@@ -1,0 +1,9 @@
+{application, emqtt_sn, [
+	{description, "Erlang MQTT-SN Gateway"},
+	{vsn, "0.0.1"},
+	{modules, []},
+	{registered, [emqtt_sn_sup]},
+	{applications, [kernel,stdlib,lager,esockd]},
+	{mod, {emqtt_sn_app, []}},
+    {env, [{listener, {1884, []}}]}
+]}.
