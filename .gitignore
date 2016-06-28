@@ -11,3 +11,4 @@ rel/example_project
 _rel/
 emqtt_sn.d
 logs/
+.erlang.mk/

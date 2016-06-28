@@ -22,23 +22,22 @@
 
 -export([start_link/1, init/1]).
 
+-define(CHILD(I), {I, {I, start_link, []}, permanent, 5000, worker, [I]}).
+
 start_link(Listener) ->
 	supervisor:start_link({local, ?MODULE}, ?MODULE, [Listener]).
 
 init([{Port, Opts}]) ->
-
-    Registry = {emqtt_sn_registry,
-                 {emqtt_sn_registry, start_link, []},
-                   permanent, 5000, worker, [emqtt_sn_registry]},
 
     GwSup = {emqtt_sn_gateway_sup,
               {emqtt_sn_gateway_sup, start_link, []},
                 permanent, infinity, supervisor, [emqtt_sn_gateway_sup]},
 
     MFA = {emqtt_sn_gateway_sup, start_gateway, []},
+
     UdpSrv = {emqtt_sn_udp_server,
                {esockd_udp, server, [mqtt_sn, Port, Opts, MFA]},
                  permanent, 5000, worker, [esockd_udp]},
 
-    {ok, { {one_for_all, 10, 3600}, [Registry, GwSup, UdpSrv] }}.
+    {ok, { {one_for_all, 10, 3600}, [?CHILD(emqtt_sn), ?CHILD(emqtt_sn_registry), GwSup, UdpSrv] }}.
 

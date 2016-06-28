@@ -48,6 +48,13 @@
 
 -type(mqtt_sn_type() :: ?SN_ADVERTISE..?SN_WILLMSGRESP).
 
+-define(SN_RC_ACCECPTED,        16#00).
+-define(SN_RC_CONGESTION,       16#01).
+-define(SN_RC_INVALID_TOPIC_ID, 16#02).
+-define(SN_RC_NOT_SUPPORTED,    16#03).
+
+-type(mqtt_sn_return_code() :: ?SN_RC_ACCECPTED .. ?SN_RC_NOT_SUPPORTED).
+
 %%--------------------------------------------------------------------
 %% MQTT-SN Message
 %%--------------------------------------------------------------------
@@ -70,6 +77,10 @@
 -define(SN_SEARCHGW_MSG(Radius),
         #mqtt_sn_message{type     = ?SN_SEARCHGW,
                          variable = Radius}).
+
+-define(SN_GWINFO_MSG(GwId, GwInfo),
+        #mqtt_sn_message{type     = ?SN_GWINFO,
+                         variable = {GwId, GwInfo}}).
 
 -define(SN_CONNECT_MSG(Flags, ProtocolId, Duration, ClientId),
         #mqtt_sn_message{type     = ?SN_CONNECT,
@@ -98,4 +109,36 @@
 -define(SN_REGACK_MSG(TopicId, MsgId, ReturnCode),
         #mqtt_sn_message{type     = ?SN_REGACK,
                          variable = {TopicId, MsgId, ReturnCode}}).
+
+-define(SN_PUBLISH_MSG(Flags, TopicId, MsgId, Data),
+       #mqtt_sn_message{type     = ?SN_PUBLISH,
+                        variable = {Flags, TopicId, MsgId, Data}}).
+
+-define(SN_PUBACK_MSG(TopicId, MsgId, ReturnCode),
+        #mqtt_sn_message{type    = ?SN_PUBACK,
+                        variable = {TopicId, MsgId, ReturnCode}}).
+
+-define(SN_PUBREC_MSG(Type, MsgId),
+        #mqtt_sn_message{type = Type, variable = MsgId}).
+
+-define(SN_SUBSCRIBE_MSG(Flags, Msgid, Topic),
+        #mqtt_sn_message{type     = ?SN_SUBSCRIBE,
+                         variable = {Flags, Msgid, Topic}}).
+
+-define(SN_SUBACK_MSG(Flags, TopicId, MsgId, ReturnCode),
+        #mqtt_sn_message{type     = ?SN_SUBACK,
+                         variable = {Flags, TopicId, MsgId, ReturnCode}}).
+
+-define(SN_UNSUBSCRIBE_MSG(Flags, Msgid, Topic),
+       #mqtt_sn_message{type     = ?SN_UNSUBSCRIBE,
+                        variable = {Flags, Msgid, Topic}}).
+
+-define(SN_PINGREQ_MSG(ClientId),
+       #mqtt_sn_message{type = ?SN_PINGREQ, variable = ClientId}).
+
+-define(SN_PINGRESP_MSG(), #mqtt_sn_message{type = ?SN_PINGRESP}).
+
+-define(SN_DISCONNECT_MSG(Duration),
+        #mqtt_sn_message{type     = ?SN_DISCONNECT,
+                         variable = Duration}).
 
