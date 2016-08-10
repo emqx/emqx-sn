@@ -9,6 +9,6 @@ rel/example_project
 .concrete/DEV_MODE
 .rebar
 _rel/
-emqtt_sn.d
+emqttd_sn.d
 logs/
 .erlang.mk/
