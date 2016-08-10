@@ -14,7 +14,7 @@
 %% limitations under the License.
 %%--------------------------------------------------------------------
 
--module(emqtt_sn_SUITE).
+-module(emqttd_sn_SUITE).
 
 -author("Feng Lee <feng@emqtt.io>").
 
@@ -28,9 +28,9 @@ groups() -> [].
 
 init_per_suite(Config) ->
     application:start(lager),
-    application:ensure_all_started(emqtt_sn),
+    application:ensure_all_started(emqttd_sn),
     Config.
 
 end_per_suite(_Config) ->
-    application:stop(emqtt_sn).
+    application:stop(emqttd_sn).
 

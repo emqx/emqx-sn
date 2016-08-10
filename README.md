@@ -1,16 +1,10 @@
+emqttd_sn
+=========
 
-emqtt_sn
-========
-
-Erlang MQTT-SN Gateway
+MQTT-SN Gateway for The EMQTT Broker
 
 License
 -------
 
 Apache License Version 2.0
-
-Author
-------
-
-Feng Lee <feng@emqtt.io>
 

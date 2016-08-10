@@ -14,26 +14,47 @@
 %% limitations under the License.
 %%--------------------------------------------------------------------
 
--module(emqtt_sn_gateway_sup).
+%% The MQTT-SN and MQTT translator...
+%% Advertise 
+
+-module(emqttd_sn).
 
 -author("Feng Lee <feng@emqtt.io>").
 
--behaviour(supervisor).
+-behaviour(gen_server).
 
--export([start_link/0, start_gateway/2, init/1]).
+%% API.
+-export([start_link/0]).
 
-%% @doc Start MQTT-SN Gateway Supervisor.
--spec(start_link() -> {ok, pid()}).
+%% gen_server.
+-export([init/1, handle_call/3, handle_cast/2, handle_info/2,
+         terminate/2, code_change/3]).
+
+-record(state, {}).
+
+%% API.
+
+-spec start_link() -> {ok, pid()}.
 start_link() ->
-	supervisor:start_link({local, ?MODULE}, ?MODULE, []).
+	gen_server:start_link(?MODULE, [], []).
 
-%% @doc Start a MQTT-SN Gateway.
--spec(start_gateway(inet:socket(), {inet:ip_address(), inet:port()}) -> {ok, pid()}).
-start_gateway(Sock, Peer) ->
-    supervisor:start_child(?MODULE, [Sock, Peer]).
+%% gen_server.
 
 init([]) ->
-    {ok, {{simple_one_for_one, 0, 1},
-          [{sn_gateway, {emqtt_sn_gateway, start_link, []},
-              temporary, 5000, worker, [emqtt_sn_gateway]}]}}.
+	{ok, #state{}}.
+
+handle_call(_Request, _From, State) ->
+	{reply, ignored, State}.
+
+handle_cast(_Msg, State) ->
+	{noreply, State}.
+
+handle_info(_Info, State) ->
+	{noreply, State}.
+
+terminate(_Reason, _State) ->
+	ok.
+
+code_change(_OldVsn, State, _Extra) ->
+	{ok, State}.
 

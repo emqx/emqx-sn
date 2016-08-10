@@ -14,7 +14,7 @@
 %% limitations under the License.
 %%--------------------------------------------------------------------
 
--module(emqtt_sn_app).
+-module(emqttd_sn_app).
 
 -author("Feng Lee <feng@emqtt.io>").
 
@@ -22,15 +22,16 @@
 
 -export([start/2, stop/1]).
 
--define(APP, emqtt_sn).
+-define(APP, emqttd_sn).
 
 %%--------------------------------------------------------------------
 %% Application Callback
 %%--------------------------------------------------------------------
 
 start(_Type, _Args) ->
-    {ok, Listener} = application:get_env(?APP, listener),
-    emqtt_sn_sup:start_link(Listener).
+    gen_conf:init(?APP),
+    {ok, Listener} = gen_conf:value(?APP, listener),
+    emqttd_sn_sup:start_link(Listener).
 
 stop(_State) ->
 	ok.

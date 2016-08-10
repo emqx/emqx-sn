@@ -14,13 +14,13 @@
 %% limitations under the License.
 %%--------------------------------------------------------------------
 
--module(emqtt_sn_gateway).
+-module(emqttd_sn_gateway).
 
 -author("Feng Lee <feng@emqtt.io>").
 
 -behaviour(gen_fsm).
 
--include("emqtt_sn.hrl").
+-include("emqttd_sn.hrl").
 
 -include_lib("emqttd/include/emqttd_protocol.hrl").
 
@@ -125,13 +125,13 @@ wait_for_will_msg(Event, StateData) ->
     {next_state, wait_for_will_msg, StateData}.
 
 connected(?SN_REGISTER_MSG(TopicId, MsgId, TopicName), StateData = #state{client_id = ClientId}) ->
-    emqtt_sn_registry:register(ClientId, TopicId, TopicName),
+    emqttd_sn_registry:register(ClientId, TopicId, TopicName),
     send_message(?SN_REGACK_MSG(TopicId, MsgId, 0), StateData),
 	{next_state, connected, StateData};
 
 connected(?SN_PUBLISH_MSG(Flags, TopicId, MsgId, Data), StateData = #state{client_id = ClientId, protocol = Proto}) ->
     #mqtt_sn_flags{dup = Dup, qos = Qos, retain = Retain} = Flags,
-    case emqtt_sn_registry:lookup_Topic(ClientId, TopicId) of
+    case emqttd_sn_registry:lookup_Topic(ClientId, TopicId) of
         undefined ->
             send_message(?SN_PUBACK_MSG(TopicId, MsgId, ?SN_RC_INVALID_TOPIC_ID), StateData);
         TopicName -> 
@@ -219,7 +219,7 @@ handle_sync_event(Event, _From, StateName, StateData) ->
 	{reply, ignored, StateName, StateData}.
 
 handle_info({datagram, Data}, StateName, StateData) ->
-    {ok, Msg} = emqtt_sn_message:parse(Data),
+    {ok, Msg} = emqttd_sn_message:parse(Data),
     ?LOG(info, "RECV ~p", [Msg], StateData),
     ?MODULE:StateName(Msg, StateData); %% cool?
 
@@ -234,7 +234,7 @@ handle_info(Info, StateName, StateData) ->
 	{next_state, StateName, StateData}.
 
 terminate(_Reason, _StateName, _StateData = #state{client_id = ClientId}) ->
-    emqtt_sn_registry:unregister_topic(ClientId).
+    emqttd_sn_registry:unregister_topic(ClientId).
 
 code_change(_OldVsn, StateName, StateData, _Extra) ->
 	{ok, StateName, StateData}.
@@ -259,7 +259,7 @@ transform(?PUBACK_PACKET(?PUBCOMP, PacketId)) ->
 
 send_message(Msg, StateData = #state{sock = Sock, peer = {Host, Port}}) ->
     ?LOG(debug, "SEND ~p~n", [Msg], StateData),
-    gen_udp:send(Sock, Host, Port, emqtt_sn_message:serialize(Msg)).
+    gen_udp:send(Sock, Host, Port, emqttd_sn_message:serialize(Msg)).
 
 next_state(StateName, StateData) ->
     {next_state, StateName, StateData, hibernate}.
