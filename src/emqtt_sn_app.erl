@@ -29,7 +29,8 @@
 %%--------------------------------------------------------------------
 
 start(_Type, _Args) ->
-    {ok, Listener} = application:get_env(?APP, listener),
+    gen_conf:init(?APP),
+    {ok, Listener} = gen_conf:value(?APP, listener),
     emqtt_sn_sup:start_link(Listener).
 
 stop(_State) ->
