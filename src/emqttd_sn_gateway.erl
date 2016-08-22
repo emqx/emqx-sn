@@ -218,7 +218,7 @@ handle_sync_event(Event, _From, StateName, StateData) ->
     ?LOG(error, "UNEXPECTED SYNC Event: ~p", [Event], StateData),
 	{reply, ignored, StateName, StateData}.
 
-handle_info({datagram, Data}, StateName, StateData) ->
+handle_info({datagram, _From, Data}, StateName, StateData) ->
     {ok, Msg} = emqttd_sn_message:parse(Data),
     ?LOG(info, "RECV ~p", [Msg], StateData),
     ?MODULE:StateName(Msg, StateData); %% cool?
