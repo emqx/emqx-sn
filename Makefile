@@ -1,6 +1,6 @@
 PROJECT = emqttd_sn
 PROJECT_DESCRIPTION = MQTT-SN Gateway for The EMQTT Broker
-PROJECT_VERSION = 0.2
+PROJECT_VERSION = 0.2.0
 
 DEPS = esockd emqttd
 
