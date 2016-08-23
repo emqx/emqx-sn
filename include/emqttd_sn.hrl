@@ -119,7 +119,8 @@
                         variable = {TopicId, MsgId, ReturnCode}}).
 
 -define(SN_PUBREC_MSG(Type, MsgId),
-        #mqtt_sn_message{type = Type, variable = MsgId}).
+        #mqtt_sn_message{type     = Type, 
+                         variable = MsgId}).
 
 -define(SN_SUBSCRIBE_MSG(Flags, Msgid, Topic),
         #mqtt_sn_message{type     = ?SN_SUBSCRIBE,
@@ -133,6 +134,10 @@
        #mqtt_sn_message{type     = ?SN_UNSUBSCRIBE,
                         variable = {Flags, Msgid, Topic}}).
 
+-define(SN_UNSUBACK_MSG(Msgid),
+       #mqtt_sn_message{type     = ?SN_UNSUBACK,
+                        variable = Msgid}).
+
 -define(SN_PINGREQ_MSG(ClientId),
        #mqtt_sn_message{type = ?SN_PINGREQ, variable = ClientId}).
 
@@ -142,3 +147,18 @@
         #mqtt_sn_message{type     = ?SN_DISCONNECT,
                          variable = Duration}).
 
+-define(SN_WILLTOPICUPD_MSG(Flags, Topic),
+        #mqtt_sn_message{type     = ?SN_WILLTOPICUPD,
+                         variable = {Flags, Topic}}).
+
+-define(SN_WILLTOPICRESP_MSG(ReturnCode),
+        #mqtt_sn_message{type     = ?SN_WILLTOPICRESP,
+                         variable = ReturnCode}).
+
+-define(SN_WILLMSGUPD_MSG(Msg),
+        #mqtt_sn_message{type     = ?SN_WILLMSGUPD,
+                         variable = Msg}).
+
+-define(SN_WILLMSGRESP_MSG(ReturnCode),
+        #mqtt_sn_message{type     = ?SN_WILLMSGRESP,
+                         variable = ReturnCode}).
