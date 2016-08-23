@@ -46,7 +46,7 @@
 
 -spec(start_link(inet:socket(), {inet:ip_address(), inet:port()}) -> {ok, pid()}).
 start_link(Sock, Peer) ->
-	gen_fsm:start_link(?MODULE, [Sock, Peer], []).
+    gen_fsm:start_link(?MODULE, [Sock, Peer], []).
 
 %% TODO:
 
@@ -83,10 +83,10 @@ idle(?SN_CONNECT_MSG(Flags, _ProtoId, Duration, ClientId), StateData = #state{pr
     case Will of
         true  ->
             send_message(?SN_WILLTOPICREQ_MSG(), StateData#state{connpkt = ConnPkt}),
-            {next_state, wait_for_will_topic, StateData#state{connpkt = ConnPkt}};
+            {next_state, wait_for_will_topic, StateData#state{connpkt = ConnPkt, client_id = ClientId}};
         false ->
             case emqttd_protocol:received(?CONNECT_PACKET(ConnPkt), Proto) of
-                {ok, Proto1}           -> next_state(connected, StateData#state{protocol = Proto1});
+                {ok, Proto1}           -> next_state(connected, StateData#state{client_id = ClientId, protocol = Proto1});
                 {error, Error}         -> shutdown(Error, StateData);
                 {error, Error, Proto1} -> shutdown(Error, StateData#state{protocol = Proto1});
                 {stop, Reason, Proto1} -> stop(Reason, StateData#state{protocol = Proto1})
@@ -96,13 +96,14 @@ idle(?SN_CONNECT_MSG(Flags, _ProtoId, Duration, ClientId), StateData = #state{pr
 idle(Event, StateData) ->
     %%TODO:...
     ?LOG(error, "UNEXPECTED Event: ~p", [Event], StateData),
-	{next_state, idle, StateData}.
+    {next_state, idle, StateData}.
 
 wait_for_will_topic(?SN_WILLTOPIC_MSG(Flags, Topic), StateData = #state{connpkt = ConnPkt}) ->
     #mqtt_sn_flags{qos = Qos, retain = Retain} = Flags,
     ConnPkt1 = ConnPkt#mqtt_packet_connect{will_retain = Retain,
                                            will_qos    = Qos,
-                                           will_topic  = Topic},
+                                           will_topic  = Topic,
+                                           will_flag   = true},
     send_message(?SN_WILLMSGREQ_MSG(), StateData),
     {next_state, wait_for_will_msg, StateData#state{connpkt = ConnPkt1}};
 
@@ -125,13 +126,13 @@ wait_for_will_msg(Event, StateData) ->
     {next_state, wait_for_will_msg, StateData}.
 
 connected(?SN_REGISTER_MSG(TopicId, MsgId, TopicName), StateData = #state{client_id = ClientId}) ->
-    emqttd_sn_registry:register(ClientId, TopicId, TopicName),
+    emqttd_sn_registry:register_topic(ClientId, TopicId, TopicName),
     send_message(?SN_REGACK_MSG(TopicId, MsgId, 0), StateData),
-	{next_state, connected, StateData};
+    {next_state, connected, StateData};
 
 connected(?SN_PUBLISH_MSG(Flags, TopicId, MsgId, Data), StateData = #state{client_id = ClientId, protocol = Proto}) ->
     #mqtt_sn_flags{dup = Dup, qos = Qos, retain = Retain} = Flags,
-    case emqttd_sn_registry:lookup_Topic(ClientId, TopicId) of
+    case emqttd_sn_registry:lookup_topic(ClientId, TopicId) of
         undefined ->
             send_message(?SN_PUBACK_MSG(TopicId, MsgId, ?SN_RC_INVALID_TOPIC_ID), StateData);
         TopicName -> 
@@ -147,7 +148,7 @@ connected(?SN_PUBLISH_MSG(Flags, TopicId, MsgId, Data), StateData = #state{clien
     end;
 
 connected(?SN_PUBACK_MSG(_TopicId, MsgId, _ReturnCode), StateData = #state{protocol = Proto}) ->
-    case emqttd_protocol:received(?PUBACK_PACKET(?PUBACK, MsgId), Proto) of
+    case emqttd_protocol:received(?PUBACK_PACKET(mqttsn_to_mqtt(?PUBACK), MsgId), Proto) of
         {ok, Proto1}           -> next_state(connected, StateData#state{protocol = Proto1});
         {error, Error}         -> shutdown(Error, StateData);
         {error, Error, Proto1} -> shutdown(Error, StateData#state{protocol = Proto1});
@@ -156,7 +157,7 @@ connected(?SN_PUBACK_MSG(_TopicId, MsgId, _ReturnCode), StateData = #state{proto
 
 connected(?SN_PUBREC_MSG(PubRec, MsgId), StateData = #state{protocol = Proto})
     when PubRec == ?SN_PUBREC; PubRec == ?SN_PUBREL; PubRec == ?SN_PUBCOMP ->
-    case emqttd_protocol:received(?PUBACK_PACKET(PubRec, MsgId), Proto) of
+    case emqttd_protocol:received(?PUBACK_PACKET(mqttsn_to_mqtt(PubRec), MsgId), Proto) of
         {ok, Proto1}           -> next_state(connected, StateData#state{protocol = Proto1});
         {error, Error}         -> shutdown(Error, StateData);
         {error, Error, Proto1} -> shutdown(Error, StateData#state{protocol = Proto1});
@@ -190,33 +191,48 @@ connected(?SN_DISCONNECT_MSG(_Duration), StateData = #state{protocol = Proto}) -
     {stop, Reason, Proto1} = emqttd_protocol:received(?PACKET(?DISCONNECT), Proto),
     stop(Reason, StateData#state{protocol = Proto1});
 
+% connected(?SN_WILLTOPICUPD_MSG(Flags, Topic), StateData = #state{connpkt = ConnPkt, protocol = Proto}) ->
+%     #mqtt_sn_flags{qos = Qos, retain = Retain} = Flags,
+%     ConnPkt1 = ConnPkt#mqtt_packet_connect{will_retain = Retain,
+%                                            will_qos    = Qos,
+%                                            will_topic  = Topic},
+%     send_message(?SN_WILLTOPICRESP_MSG(0), StateData),
+%     % Proto1 = will_topic_update(ConnPkt1, Proto),
+%     {next_state, connected, StateData#state{protocol = Proto}};
+
+% connected(?SN_WILLMSGUPD_MSG(Msg), StateData = #state{connpkt = ConnPkt, protocol = Proto}) ->
+%     ConnPkt1 = ConnPkt#mqtt_packet_connect{will_msg = Msg},
+%     send_message(?SN_WILLMSGRESP_MSG(0), StateData),
+%     % Proto1 = will_msg_update(ConnPkt1, Proto),
+%     {next_state, connected, StateData#state{protocol = Proto}};
+
 connected(Event, StateData) ->
     ?LOG(error, "UNEXPECTED Event: ~p", [Event], StateData),
-	{next_state, connected, StateData}.
+    {next_state, connected, StateData}.
 
 handle_event(Event, StateName, StateData) ->
     ?LOG(error, "UNEXPECTED Event: ~p", [Event], StateData),
-	{next_state, StateName, StateData}.
+    {next_state, StateName, StateData}.
 
 idle(Event, _From, StateData) ->
     ?LOG(error, "UNEXPECTED Event: ~p", [Event], StateData),
-	{reply, ignored, idle, StateData}.
+    {reply, ignored, idle, StateData}.
 
 wait_for_will_topic(Event, _From, StateData) ->
     ?LOG(error, "UNEXPECTED Event: ~p", [Event], StateData),
-	{reply, ignored, wait_for_will_topic, StateData}.
+    {reply, ignored, wait_for_will_topic, StateData}.
 
 wait_for_will_msg(Event, _From, StateData) ->
     ?LOG(error, "UNEXPECTED Event: ~p", [Event], StateData),
-	{reply, ignored, wait_for_will_msg, StateData}.
+    {reply, ignored, wait_for_will_msg, StateData}.
 
 connected(Event, _From, StateData) ->
     ?LOG(error, "UNEXPECTED Event: ~p", [Event], StateData),
-	{reply, ignored, state_name, StateData}.
+    {reply, ignored, state_name, StateData}.
 
 handle_sync_event(Event, _From, StateName, StateData) ->
     ?LOG(error, "UNEXPECTED SYNC Event: ~p", [Event], StateData),
-	{reply, ignored, StateName, StateData}.
+    {reply, ignored, StateName, StateData}.
 
 handle_info({datagram, _From, Data}, StateName, StateData) ->
     {ok, Msg} = emqttd_sn_message:parse(Data),
@@ -229,15 +245,65 @@ handle_info({suback, PacketId, [GrantedQos]}, StateName, StateData) ->
     send_message(?SN_SUBACK_MSG(Flags, 1, PacketId, 0), StateData),
     next_state(StateName, StateData);
 
+handle_info({deliver, Msg}, StateName, StateData = #state{client_id = ClientId}) ->
+    #mqtt_packet{header   = #mqtt_packet_header{type = ?PUBLISH, dup = Dup, qos = Qos, retain = Retain},
+                  variable = #mqtt_packet_publish{topic_name = TopicName, packet_id = MsgId},
+                  payload  = Payload} = emqttd_message:to_packet(Msg),
+    case emqttd_sn_registry:lookup_topic_id(ClientId, TopicName) of
+        undefined -> 
+            ?LOG(error, "Before subscribing, please register topic: ~p", [TopicName], StateData);    
+        TopicId -> 
+            MsgId1 = case Qos > 0 of
+                true -> MsgId;
+                false -> 0
+            end,
+            Flags = #mqtt_sn_flags{dup = Dup, qos = Qos, retain = Retain, topic_id_type = 2#01},
+            Data = ?SN_PUBLISH_MSG(Flags, TopicId, MsgId1, Payload),
+            send_message(Data, StateData)
+    end,
+    next_state(StateName, StateData);
+
+handle_info({keepalive, start, Interval}, StateName, StateData = #state{sock = Sock}) ->
+    ?LOG(debug, "Keepalive at the interval of ~p", [Interval], StateData),
+    StatFun = fun() ->
+                case inet:getstat(Sock, [recv_oct]) of
+                    {ok, [{recv_oct, RecvOct}]} -> {ok, RecvOct};
+                    {error, Error}              -> {error, Error}
+                end
+             end,
+    KeepAlive = emqttd_keepalive:start(StatFun, Interval, {keepalive, check}),
+    next_state(StateName, StateData#state{keepalive = KeepAlive});
+
+handle_info({keepalive, check}, StateName, StateData = #state{keepalive = KeepAlive}) ->
+    case emqttd_keepalive:check(KeepAlive) of
+        {ok, KeepAlive1} ->
+            next_state(StateName, StateData#state{keepalive = KeepAlive1});
+        {error, timeout} ->
+            ?LOG(debug, "Keepalive timeout", [], StateData),
+            shutdown(keepalive_timeout, StateData);
+        {error, Error} ->
+            ?LOG(warning, "Keepalive error - ~p", [Error], StateData),
+            shutdown(Error, StateData)
+    end;
+
 handle_info(Info, StateName, StateData) ->
     ?LOG(error, "UNEXPECTED INFO: ~p", [Info], StateData),
-	{next_state, StateName, StateData}.
+    {next_state, StateName, StateData}.
 
-terminate(_Reason, _StateName, _StateData = #state{client_id = ClientId}) ->
-    emqttd_sn_registry:unregister_topic(ClientId).
+terminate(Reason, _StateName, _StateData = #state{client_id = ClientId, keepalive = KeepAlive, protocol = Proto}) ->
+    emqttd_sn_registry:unregister_topic(ClientId),
+    emqttd_keepalive:cancel(KeepAlive),
+    case {Proto, Reason} of
+        {undefined, _} ->
+            ok;
+        {_, {shutdown, Error}} ->
+            emqttd_protocol:shutdown(Error, Proto);
+        {_, Reason} ->
+            emqttd_protocol:shutdown(Reason, Proto)
+    end.
 
 code_change(_OldVsn, StateName, StateData, _Extra) ->
-	{ok, StateName, StateData}.
+    {ok, StateName, StateData}.
 
 transform(?CONNACK_PACKET(0)) ->
     ?SN_CONNACK_MSG(0);
@@ -255,7 +321,10 @@ transform(?PUBACK_PACKET(?PUBREL, PacketId)) ->
     ?SN_PUBREC_MSG(?SN_PUBREL, PacketId);
 
 transform(?PUBACK_PACKET(?PUBCOMP, PacketId)) ->
-    ?SN_PUBREC_MSG(?SN_PUBCOMP, PacketId).
+    ?SN_PUBREC_MSG(?SN_PUBCOMP, PacketId);
+
+transform(?UNSUBACK_PACKET(PacketId))->
+    ?SN_UNSUBACK_MSG(PacketId).
 
 send_message(Msg, StateData = #state{sock = Sock, peer = {Host, Port}}) ->
     ?LOG(debug, "SEND ~p~n", [Msg], StateData),
@@ -269,4 +338,9 @@ shutdown(Error, StateData) ->
 
 stop(Reason, StateData) ->
     {stop, Reason, StateData}.
+
+mqttsn_to_mqtt(?SN_PUBACK) -> ?PUBACK;
+mqttsn_to_mqtt(?SN_PUBREC) -> ?PUBREC;
+mqttsn_to_mqtt(?SN_PUBREL) -> ?PUBREL;
+mqttsn_to_mqtt(?SN_PUBCOMP) -> ?PUBCOMP.
 

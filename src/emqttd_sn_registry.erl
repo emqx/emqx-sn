@@ -23,7 +23,7 @@
 %% API.
 -export([start_link/0, stop/0]).
 
--export([register_topic/3, lookup_topic/2, unregister_topic/1]).
+-export([register_topic/3, lookup_topic/2, unregister_topic/1, lookup_topic_id/2]).
 
 %% gen_server.
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2,
@@ -54,6 +54,13 @@ lookup_topic(ClientId, TopicId) ->
         error:badarg -> undefined
     end.
 
+-spec(lookup_topic_id(binary(), binary) -> undefined | pos_integer()).
+lookup_topic_id(ClientId,TopicName) ->
+    try ets:lookup_element(sn_topic_id, {ClientId, TopicName}, 2)
+    catch
+        error:badarg -> undefined
+    end.
+
 -spec(unregister_topic(binary()) -> ok).
 unregister_topic(ClientId) ->
     gen_server:cast(?MODULE, {unregister, ClientId}).
@@ -64,14 +71,18 @@ unregister_topic(ClientId) ->
 
 init([]) ->
     %% ClientId -> [TopicId]
-    ets:new(sn_topic_id, [bag, named_table, protected]),
+    ets:new(sn_topic, [bag, named_table, protected]),
     %% {ClientId, TopicId} -> TopicName
     ets:new(sn_topic_name, [set, named_table, protected]),
+    %% {ClientId, TopicName} ->TopicId 
+    ets:new(sn_topic_id, [set, named_table, protected]),
+
 	{ok, #state{}}.
 
 handle_call({register, ClientId, TopicId, TopicName}, _From, State) ->
-    ets:insert(sn_topic_id, {ClientId, TopicId}),
+    ets:insert(sn_topic, {ClientId, TopicId}),
     ets:insert(sn_topic_name, {{ClientId, TopicId}, TopicName}),
+    ets:insert(sn_topic_id, {{ClientId, TopicName}, TopicId}),
 	{reply, ok, State};
 
 handle_call(stop, _From, State) ->
@@ -81,9 +92,13 @@ handle_call(_Request, _From, State) ->
 	{reply, ignored, State}.
 
 handle_cast({unregister, ClientId}, State) ->
-    [ets:delete(sn_topic_name, {ClientId, TopicId})
-        || {_, TopicId} <- ets:lookup(sn_topic_id, ClientId)],
-    ets:delete(sn_topic_id, ClientId),
+    lists:foreach(
+        fun({_, TopicId}) -> 
+            [{_, TopicName}] = ets:lookup(sn_topic_name, {ClientId, TopicId}),
+            ets:delete(sn_topic_name, {ClientId, TopicId}),
+            ets:delete(sn_topic_id, {ClientId, TopicName})
+        end, ets:lookup(sn_topic_id, ClientId)),
+    ets:delete(sn_topic, ClientId),
 	{noreply, State};
 
 handle_cast(_Msg, State) ->
