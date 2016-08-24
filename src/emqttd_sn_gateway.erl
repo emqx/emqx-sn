@@ -240,9 +240,9 @@ handle_info({datagram, _From, Data}, StateName, StateData) ->
     ?MODULE:StateName(Msg, StateData); %% cool?
 
 %% Asynchronous SUBACK
-handle_info({suback, PacketId, [GrantedQos]}, StateName, StateData) ->
+handle_info({suback, MsgId, [GrantedQos]}, StateName, StateData) ->
     Flags = #mqtt_sn_flags{qos = GrantedQos},
-    send_message(?SN_SUBACK_MSG(Flags, 1, PacketId, 0), StateData),
+    send_message(?SN_SUBACK_MSG(Flags, 1, MsgId, 0), StateData),
     next_state(StateName, StateData);
 
 handle_info({deliver, Msg}, StateName, StateData = #state{client_id = ClientId}) ->
@@ -261,6 +261,10 @@ handle_info({deliver, Msg}, StateName, StateData = #state{client_id = ClientId})
             Data = ?SN_PUBLISH_MSG(Flags, TopicId, MsgId1, Payload),
             send_message(Data, StateData)
     end,
+    next_state(StateName, StateData);
+
+handle_info({redeliver, {?PUBREL, MsgId}}, StateName, StateData) ->
+    send_message(?SN_PUBREC_MSG(?SN_PUBREL, MsgId), StateData),
     next_state(StateName, StateData);
 
 handle_info({keepalive, start, Interval}, StateName, StateData = #state{sock = Sock}) ->
@@ -311,20 +315,20 @@ transform(?CONNACK_PACKET(0)) ->
 transform(?CONNACK_PACKET(_ReturnCode)) ->
     ?SN_CONNACK_MSG(?SN_RC_CONGESTION);
 
-transform(?PUBACK_PACKET(?PUBACK, PacketId)) ->
-    ?SN_PUBACK_MSG(1, PacketId, 0);
+transform(?PUBACK_PACKET(?PUBACK, MsgId)) ->
+    ?SN_PUBACK_MSG(1, MsgId, 0);
 
-transform(?PUBACK_PACKET(?PUBREC, PacketId)) ->
-    ?SN_PUBREC_MSG(?SN_PUBREC, PacketId);
+transform(?PUBACK_PACKET(?PUBREC, MsgId)) ->
+    ?SN_PUBREC_MSG(?SN_PUBREC, MsgId);
 
-transform(?PUBACK_PACKET(?PUBREL, PacketId)) ->
-    ?SN_PUBREC_MSG(?SN_PUBREL, PacketId);
+transform(?PUBACK_PACKET(?PUBREL, MsgId)) ->
+    ?SN_PUBREC_MSG(?SN_PUBREL, MsgId);
 
-transform(?PUBACK_PACKET(?PUBCOMP, PacketId)) ->
-    ?SN_PUBREC_MSG(?SN_PUBCOMP, PacketId);
+transform(?PUBACK_PACKET(?PUBCOMP, MsgId)) ->
+    ?SN_PUBREC_MSG(?SN_PUBCOMP, MsgId);
 
-transform(?UNSUBACK_PACKET(PacketId))->
-    ?SN_UNSUBACK_MSG(PacketId).
+transform(?UNSUBACK_PACKET(MsgId))->
+    ?SN_UNSUBACK_MSG(MsgId).
 
 send_message(Msg, StateData = #state{sock = Sock, peer = {Host, Port}}) ->
     ?LOG(debug, "SEND ~p~n", [Msg], StateData),
