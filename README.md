@@ -16,6 +16,8 @@ File: etc/emqttd_sn.conf
 ```erlang
 {listener, {1884, []}}.
 
+```
+
 ## Usage
 
 ### simple 
