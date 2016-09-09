@@ -3,11 +3,6 @@ emqttd_sn
 
 MQTT-SN Gateway for The EMQTT Broker
 
-License
--------
-
-Apache License Version 2.0
-
 Configure Plugin
 ----------------
 
@@ -70,6 +65,11 @@ Load Plugin
 ```
 ./bin/emqttd_ctl plugins load emqttd_sn
 ```
+
+License
+-------
+
+Apache License Version 2.0
 
 Author
 ------
