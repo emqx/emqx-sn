@@ -5,5 +5,5 @@
 	{registered, [emqttd_sn_sup]},
 	{applications, [kernel,stdlib,lager,esockd]},
 	{mod, {emqttd_sn_app, []}},
-    {env, [{listener, {1884, []}}]}
+    {env, []}
 ]}.
