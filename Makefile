@@ -2,10 +2,11 @@ PROJECT = emqttd_sn
 PROJECT_DESCRIPTION = MQTT-SN Gateway for The EMQTT Broker
 PROJECT_VERSION = 0.2.0
 
-DEPS = esockd emqttd
+DEPS = esockd
+dep_esockd = git https://github.com/emqtt/esockd emq20
 
-dep_esockd = git https://github.com/emqtt/esockd.git udp
-dep_emqttd = git https://github.com/emqtt/emqttd.git emq20
+BUILD_DEPS = emqttd
+dep_emqttd = git https://github.com/emqtt/emqttd emq20
 
 ERLC_OPTS += +'{parse_transform, lager_transform}'
 

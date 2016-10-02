@@ -1,9 +1,0 @@
-{application, emqttd_sn, [
-	{description, "MQTT-SN Gateway for The EMQTT Broker"},
-	{vsn, "0.2.0"},
-	{modules, []},
-	{registered, [emqttd_sn_sup]},
-	{applications, [kernel,stdlib,lager,esockd]},
-	{mod, {emqttd_sn_app, []}},
-    {env, []}
-]}.
