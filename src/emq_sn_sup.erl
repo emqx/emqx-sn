@@ -14,25 +14,30 @@
 %% limitations under the License.
 %%--------------------------------------------------------------------
 
--module(emqttd_sn_app).
+-module(emq_sn_sup).
 
 -author("Feng Lee <feng@emqtt.io>").
 
--behaviour(application).
+-behaviour(supervisor).
 
--export([start/2, stop/1]).
+-export([start_link/1, init/1]).
 
--define(APP, emqttd_sn).
+-define(CHILD(I), {I, {I, start_link, []}, permanent, 5000, worker, [I]}).
 
-%%--------------------------------------------------------------------
-%% Application Callback
-%%--------------------------------------------------------------------
+start_link(Listener) ->
+	supervisor:start_link({local, ?MODULE}, ?MODULE, [Listener]).
 
-start(_Type, _Args) ->
-    gen_conf:init(?APP),
-    {ok, Listener} = gen_conf:value(?APP, listener),
-    emqttd_sn_sup:start_link(Listener).
+init([{Port, Opts}]) ->
 
-stop(_State) ->
-	ok.
+    GwSup = {emq_sn_gateway_sup,
+              {emq_sn_gateway_sup, start_link, []},
+                permanent, infinity, supervisor, [emq_sn_gateway_sup]},
+
+    MFA = {emq_sn_gateway_sup, start_gateway, []},
+
+    UdpSrv = {emq_sn_udp_server,
+               {esockd_udp, server, [mqtt_sn, Port, Opts, MFA]},
+                 permanent, 5000, worker, [esockd_udp]},
+
+    {ok, { {one_for_all, 10, 3600}, [?CHILD(emq_sn), ?CHILD(emq_sn_registry), GwSup, UdpSrv] }}.
 

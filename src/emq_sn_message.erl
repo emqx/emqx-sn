@@ -14,11 +14,11 @@
 %% limitations under the License.
 %%--------------------------------------------------------------------
 
--module(emqttd_sn_message).
+-module(emq_sn_message).
 
 -author("Feng Lee <feng@emqtt.io>").
 
--include("emqttd_sn.hrl").
+-include("emq_sn.hrl").
 
 -export([parse/1, serialize/1]).
 

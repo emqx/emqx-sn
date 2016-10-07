@@ -14,13 +14,13 @@
 %% limitations under the License.
 %%--------------------------------------------------------------------
 
--module(emqttd_sn_gateway).
+-module(emq_sn_gateway).
 
 -author("Feng Lee <feng@emqtt.io>").
 
 -behaviour(gen_fsm).
 
--include("emqttd_sn.hrl").
+-include("emq_sn.hrl").
 
 -include_lib("emqttd/include/emqttd_protocol.hrl").
 
@@ -126,13 +126,13 @@ wait_for_will_msg(Event, StateData) ->
     {next_state, wait_for_will_msg, StateData}.
 
 connected(?SN_REGISTER_MSG(TopicId, MsgId, TopicName), StateData = #state{client_id = ClientId}) ->
-    emqttd_sn_registry:register_topic(ClientId, TopicId, TopicName),
+    emq_sn_registry:register_topic(ClientId, TopicId, TopicName),
     send_message(?SN_REGACK_MSG(TopicId, MsgId, 0), StateData),
     {next_state, connected, StateData};
 
 connected(?SN_PUBLISH_MSG(Flags, TopicId, MsgId, Data), StateData = #state{client_id = ClientId, protocol = Proto}) ->
     #mqtt_sn_flags{dup = Dup, qos = Qos, retain = Retain} = Flags,
-    case emqttd_sn_registry:lookup_topic(ClientId, TopicId) of
+    case emq_sn_registry:lookup_topic(ClientId, TopicId) of
         undefined ->
             send_message(?SN_PUBACK_MSG(TopicId, MsgId, ?SN_RC_INVALID_TOPIC_ID), StateData);
         TopicName -> 
@@ -249,7 +249,7 @@ handle_info({deliver, Msg}, StateName, StateData = #state{client_id = ClientId})
     #mqtt_packet{header   = #mqtt_packet_header{type = ?PUBLISH, dup = Dup, qos = Qos, retain = Retain},
                   variable = #mqtt_packet_publish{topic_name = TopicName, packet_id = MsgId},
                   payload  = Payload} = emqttd_message:to_packet(Msg),
-    case emqttd_sn_registry:lookup_topic_id(ClientId, TopicName) of
+    case emq_sn_registry:lookup_topic_id(ClientId, TopicName) of
         undefined -> 
             ?LOG(error, "Before subscribing, please register topic: ~p", [TopicName], StateData);    
         TopicId -> 
@@ -295,7 +295,7 @@ handle_info(Info, StateName, StateData) ->
     {next_state, StateName, StateData}.
 
 terminate(Reason, _StateName, _StateData = #state{client_id = ClientId, keepalive = KeepAlive, protocol = Proto}) ->
-    emqttd_sn_registry:unregister_topic(ClientId),
+    emq_sn_registry:unregister_topic(ClientId),
     emqttd_keepalive:cancel(KeepAlive),
     case {Proto, Reason} of
         {undefined, _} ->
@@ -332,7 +332,7 @@ transform(?UNSUBACK_PACKET(MsgId))->
 
 send_message(Msg, StateData = #state{sock = Sock, peer = {Host, Port}}) ->
     ?LOG(debug, "SEND ~p~n", [Msg], StateData),
-    gen_udp:send(Sock, Host, Port, emqttd_sn_message:serialize(Msg)).
+    gen_udp:send(Sock, Host, Port, emq_sn_message:serialize(Msg)).
 
 next_state(StateName, StateData) ->
     {next_state, StateName, StateData, hibernate}.

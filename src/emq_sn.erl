@@ -14,30 +14,47 @@
 %% limitations under the License.
 %%--------------------------------------------------------------------
 
--module(emqttd_sn_sup).
+%% The MQTT-SN and MQTT translator...
+%% Advertise 
+
+-module(emq_sn).
 
 -author("Feng Lee <feng@emqtt.io>").
 
--behaviour(supervisor).
+-behaviour(gen_server).
 
--export([start_link/1, init/1]).
+%% API.
+-export([start_link/0]).
 
--define(CHILD(I), {I, {I, start_link, []}, permanent, 5000, worker, [I]}).
+%% gen_server.
+-export([init/1, handle_call/3, handle_cast/2, handle_info/2,
+         terminate/2, code_change/3]).
 
-start_link(Listener) ->
-	supervisor:start_link({local, ?MODULE}, ?MODULE, [Listener]).
+-record(state, {}).
 
-init([{Port, Opts}]) ->
+%% API.
 
-    GwSup = {emqttd_sn_gateway_sup,
-              {emqttd_sn_gateway_sup, start_link, []},
-                permanent, infinity, supervisor, [emqttd_sn_gateway_sup]},
+-spec start_link() -> {ok, pid()}.
+start_link() ->
+	gen_server:start_link(?MODULE, [], []).
 
-    MFA = {emqttd_sn_gateway_sup, start_gateway, []},
+%% gen_server.
 
-    UdpSrv = {emqttd_sn_udp_server,
-               {esockd_udp, server, [mqtt_sn, Port, Opts, MFA]},
-                 permanent, 5000, worker, [esockd_udp]},
+init([]) ->
+	{ok, #state{}}.
 
-    {ok, { {one_for_all, 10, 3600}, [?CHILD(emqttd_sn), ?CHILD(emqttd_sn_registry), GwSup, UdpSrv] }}.
+handle_call(_Request, _From, State) ->
+	{reply, ignored, State}.
+
+handle_cast(_Msg, State) ->
+	{noreply, State}.
+
+handle_info(_Info, State) ->
+	{noreply, State}.
+
+terminate(_Reason, _State) ->
+	ok.
+
+code_change(_OldVsn, State, _Extra) ->
+	{ok, State}.
 
