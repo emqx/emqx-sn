@@ -1,6 +1,6 @@
-PROJECT = emqttd_sn
-PROJECT_DESCRIPTION = MQTT-SN Gateway for The EMQTT Broker
-PROJECT_VERSION = 0.2.0
+PROJECT = emq_sn
+PROJECT_DESCRIPTION = MQTT-SN Gateway for The EMQ Broker
+PROJECT_VERSION = 0.3.0
 
 DEPS = esockd
 dep_esockd = git https://github.com/emqtt/esockd emq20
@@ -15,5 +15,5 @@ ERLC_OPTS += +'{parse_transform, lager_transform}'
 
 include erlang.mk
 
-#app.config::
-#    cuttlefish -l info -e etc/ -c etc/emq_sn.conf -i priv/emq_sn.schema -d .data
+app.config::
+	cuttlefish -l info -e etc/ -c etc/emq_sn.conf -i priv/emq_sn.schema -d data
