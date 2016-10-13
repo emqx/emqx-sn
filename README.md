@@ -1,16 +1,15 @@
-emqttd_sn
-=========
+emq_sn
+======
 
-MQTT-SN Gateway for The EMQTT Broker
+MQTT-SN Gateway for The EMQ Broker
 
 Configure Plugin
 ----------------
 
-File: etc/emqttd_sn.conf
+File: etc/emq_sn.conf
 
 ```erlang
-{listener, {1884, []}}.
-
+mqtt.sn.port = 1884
 ```
 
 ## Usage
@@ -23,7 +22,7 @@ examples/simple_example.erl
 %% create udp socket
 {ok, Socket} = gen_udp:open(0, [binary]),
 
-%% connect to emqttd_sn broker
+%% connect to broker
 Package = gen_connect_package(ClientId),
 ok = gen_udp:send(Socket, ?HOST, ?PORT, Package),
 
@@ -53,7 +52,7 @@ after
         io:format("Error: receive timeout!~n")
 end,
 
-%% disconnect from emqttd_sn broker
+%% disconnect from broker
 DisConnectPackage = gen_disconnect_package(),
 ok = gen_udp:send(Socket, ?HOST, ?PORT, DisConnectPackage).
 
@@ -63,7 +62,7 @@ Load Plugin
 -----------
 
 ```
-./bin/emqttd_ctl plugins load emqttd_sn
+./bin/emqttd_ctl plugins load emq_sn
 ```
 
 License
@@ -75,3 +74,4 @@ Author
 ------
 
 Feng Lee <feng@emqtt.io>
+

@@ -1,3 +1,5 @@
+%%-*- mode: erlang -*-
+%% emq_sn config mapping
 {mapping, "mqtt.sn.port", "emq_sn.listener", [
   {default, 1884},
   {datatype, integer}
