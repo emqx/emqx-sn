@@ -30,7 +30,7 @@
 
 start(_Type, _Args) ->
     {ok, Listener} = application:get_env(?APP, listener),
-    emqttd_sn_sup:start_link(Listener).
+    emq_sn_sup:start_link(Listener).
 
 stop(_State) ->
 	ok.

@@ -6,6 +6,5 @@
 ]}.
 
 {translation, "emq_sn.listener", fun(Conf) ->
-  Port = cuttlefish:conf_get("mqtt.sn.port", Conf),
-  {Port, []}
+  Port = cuttlefish:conf_get("mqtt.sn.port", Conf), {Port, []}
 end}.
