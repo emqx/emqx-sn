@@ -1,12 +1,12 @@
 PROJECT = emq_sn
-PROJECT_DESCRIPTION = EMQ MQTT-SN Gateway
-PROJECT_VERSION = 0.3
+PROJECT_DESCRIPTION = MQTT-SN Gateway
+PROJECT_VERSION = 0.2
 
 DEPS = esockd
 dep_esockd = git https://github.com/emqtt/esockd emq20
 
 BUILD_DEPS = emqttd
-dep_emqttd = git https://github.com/emqtt/emqttd master
+dep_emqttd = git https://github.com/emqtt/emqttd emq20
 
 TEST_DEPS = cuttlefish
 dep_cuttlefish = git https://github.com/emqtt/cuttlefish
