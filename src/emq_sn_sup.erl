@@ -14,7 +14,7 @@
 %% limitations under the License.
 %%--------------------------------------------------------------------
 
--module(emqttd_sn_sup).
+-module(emq_sn_sup).
 
 -author("Feng Lee <feng@emqtt.io>").
 
@@ -29,15 +29,15 @@ start_link(Listener) ->
 
 init([{Port, Opts}]) ->
 
-    GwSup = {emqttd_sn_gateway_sup,
-              {emqttd_sn_gateway_sup, start_link, []},
-                permanent, infinity, supervisor, [emqttd_sn_gateway_sup]},
+    GwSup = {emq_sn_gateway_sup,
+              {emq_sn_gateway_sup, start_link, []},
+                permanent, infinity, supervisor, [emq_sn_gateway_sup]},
 
-    MFA = {emqttd_sn_gateway_sup, start_gateway, []},
+    MFA = {emq_sn_gateway_sup, start_gateway, []},
 
-    UdpSrv = {emqttd_sn_udp_server,
+    UdpSrv = {emq_sn_udp_server,
                {esockd_udp, server, [mqtt_sn, Port, Opts, MFA]},
                  permanent, 5000, worker, [esockd_udp]},
 
-    {ok, { {one_for_all, 10, 3600}, [?CHILD(emqttd_sn), ?CHILD(emqttd_sn_registry), GwSup, UdpSrv] }}.
+    {ok, { {one_for_all, 10, 3600}, [?CHILD(emq_sn), ?CHILD(emq_sn_registry), GwSup, UdpSrv] }}.
 

@@ -14,26 +14,24 @@
 %% limitations under the License.
 %%--------------------------------------------------------------------
 
--module(emqttd_sn_gateway_sup).
+-module(emq_sn_app).
 
 -author("Feng Lee <feng@emqtt.io>").
 
--behaviour(supervisor).
+-behaviour(application).
 
--export([start_link/0, start_gateway/2, init/1]).
+-export([start/2, stop/1]).
 
-%% @doc Start MQTT-SN Gateway Supervisor.
--spec(start_link() -> {ok, pid()}).
-start_link() ->
-	supervisor:start_link({local, ?MODULE}, ?MODULE, []).
+-define(APP, emq_sn).
 
-%% @doc Start a MQTT-SN Gateway.
--spec(start_gateway(inet:socket(), {inet:ip_address(), inet:port()}) -> {ok, pid()}).
-start_gateway(Sock, Peer) ->
-    supervisor:start_child(?MODULE, [Sock, Peer]).
+%%--------------------------------------------------------------------
+%% Application Callback
+%%--------------------------------------------------------------------
 
-init([]) ->
-    {ok, {{simple_one_for_one, 0, 1},
-          [{sn_gateway, {emqttd_sn_gateway, start_link, []},
-              temporary, 5000, worker, [emqttd_sn_gateway]}]}}.
+start(_Type, _Args) ->
+    {ok, Listener} = application:get_env(?APP, listener),
+    emq_sn_sup:start_link(Listener).
+
+stop(_State) ->
+	ok.
 

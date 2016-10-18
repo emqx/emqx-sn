@@ -17,7 +17,7 @@
 %% The MQTT-SN and MQTT translator...
 %% Advertise 
 
--module(emqttd_sn).
+-module(emq_sn).
 
 -author("Feng Lee <feng@emqtt.io>").
 
