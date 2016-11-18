@@ -172,10 +172,10 @@ connected(?SN_SUBSCRIBE_MSG(Flags, MsgId, TopicId), StateData = #state{client_id
             send_message(?SN_SUBACK_MSG(NewFlag, TopicId, MsgId, ?SN_RC_INVALID_TOPIC_ID), StateData);
         TopicName ->
             case emqttd_protocol:received(?SUBSCRIBE_PACKET(MsgId, [{TopicName, Qos}]), Proto) of
-        {ok, Proto1}           -> next_state(connected, StateData#state{protocol = Proto1});
-        {error, Error}         -> shutdown(Error, StateData);
-        {error, Error, Proto1} -> shutdown(Error, StateData#state{protocol = Proto1});
-        {stop, Reason, Proto1} -> stop(Reason, StateData#state{protocol = Proto1})
+                {ok, Proto1}           -> next_state(connected, StateData#state{protocol = Proto1});
+                {error, Error}         -> shutdown(Error, StateData);
+                {error, Error, Proto1} -> shutdown(Error, StateData#state{protocol = Proto1});
+                {stop, Reason, Proto1} -> stop(Reason, StateData#state{protocol = Proto1})
             end
     end;
 
@@ -185,10 +185,10 @@ connected(?SN_UNSUBSCRIBE_MSG(Flags, MsgId, TopicId), StateData = #state{client_
         undefined -> stop(protocol_bad_topicidtype, StateData#state{protocol = Proto});  %% UNSUBACK has no ReturnCode
         TopicName ->
             case emqttd_protocol:received(?UNSUBSCRIBE_PACKET(MsgId, [TopicName]), Proto) of
-        {ok, Proto1}           -> next_state(connected, StateData#state{protocol = Proto1});
-        {error, Error}         -> shutdown(Error, StateData);
-        {error, Error, Proto1} -> shutdown(Error, StateData#state{protocol = Proto1});
-        {stop, Reason, Proto1} -> stop(Reason, StateData#state{protocol = Proto1})
+                {ok, Proto1}           -> next_state(connected, StateData#state{protocol = Proto1});
+                {error, Error}         -> shutdown(Error, StateData);
+                {error, Error, Proto1} -> shutdown(Error, StateData#state{protocol = Proto1});
+                {stop, Reason, Proto1} -> stop(Reason, StateData#state{protocol = Proto1})
             end
     end;
 

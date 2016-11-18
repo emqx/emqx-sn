@@ -20,13 +20,13 @@ start() ->
     %% receive message
     wait_response(),
 
-    %% subscribe
+    %% subscribe  normal topic name
     SubscribePackage = gen_subscribe_package(<<"T3">>),
     ok = gen_udp:send(Socket, ?HOST, ?PORT, SubscribePackage),
     io:format("send subscribe package=~p~n", [SubscribePackage]),
     wait_response(),
 
-    %% publish
+    %% publish   SHORT TOPIC NAME
     PublishPackage = gen_publish_package(<<"T3">>, <<"Payload...">>),
     ok = gen_udp:send(Socket, ?HOST, ?PORT, PublishPackage),
     io:format("send publish package=~p~n", [PublishPackage]),
@@ -64,7 +64,7 @@ gen_subscribe_package(ShortTopic) ->
     Will = 0,
     Qos = 1,
     CleanSession = 0,
-    TopicIdType = 0,
+    TopicIdType = 0,  % normal topic name
     Flag = <<Dup:1, Qos:2, Retain:1, Will:1, CleanSession:1, TopicIdType:2>>,
     MsgId = 1,
     <<Length:8, MsgType:8, Flag/binary, MsgId:16, ShortTopic/binary>>.
@@ -84,7 +84,7 @@ gen_publish_package(ShortTopic, Payload) ->
     Will = 0,
     CleanSession = 0,
     MsgId = 1,
-    TopicIdType = 2,
+    TopicIdType = 2,  % SHORT TOPIC NAME
     Flag = <<Dup:1, Qos:2, Retain:1, Will:1, CleanSession:1, TopicIdType:2>>,
     <<Length:8, MsgType:8, Flag/binary, ShortTopic/binary, MsgId:16, Payload/binary>>.
 
