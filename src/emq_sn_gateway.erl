@@ -131,8 +131,8 @@ connected(?SN_REGISTER_MSG(TopicId, MsgId, TopicName), StateData = #state{client
     {next_state, connected, StateData};
 
 connected(?SN_PUBLISH_MSG(Flags, TopicId, MsgId, Data), StateData = #state{client_id = ClientId, protocol = Proto}) ->
-    #mqtt_sn_flags{dup = Dup, qos = Qos, retain = Retain} = Flags,
-    case emq_sn_registry:lookup_topic(ClientId, TopicId) of
+    #mqtt_sn_flags{dup = Dup, qos = Qos, retain = Retain, topic_id_type = TopicIdType} = Flags,
+    case topicid_to_topicname(TopicIdType, TopicId, ClientId) of
         undefined ->
             send_message(?SN_PUBACK_MSG(TopicId, MsgId, ?SN_RC_INVALID_TOPIC_ID), StateData);
         TopicName -> 
@@ -164,23 +164,32 @@ connected(?SN_PUBREC_MSG(PubRec, MsgId), StateData = #state{protocol = Proto})
         {stop, Reason, Proto1} -> stop(Reason, StateData#state{protocol = Proto1})
     end;
 
-%%TODO: TopicId -> Name
-connected(?SN_SUBSCRIBE_MSG(Flags, MsgId, Topic), StateData = #state{protocol = Proto}) ->
-    #mqtt_sn_flags{qos = Qos, topic_id_type = _TopicIdType} = Flags,
-    case emqttd_protocol:received(?SUBSCRIBE_PACKET(MsgId, [{Topic, Qos}]), Proto) of
+connected(?SN_SUBSCRIBE_MSG(Flags, MsgId, TopicId), StateData = #state{client_id = ClientId, protocol = Proto}) ->
+    #mqtt_sn_flags{qos = Qos, topic_id_type = TopicIdType} = Flags,
+    case topicid_to_topicname(TopicIdType, TopicId, ClientId) of
+        undefined ->
+            NewFlag = <<0:1, Qos:2, 0:5>>,
+            send_message(?SN_SUBACK_MSG(NewFlag, TopicId, MsgId, ?SN_RC_INVALID_TOPIC_ID), StateData);
+        TopicName ->
+            case emqttd_protocol:received(?SUBSCRIBE_PACKET(MsgId, [{TopicName, Qos}]), Proto) of
         {ok, Proto1}           -> next_state(connected, StateData#state{protocol = Proto1});
         {error, Error}         -> shutdown(Error, StateData);
         {error, Error, Proto1} -> shutdown(Error, StateData#state{protocol = Proto1});
         {stop, Reason, Proto1} -> stop(Reason, StateData#state{protocol = Proto1})
+            end
     end;
 
-%%TODO: TopicId -> Name
-connected(?SN_UNSUBSCRIBE_MSG(_Flags, MsgId, Topic), StateData = #state{protocol = Proto}) ->
-    case emqttd_protocol:received(?UNSUBSCRIBE_PACKET(MsgId, [Topic]), Proto) of
+connected(?SN_UNSUBSCRIBE_MSG(Flags, MsgId, TopicId), StateData = #state{client_id = ClientId, protocol = Proto}) ->
+    #mqtt_sn_flags{topic_id_type = TopicIdType} = Flags,
+    case topicid_to_topicname(TopicIdType, TopicId, ClientId) of
+        undefined -> stop(protocol_bad_topicidtype, StateData#state{protocol = Proto});  %% UNSUBACK has no ReturnCode
+        TopicName ->
+            case emqttd_protocol:received(?UNSUBSCRIBE_PACKET(MsgId, [TopicName]), Proto) of
         {ok, Proto1}           -> next_state(connected, StateData#state{protocol = Proto1});
         {error, Error}         -> shutdown(Error, StateData);
         {error, Error, Proto1} -> shutdown(Error, StateData#state{protocol = Proto1});
         {stop, Reason, Proto1} -> stop(Reason, StateData#state{protocol = Proto1})
+            end
     end;
 
 connected(?SN_PINGREQ_MSG(_ClientId), StateData) ->
@@ -251,15 +260,12 @@ handle_info({deliver, Msg}, StateName, StateData = #state{client_id = ClientId})
                   payload  = Payload} = emqttd_message:to_packet(Msg),
     case emq_sn_registry:lookup_topic_id(ClientId, TopicName) of
         undefined -> 
-            ?LOG(error, "Before subscribing, please register topic: ~p", [TopicName], StateData);    
+            case byte_size(TopicName) of
+                2 -> send_publish(Dup, Qos, Retain, 2, TopicName, MsgId, Payload, StateData);  % use short topic name
+                _ -> ?LOG(error, "Before subscribing, please register topic: ~p", [TopicName], StateData)
+            end;
         TopicId -> 
-            MsgId1 = case Qos > 0 of
-                true -> MsgId;
-                false -> 0
-            end,
-            Flags = #mqtt_sn_flags{dup = Dup, qos = Qos, retain = Retain, topic_id_type = 2#01},
-            Data = ?SN_PUBLISH_MSG(Flags, TopicId, MsgId1, Payload),
-            send_message(Data, StateData)
+            send_publish(Dup, Qos, Retain, 1, TopicId, MsgId, Payload, StateData)   % use pre-defined topic id
     end,
     next_state(StateName, StateData);
 
@@ -330,6 +336,19 @@ transform(?PUBACK_PACKET(?PUBCOMP, MsgId)) ->
 transform(?UNSUBACK_PACKET(MsgId))->
     ?SN_UNSUBACK_MSG(MsgId).
 
+send_publish(Dup, Qos, Retain, TopicIdType, TopicName, MsgId, Payload, StateData) when is_binary(TopicName) ->
+    <<TopicId:16>> = TopicName,
+    send_publish(Dup, Qos, Retain, TopicIdType, TopicId, MsgId, Payload, StateData);
+send_publish(Dup, Qos, Retain, TopicIdType, TopicId, MsgId, Payload, StateData) ->
+    MsgId1 = case Qos > 0 of
+                 true -> MsgId;
+                 false -> 0
+             end,
+    Flags = #mqtt_sn_flags{dup = Dup, qos = Qos, retain = Retain, topic_id_type = TopicIdType},
+    Data = ?SN_PUBLISH_MSG(Flags, TopicId, MsgId1, Payload),
+    send_message(Data, StateData).
+
+
 send_message(Msg, StateData = #state{sock = Sock, peer = {Host, Port}}) ->
     ?LOG(debug, "SEND ~p~n", [Msg], StateData),
     gen_udp:send(Sock, Host, Port, emq_sn_message:serialize(Msg)).
@@ -347,4 +366,18 @@ mqttsn_to_mqtt(?SN_PUBACK) -> ?PUBACK;
 mqttsn_to_mqtt(?SN_PUBREC) -> ?PUBREC;
 mqttsn_to_mqtt(?SN_PUBREL) -> ?PUBREL;
 mqttsn_to_mqtt(?SN_PUBCOMP) -> ?PUBCOMP.
+
+
+topicid_to_topicname(TopicType, TopicId, _ClientId) when TopicType == 0 ->
+    TopicId;
+topicid_to_topicname(TopicType, TopicId, ClientId) when TopicType == 1 ->
+    emq_sn_registry:lookup_topic(ClientId, TopicId);
+topicid_to_topicname(TopicType, TopicId, _ClientId) when TopicType == 2 ->
+    case is_binary(TopicId) of
+        true -> TopicId;
+        false -> <<TopicId:16>>
+    end;
+topicid_to_topicname(_TopicType, _TopicId, _ClientId) ->
+    undefined.
+
 
