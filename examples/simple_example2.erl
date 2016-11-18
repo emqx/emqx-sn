@@ -1,4 +1,4 @@
--module(simple_example).
+-module(simple_example2).
 
 -include("emq_sn.hrl").
 
@@ -20,20 +20,14 @@ start() ->
     %% receive message
     wait_response(),
 
-    %% register topic_id
-    RegisterPackage = gen_register_package(<<"TopicA">>, 0),
-    ok = gen_udp:send(Socket, ?HOST, ?PORT, RegisterPackage),
-    io:format("send register package=~p~n", [RegisterPackage]),
-    TopicId = wait_response(),
-
-    %% subscribe
-    SubscribePackage = gen_subscribe_package(TopicId),
+    %% subscribe, SHORT TOPIC NAME
+    SubscribePackage = gen_subscribe_package(<<"T1">>),
     ok = gen_udp:send(Socket, ?HOST, ?PORT, SubscribePackage),
     io:format("send subscribe package=~p~n", [SubscribePackage]),
     wait_response(),
 
-    %% publish
-    PublishPackage = gen_publish_package(TopicId, <<"Payload...">>),
+    %% publish, SHORT TOPIC NAME
+    PublishPackage = gen_publish_package(<<"T1">>, <<"Payload...">>),
     ok = gen_udp:send(Socket, ?HOST, ?PORT, PublishPackage),
     io:format("send publish package=~p~n", [PublishPackage]),
     wait_response(),
@@ -62,7 +56,7 @@ gen_connect_package(ClientId) ->
     Duration = 10,
     <<Length:8, MsgType:8, Flag/binary, ProtocolId:8, Duration:16, ClientId/binary>>.
 
-gen_subscribe_package(TopicId) ->
+gen_subscribe_package(ShortTopic) ->
     Length = 7,
     MsgType = ?SN_SUBSCRIBE,
     Dup = 0,
@@ -70,10 +64,10 @@ gen_subscribe_package(TopicId) ->
     Will = 0,
     Qos = 1,
     CleanSession = 0,
-    TopicIdType = 1,
+    TopicIdType = 2,   % SHORT TOPIC NAME
     Flag = <<Dup:1, Qos:2, Retain:1, Will:1, CleanSession:1, TopicIdType:2>>,
     MsgId = 1,
-    <<Length:8, MsgType:8, Flag/binary, MsgId:16, TopicId:16>>.
+    <<Length:8, MsgType:8, Flag/binary, MsgId:16, ShortTopic/binary>>.
 
 gen_register_package(Topic, TopicId) ->
     Length = 6+byte_size(Topic),
@@ -81,7 +75,7 @@ gen_register_package(Topic, TopicId) ->
     MsgId = 1,
     <<Length:8, MsgType:8, TopicId:16, MsgId:16, Topic/binary>>.
 
-gen_publish_package(TopicId, Payload) ->
+gen_publish_package(ShortTopic, Payload) ->
     Length = 7+byte_size(Payload),
     MsgType = ?SN_PUBLISH,
     Dup = 0,
@@ -90,9 +84,9 @@ gen_publish_package(TopicId, Payload) ->
     Will = 0,
     CleanSession = 0,
     MsgId = 1,
-    TopicIdType = 1,
+    TopicIdType = 2,  % SHORT TOPIC NAME
     Flag = <<Dup:1, Qos:2, Retain:1, Will:1, CleanSession:1, TopicIdType:2>>,
-    <<Length:8, MsgType:8, Flag/binary, TopicId:16, MsgId:16, Payload/binary>>.
+    <<Length:8, MsgType:8, Flag/binary, ShortTopic/binary, MsgId:16, Payload/binary>>.
 
 gen_disconnect_package()->
     Length = 2,
