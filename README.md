@@ -23,20 +23,20 @@ examples/simple_example.erl
 {ok, Socket} = gen_udp:open(0, [binary]),
 
 %% connect to broker
-Package = gen_connect_package(ClientId),
-ok = gen_udp:send(Socket, ?HOST, ?PORT, Package),
+Packet = gen_connect_package(ClientId),
+ok = gen_udp:send(Socket, ?HOST, ?PORT, Packet),
 
 %% register topic_id
-RegisterPackage = gen_register_package(<<"TopicA">>, 1),
-ok = gen_udp:send(Socket, ?HOST, ?PORT, RegisterPackage),
+RegisterPacket = gen_register_package(<<"TopicA">>, 1),
+ok = gen_udp:send(Socket, ?HOST, ?PORT, RegisterPacket),
 
 %% subscribe
-SubscribePackage = gen_subscribe_package(1),
-ok = gen_udp:send(Socket, ?HOST, ?PORT, SubscribePackage),
+SubscribePacket = gen_subscribe_package(1),
+ok = gen_udp:send(Socket, ?HOST, ?PORT, SubscribePacket),
 
 %% publish
-PublishPackage = gen_publish_package(1, <<"Payload...">>),
-ok = gen_udp:send(Socket, ?HOST, ?PORT, PublishPackage),
+PublishPacket = gen_publish_package(1, <<"Payload...">>),
+ok = gen_udp:send(Socket, ?HOST, ?PORT, PublishPacket),
 
 %% receive message
 receive
@@ -53,8 +53,8 @@ after
 end,
 
 %% disconnect from broker
-DisConnectPackage = gen_disconnect_package(),
-ok = gen_udp:send(Socket, ?HOST, ?PORT, DisConnectPackage).
+DisConnectPacket = gen_disconnect_package(),
+ok = gen_udp:send(Socket, ?HOST, ?PORT, DisConnectPacket).
 
 ```
 
