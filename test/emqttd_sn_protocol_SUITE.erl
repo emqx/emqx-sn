@@ -74,9 +74,9 @@ send_connect_msg(Fun) ->
     ProtocolId = 1,
     Duration = 10,
     ClientId = <<"test">>,
-    Package = <<Length:8, MsgType:8, Dup:1, Qos:2, Retain:1, Will:1, 
+    Packet = <<Length:8, MsgType:8, Dup:1, Qos:2, Retain:1, Will:1, 
             CleanSession:1, TopicIdType:2, ProtocolId:8, Duration:16, ClientId/binary>>,
-    ok = gen_udp:send(Socket, ?HOST, ?PORT, Package),
+    ok = gen_udp:send(Socket, ?HOST, ?PORT, Packet),
     lookup(Socket, Fun).    
 
 send_connect_msg_for_wait_will(Fun) ->
@@ -92,9 +92,9 @@ send_connect_msg_for_wait_will(Fun) ->
     ProtocolId = 1,
     Duration = 10,
     ClientId = <<"test">>,
-    ConnectPackage = <<Length:8, MsgType:8, Dup:1, Qos:2, Retain:1, Will:1, 
+    ConnectPacket = <<Length:8, MsgType:8, Dup:1, Qos:2, Retain:1, Will:1, 
             CleanSession:1, TopicIdType:2, ProtocolId:8, Duration:16, ClientId/binary>>,
-    ok = gen_udp:send(Socket, ?HOST, ?PORT, ConnectPackage),
+    ok = gen_udp:send(Socket, ?HOST, ?PORT, ConnectPacket),
     lookup(Socket, Fun). 
 
 send_willtopic_msg(Socket) ->
@@ -107,16 +107,16 @@ send_willtopic_msg(Socket) ->
     CleanSession = 0,
     TopicIdType = 0,
     WillTopic = <<"will">>,
-    WillTopicPackage = <<Length:8, MsgType:8, Dup:1, Qos:2, Retain:1, Will:1, 
+    WillTopicPacket = <<Length:8, MsgType:8, Dup:1, Qos:2, Retain:1, Will:1, 
             CleanSession:1, TopicIdType:2, WillTopic/binary>>,
-    ok = gen_udp:send(Socket, ?HOST, ?PORT, WillTopicPackage).    
+    ok = gen_udp:send(Socket, ?HOST, ?PORT, WillTopicPacket).    
 
 send_willmsg_msg(Socket) ->
     Length = 9,
     MsgType = ?SN_WILLMSG,
     WillMsg = <<"willmsg">>,
-    WillMsgPackage = <<Length:8, MsgType:8, WillMsg/binary>>,
-    ok = gen_udp:send(Socket, ?HOST, ?PORT, WillMsgPackage).
+    WillMsgPacket = <<Length:8, MsgType:8, WillMsg/binary>>,
+    ok = gen_udp:send(Socket, ?HOST, ?PORT, WillMsgPacket).
 
 send_register_msg(Socket) ->
     Length = 15,
@@ -124,8 +124,8 @@ send_register_msg(Socket) ->
     TopicId = 1,
     MsgId = 1,
     Topic = <<"testtopic">>,
-    RegisterPackage = <<Length:8, MsgType:8, TopicId:16, MsgId:16, Topic/binary>>,
-    ok = gen_udp:send(Socket, ?HOST, ?PORT, RegisterPackage).
+    RegisterPacket = <<Length:8, MsgType:8, TopicId:16, MsgId:16, Topic/binary>>,
+    ok = gen_udp:send(Socket, ?HOST, ?PORT, RegisterPacket).
 
 send_publish_msg(Socket, Qos) ->
     send_publish_msg(Socket, Qos, 0).
@@ -140,33 +140,33 @@ send_publish_msg(Socket, Qos, MsgId) ->
     TopicIdType = 0,
     TopicId = 1,
     Data = <<"testtopic">>,
-    PublishPackage = <<Length:8, MsgType:8, Dup:1, Qos:2, Retain:1, Will:1, 
+    PublishPacket = <<Length:8, MsgType:8, Dup:1, Qos:2, Retain:1, Will:1, 
             CleanSession:1, TopicIdType:2,TopicId:16, MsgId:16, Data/binary>>,
-    ok = gen_udp:send(Socket, ?HOST, ?PORT, PublishPackage).
+    ok = gen_udp:send(Socket, ?HOST, ?PORT, PublishPacket).
 
 send_puback_msg(Socket, TopicId, MsgId) ->
     Length = 4,
     MsgType = ?SN_PUBACK,
-    PubAckPackage = <<Length:8, MsgType:8, TopicId:16, MsgId:16, 0:8>>,
-    ok = gen_udp:send(Socket, ?HOST, ?PORT, PubAckPackage).
+    PubAckPacket = <<Length:8, MsgType:8, TopicId:16, MsgId:16, 0:8>>,
+    ok = gen_udp:send(Socket, ?HOST, ?PORT, PubAckPacket).
 
 send_pubrec_msg(Socket, MsgId) ->
     Length = 4,
     MsgType = ?SN_PUBREC,
-    PubRecPackage = <<Length:8, MsgType:8, MsgId:16>>,
-    ok = gen_udp:send(Socket, ?HOST, ?PORT, PubRecPackage).
+    PubRecPacket = <<Length:8, MsgType:8, MsgId:16>>,
+    ok = gen_udp:send(Socket, ?HOST, ?PORT, PubRecPacket).
 
 send_pubrel_msg(Socket, MsgId) ->
     Length = 4,
     MsgType = ?SN_PUBREL,
-    PubRelPackage = <<Length:8, MsgType:8, MsgId:16>>,
-    ok = gen_udp:send(Socket, ?HOST, ?PORT, PubRelPackage).
+    PubRelPacket = <<Length:8, MsgType:8, MsgId:16>>,
+    ok = gen_udp:send(Socket, ?HOST, ?PORT, PubRelPacket).
 
 send_pubcomp_msg(Socket, MsgId) ->
     Length = 4,
     MsgType = ?SN_PUBCOMP,
-    PubCompPackage = <<Length:8, MsgType:8, MsgId:16>>,
-    ok = gen_udp:send(Socket, ?HOST, ?PORT, PubCompPackage).
+    PubCompPacket = <<Length:8, MsgType:8, MsgId:16>>,
+    ok = gen_udp:send(Socket, ?HOST, ?PORT, PubCompPacket).
 
 send_subscribe_msg(Socket, Qos) ->
     Length = 14,
@@ -178,9 +178,9 @@ send_subscribe_msg(Socket, Qos) ->
     TopicIdType = 0,
     MsgId = 1,
     TopicId = <<"testtopic">>,
-    SubscribePackage = <<Length:8, MsgType:8, Dup:1, Qos:2, Retain:1, Will:1, 
+    SubscribePacket = <<Length:8, MsgType:8, Dup:1, Qos:2, Retain:1, Will:1, 
             CleanSession:1, TopicIdType:2, MsgId:16, TopicId/binary>>,
-    ok = gen_udp:send(Socket, ?HOST, ?PORT, SubscribePackage).    
+    ok = gen_udp:send(Socket, ?HOST, ?PORT, SubscribePacket).    
 
 send_unsubscribe_msg(Socket) ->
     Length = 13,
@@ -193,21 +193,21 @@ send_unsubscribe_msg(Socket) ->
     TopicIdType = 0,
     MsgId = 1,
     TopicId = <<"subtopic">>,
-    UnSubscribePackage = <<Length:8, MsgType:8, Dup:1, Qos:2, Retain:1, Will:1, 
+    UnSubscribePacket = <<Length:8, MsgType:8, Dup:1, Qos:2, Retain:1, Will:1, 
             CleanSession:1, TopicIdType:2, MsgId:16, TopicId/binary>>,
-    ok = gen_udp:send(Socket, ?HOST, ?PORT, UnSubscribePackage). 
+    ok = gen_udp:send(Socket, ?HOST, ?PORT, UnSubscribePacket). 
 
 send_pingreq_msg(Socket)->
     Length = 2,
     MsgType = ?SN_PINGREQ,
-    PingReqPackage = <<Length:8, MsgType:8>>,
-    ok = gen_udp:send(Socket, ?HOST, ?PORT, PingReqPackage).
+    PingReqPacket = <<Length:8, MsgType:8>>,
+    ok = gen_udp:send(Socket, ?HOST, ?PORT, PingReqPacket).
 
 send_disconnect_msg(Socket) ->
     Length = 2,
     MsgType = ?SN_DISCONNECT,
-    DisConnectPackage = <<Length:8, MsgType:8>>,
-    ok = gen_udp:send(Socket, ?HOST, ?PORT, DisConnectPackage).
+    DisConnectPacket = <<Length:8, MsgType:8>>,
+    ok = gen_udp:send(Socket, ?HOST, ?PORT, DisConnectPacket).
 
 lookup(Socket, Fun) ->
     receive

@@ -1,6 +1,6 @@
 PROJECT = emq_sn
 PROJECT_DESCRIPTION = MQTT-SN Gateway
-PROJECT_VERSION = 0.2
+PROJECT_VERSION = 0.2.1
 
 DEPS = esockd
 dep_esockd = git https://github.com/emqtt/esockd emq20

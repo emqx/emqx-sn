@@ -14,35 +14,35 @@ start() ->
     {ok, Socket} = gen_udp:open(0, [binary]),
 
     %% connect to emqttd_sn broker
-    Package = gen_connect_package(<<"client1">>),
-    ok = gen_udp:send(Socket, ?HOST, ?PORT, Package),
-    io:format("send connect package=~p~n", [Package]),
+    Packet = gen_connect_packet(<<"client1">>),
+    ok = gen_udp:send(Socket, ?HOST, ?PORT, Packet),
+    io:format("send connect packet=~p~n", [Packet]),
     %% receive message
     wait_response(),
 
     %% subscribe  normal topic name
-    SubscribePackage = gen_subscribe_package(<<"T3">>),
-    ok = gen_udp:send(Socket, ?HOST, ?PORT, SubscribePackage),
-    io:format("send subscribe package=~p~n", [SubscribePackage]),
+    SubscribePacket = gen_subscribe_packet(<<"T3">>),
+    ok = gen_udp:send(Socket, ?HOST, ?PORT, SubscribePacket),
+    io:format("send subscribe packet=~p~n", [SubscribePacket]),
     wait_response(),
 
     %% publish   SHORT TOPIC NAME
-    PublishPackage = gen_publish_package(<<"T3">>, <<"Payload...">>),
-    ok = gen_udp:send(Socket, ?HOST, ?PORT, PublishPackage),
-    io:format("send publish package=~p~n", [PublishPackage]),
+    PublishPacket = gen_publish_packet(<<"T3">>, <<"Payload...">>),
+    ok = gen_udp:send(Socket, ?HOST, ?PORT, PublishPacket),
+    io:format("send publish packet=~p~n", [PublishPacket]),
     wait_response(),
 
     % wait for subscribed message from broker
     wait_response(),
 
     %% disconnect from emqttd_sn broker
-    DisConnectPackage = gen_disconnect_package(),
-    ok = gen_udp:send(Socket, ?HOST, ?PORT, DisConnectPackage),
-    io:format("send disconnect package=~p~n", [DisConnectPackage]).
+    DisConnectPacket = gen_disconnect_packet(),
+    ok = gen_udp:send(Socket, ?HOST, ?PORT, DisConnectPacket),
+    io:format("send disconnect packet=~p~n", [DisConnectPacket]).
 
 
 
-gen_connect_package(ClientId) ->
+gen_connect_packet(ClientId) ->
     Length = 6+byte_size(ClientId),
     MsgType = ?SN_CONNECT,
     Dup = 0,
@@ -56,7 +56,7 @@ gen_connect_package(ClientId) ->
     Duration = 10,
     <<Length:8, MsgType:8, Flag/binary, ProtocolId:8, Duration:16, ClientId/binary>>.
 
-gen_subscribe_package(ShortTopic) ->
+gen_subscribe_packet(ShortTopic) ->
     Length = 7,
     MsgType = ?SN_SUBSCRIBE,
     Dup = 0,
@@ -69,13 +69,13 @@ gen_subscribe_package(ShortTopic) ->
     MsgId = 1,
     <<Length:8, MsgType:8, Flag/binary, MsgId:16, ShortTopic/binary>>.
 
-gen_register_package(Topic, TopicId) ->
+gen_register_packet(Topic, TopicId) ->
     Length = 6+byte_size(Topic),
     MsgType = ?SN_REGISTER,
     MsgId = 1,
     <<Length:8, MsgType:8, TopicId:16, MsgId:16, Topic/binary>>.
 
-gen_publish_package(ShortTopic, Payload) ->
+gen_publish_packet(ShortTopic, Payload) ->
     Length = 7+byte_size(Payload),
     MsgType = ?SN_PUBLISH,
     Dup = 0,
@@ -88,7 +88,7 @@ gen_publish_package(ShortTopic, Payload) ->
     Flag = <<Dup:1, Qos:2, Retain:1, Will:1, CleanSession:1, TopicIdType:2>>,
     <<Length:8, MsgType:8, Flag/binary, ShortTopic/binary, MsgId:16, Payload/binary>>.
 
-gen_disconnect_package()->
+gen_disconnect_packet()->
     Length = 2,
     MsgType = ?SN_DISCONNECT,
     <<Length:8, MsgType:8>>.
