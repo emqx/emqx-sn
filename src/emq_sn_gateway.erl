@@ -296,6 +296,10 @@ handle_info({keepalive, check}, StateName, StateData = #state{keepalive = KeepAl
             shutdown(Error, StateData)
     end;
 
+handle_info({'$gen_cast', {subscribe, Topics}}, StateName, StateData) ->
+    ?LOG(debug, "ignore subscribe Topics=~p", [Topics], StateData),
+    {next_state, StateName, StateData};
+
 handle_info(Info, StateName, StateData) ->
     ?LOG(error, "UNEXPECTED INFO: ~p", [Info], StateData),
     {next_state, StateName, StateData}.
