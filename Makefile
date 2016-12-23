@@ -1,12 +1,12 @@
 PROJECT = emq_sn
 PROJECT_DESCRIPTION = MQTT-SN Gateway
-PROJECT_VERSION = 0.2.1
+PROJECT_VERSION = 0.2.5
 
 DEPS = esockd
-dep_esockd = git https://github.com/emqtt/esockd emq20
+dep_esockd = git https://github.com/emqtt/esockd master
 
 BUILD_DEPS = emqttd cuttlefish
-dep_emqttd = git https://github.com/emqtt/emqttd emq20
+dep_emqttd = git https://github.com/emqtt/emqttd master
 dep_cuttlefish = git https://github.com/emqtt/cuttlefish
 
 ERLC_OPTS += +'{parse_transform, lager_transform}'
