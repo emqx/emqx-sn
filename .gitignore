@@ -13,3 +13,5 @@ emq_sn.d
 logs/
 .erlang.mk/
 data/
+.idea/
+*.iml

@@ -1,11 +1,13 @@
--module (emqttd_sn_protocol_SUITE).
+-module (emq_sn_protocol_SUITE).
 
 -include_lib("eunit/include/eunit.hrl").
--include("emqttd_sn.hrl").
+-include("emq_sn.hrl").
 -include_lib("emqttd/include/emqttd_protocol.hrl").
 -compile(export_all).
 -define(HOST, "localhost").
 -define(PORT, 1884).
+
+all() -> [].
 
 subscribe() ->
     subscribe(0).
