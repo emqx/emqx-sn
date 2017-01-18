@@ -63,7 +63,7 @@ lookup_topic_id(ClientId,TopicName) ->
 
 -spec(unregister_topic(binary()) -> ok).
 unregister_topic(ClientId) ->
-    gen_server:cast(?MODULE, {unregister, ClientId}).
+    gen_server:call(?MODULE, {unregister, ClientId}).
 
 %%--------------------------------------------------------------------
 %% gen_server Callbacks
@@ -85,21 +85,21 @@ handle_call({register, ClientId, TopicId, TopicName}, _From, State) ->
     ets:insert(sn_topic_id, {{ClientId, TopicName}, TopicId}),
 	{reply, ok, State};
 
+handle_call({unregister, ClientId}, _From, State) ->
+    lists:foreach(
+        fun({_, TopicId}) ->
+            [{_, TopicName}] = ets:lookup(sn_topic_name, {ClientId, TopicId}),
+            ets:delete(sn_topic_name, {ClientId, TopicId}),
+            ets:delete(sn_topic_id, {ClientId, TopicName})
+        end, ets:lookup(sn_topic, ClientId)),
+    ets:delete(sn_topic, ClientId),
+    {reply, ok, State};
+
 handle_call(stop, _From, State) ->
     {stop, normal, ok, State};
 
 handle_call(_Request, _From, State) ->
 	{reply, ignored, State}.
-
-handle_cast({unregister, ClientId}, State) ->
-    lists:foreach(
-        fun({_, TopicId}) -> 
-            [{_, TopicName}] = ets:lookup(sn_topic_name, {ClientId, TopicId}),
-            ets:delete(sn_topic_name, {ClientId, TopicId}),
-            ets:delete(sn_topic_id, {ClientId, TopicName})
-        end, ets:lookup(sn_topic_id, ClientId)),
-    ets:delete(sn_topic, ClientId),
-	{noreply, State};
 
 handle_cast(_Msg, State) ->
 	{noreply, State}.
@@ -113,20 +113,4 @@ terminate(_Reason, _State) ->
 code_change(_OldVsn, State, _Extra) ->
 	{ok, State}.
 
--ifdef(TEST).
-
--include_lib("eunit/include/eunit.hrl").
-
-register_topic_test() ->
-    start_link(),
-    register_topic(<<"ClientId">>, 1, <<"Topic1">>),
-    register_topic(<<"ClientId">>, 2, <<"Topic2">>),
-    ?assertEqual(<<"Topic1">>, lookup_topic(<<"ClientId">>, 1)),
-    ?assertEqual(<<"Topic2">>, lookup_topic(<<"ClientId">>, 2)),
-    unregister_topic(<<"ClientId">>),
-    ?assertEqual(undefined, lookup_topic(<<"ClientId">>, 1)),
-    ?assertEqual(undefined, lookup_topic(<<"ClientId">>, 2)),
-    stop().
-
--endif.
 
