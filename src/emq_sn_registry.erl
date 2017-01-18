@@ -99,6 +99,7 @@ handle_call({unregister, ClientId}, _From, State) ->
             ets:delete(sn_topic_id, {ClientId, TopicName})
         end, ets:lookup(sn_topic, ClientId)),
     ets:delete(sn_topic, ClientId),
+    ets:delete(sn_topic_max_id, ClientId),
     {reply, ok, State, hibernate};
 
 handle_call(stop, _From, State) ->

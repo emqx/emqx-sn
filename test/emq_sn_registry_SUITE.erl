@@ -25,7 +25,7 @@
 
 -compile(export_all).
 
-all() -> [register_topic_test, register_topic_test2, register_topic_test3].
+all() -> [register_topic_test, register_topic_test2, register_topic_test3, register_topic_test4].
 
 
 init_per_suite(Config) ->
@@ -87,6 +87,18 @@ register_topic_test3(_Config) ->
     ?assertEqual(undefined, lookup_topic_id(<<"ClientId">>, <<"Topic1">>)),
     ?assertEqual(undefined, lookup_topic_id(<<"ClientId">>, <<"Topic2">>)),
     stop().
+
+
+register_topic_test4(_Config) ->
+    start_link(),
+    ?assertEqual(0, register_topic(<<"ClientId">>, <<"TopicA">>)),
+    ?assertEqual(1, register_topic(<<"ClientId">>, <<"TopicB">>)),
+    ?assertEqual(2, register_topic(<<"ClientId">>, <<"TopicC">>)),
+    unregister_topic(<<"ClientId">>),
+    ?assertEqual(0, register_topic(<<"ClientId">>, <<"TopicD">>)),
+    stop().
+
+
 
 register_a_lot(Max, Max) ->
     ok;
