@@ -39,15 +39,15 @@ end_per_suite(_Config) ->
 
 register_topic_test(_Config) ->
     start_link(),
-    ?assertEqual(0, register_topic(<<"ClientId">>, <<"Topic1">>)),
-    ?assertEqual(1, register_topic(<<"ClientId">>, <<"Topic2">>)),
-    ?assertEqual(<<"Topic1">>, lookup_topic(<<"ClientId">>, 0)),
-    ?assertEqual(<<"Topic2">>, lookup_topic(<<"ClientId">>, 1)),
-    ?assertEqual(0, lookup_topic_id(<<"ClientId">>, <<"Topic1">>)),
-    ?assertEqual(1, lookup_topic_id(<<"ClientId">>, <<"Topic2">>)),
+    ?assertEqual(1, register_topic(<<"ClientId">>, <<"Topic1">>)),
+    ?assertEqual(2, register_topic(<<"ClientId">>, <<"Topic2">>)),
+    ?assertEqual(<<"Topic1">>, lookup_topic(<<"ClientId">>, 1)),
+    ?assertEqual(<<"Topic2">>, lookup_topic(<<"ClientId">>, 2)),
+    ?assertEqual(1, lookup_topic_id(<<"ClientId">>, <<"Topic1">>)),
+    ?assertEqual(2, lookup_topic_id(<<"ClientId">>, <<"Topic2">>)),
     unregister_topic(<<"ClientId">>),
-    ?assertEqual(undefined, lookup_topic(<<"ClientId">>, 0)),
     ?assertEqual(undefined, lookup_topic(<<"ClientId">>, 1)),
+    ?assertEqual(undefined, lookup_topic(<<"ClientId">>, 2)),
     ?assertEqual(undefined, lookup_topic_id(<<"ClientId">>, <<"Topic1">>)),
     ?assertEqual(undefined, lookup_topic_id(<<"ClientId">>, <<"Topic2">>)),
     stop().
@@ -55,17 +55,17 @@ register_topic_test(_Config) ->
 
 register_topic_test2(_Config) ->
     start_link(),
-    ?assertEqual(0, register_topic(<<"ClientId">>, <<"Topic1">>)),
-    ?assertEqual(1, register_topic(<<"ClientId">>, <<"Topic2">>)),
-    ?assertEqual(0, register_topic(<<"ClientId">>, <<"Topic1">>)),
-    ?assertEqual(<<"Topic1">>, lookup_topic(<<"ClientId">>, 0)),
-    ?assertEqual(<<"Topic2">>, lookup_topic(<<"ClientId">>, 1)),
-    ?assertEqual(0, lookup_topic_id(<<"ClientId">>, <<"Topic1">>)),
-    ?assertEqual(1, lookup_topic_id(<<"ClientId">>, <<"Topic2">>)),
+    ?assertEqual(1, register_topic(<<"ClientId">>, <<"Topic1">>)),
+    ?assertEqual(2, register_topic(<<"ClientId">>, <<"Topic2">>)),
+    ?assertEqual(1, register_topic(<<"ClientId">>, <<"Topic1">>)),
+    ?assertEqual(<<"Topic1">>, lookup_topic(<<"ClientId">>, 1)),
+    ?assertEqual(<<"Topic2">>, lookup_topic(<<"ClientId">>, 2)),
+    ?assertEqual(1, lookup_topic_id(<<"ClientId">>, <<"Topic1">>)),
+    ?assertEqual(2, lookup_topic_id(<<"ClientId">>, <<"Topic2">>)),
     ?assertEqual(undefined, lookup_topic_id(<<"ClientId">>, <<"Topic3">>)),
     unregister_topic(<<"ClientId">>),
-    ?assertEqual(undefined, lookup_topic(<<"ClientId">>, 0)),
     ?assertEqual(undefined, lookup_topic(<<"ClientId">>, 1)),
+    ?assertEqual(undefined, lookup_topic(<<"ClientId">>, 2)),
     ?assertEqual(undefined, lookup_topic_id(<<"ClientId">>, <<"Topic1">>)),
     ?assertEqual(undefined, lookup_topic_id(<<"ClientId">>, <<"Topic2">>)),
     stop().
@@ -74,16 +74,15 @@ register_topic_test2(_Config) ->
 register_topic_test3(_Config) ->
     io:format("register_topic_test3 will take long long time ...~n"),
     start_link(),
-    register_a_lot(0, 16#10000),
+    register_a_lot(1, 16#fffe),
     io:format("start overflow~n"),
-    ?assertEqual(0, register_topic(<<"ClientId">>, <<"TopicABC">>)),
+    ?assertEqual(undefined, register_topic(<<"ClientId">>, <<"TopicABC">>)),
     timer:sleep(500),
-    ?assertEqual(undefined, lookup_topic_id(<<"ClientId">>, <<"Topic0">>)),
     ?assertEqual(1, lookup_topic_id(<<"ClientId">>, <<"Topic1">>)),
-    ?assertEqual(0, lookup_topic_id(<<"ClientId">>, <<"TopicABC">>)),
+    ?assertEqual(2, lookup_topic_id(<<"ClientId">>, <<"Topic2">>)),
     unregister_topic(<<"ClientId">>),
-    ?assertEqual(undefined, lookup_topic(<<"ClientId">>, 0)),
     ?assertEqual(undefined, lookup_topic(<<"ClientId">>, 1)),
+    ?assertEqual(undefined, lookup_topic(<<"ClientId">>, 2)),
     ?assertEqual(undefined, lookup_topic_id(<<"ClientId">>, <<"Topic1">>)),
     ?assertEqual(undefined, lookup_topic_id(<<"ClientId">>, <<"Topic2">>)),
     stop().
@@ -91,16 +90,18 @@ register_topic_test3(_Config) ->
 
 register_topic_test4(_Config) ->
     start_link(),
-    ?assertEqual(0, register_topic(<<"ClientId">>, <<"TopicA">>)),
-    ?assertEqual(1, register_topic(<<"ClientId">>, <<"TopicB">>)),
-    ?assertEqual(2, register_topic(<<"ClientId">>, <<"TopicC">>)),
+    ?assertEqual(1, register_topic(<<"ClientId">>, <<"TopicA">>)),
+    ?assertEqual(2, register_topic(<<"ClientId">>, <<"TopicB">>)),
+    ?assertEqual(3, register_topic(<<"ClientId">>, <<"TopicC">>)),
     unregister_topic(<<"ClientId">>),
-    ?assertEqual(0, register_topic(<<"ClientId">>, <<"TopicD">>)),
+    ?assertEqual(1, register_topic(<<"ClientId">>, <<"TopicD">>)),
     stop().
 
 
 
 register_a_lot(Max, Max) ->
+    TopicString = io_lib:format("Topic~p", [Max]),
+    ?assertEqual(Max, register_topic(<<"ClientId">>, list_to_binary(TopicString))),
     ok;
 register_a_lot(N, Max) ->
     case (N rem 1024) of

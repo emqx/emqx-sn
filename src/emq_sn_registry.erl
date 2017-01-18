@@ -75,7 +75,6 @@ unregister_topic(ClientId) ->
 init([]) ->
     %% ClientId -> [TopicId]
     ets:new(sn_topic, [bag, named_table, protected]),
-    ets:new(sn_topic_max_id, [set, named_table, protected]),
     %% {ClientId, TopicId} -> TopicName
     ets:new(sn_topic_name, [set, named_table, protected]),
     %% {ClientId, TopicName} ->TopicId 
@@ -99,7 +98,6 @@ handle_call({unregister, ClientId}, _From, State) ->
             ets:delete(sn_topic_id, {ClientId, TopicName})
         end, ets:lookup(sn_topic, ClientId)),
     ets:delete(sn_topic, ClientId),
-    ets:delete(sn_topic_max_id, ClientId),
     {reply, ok, State, hibernate};
 
 handle_call(stop, _From, State) ->
@@ -135,19 +133,14 @@ get_registered_id(ClientId, TopicName) ->
     end.
 
 register_new_topic(ClientId, TopicName) ->
-    NewTopicId = ets:update_counter(sn_topic_max_id, ClientId, 1, {2, 0}) - 1,
-    case NewTopicId >= 16#10000 of
-        true ->  % id overflow, replace the old one
-            TopicId = NewTopicId - 16#10000,
-            OldTopic = lookup_topic(ClientId, TopicId),
-            % DO NOT insert sn_topic, it's TopicId has already been there
-            ets:insert(sn_topic_name, {{ClientId, TopicId}, TopicName}),
-            ets:delete(sn_topic_id, {ClientId, OldTopic}),
-            ets:insert(sn_topic_id, {{ClientId, TopicName}, TopicId}),
-            TopicId;
-        false -> % this id is new
+    %% The values “0x0000” and “0xFFFF” are reserved and therefore should not be used.
+    NewTopicId = length(ets:lookup(sn_topic, ClientId)) + 1,
+    case NewTopicId < 16#FFFF of
+        true ->  % this id is new
             ets:insert(sn_topic, {ClientId, NewTopicId}),
             ets:insert(sn_topic_name, {{ClientId, NewTopicId}, TopicName}),
             ets:insert(sn_topic_id, {{ClientId, TopicName}, NewTopicId}),
-            NewTopicId
+            NewTopicId;
+        false -> % id is full
+            undefined
     end.
