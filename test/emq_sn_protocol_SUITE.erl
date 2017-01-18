@@ -90,6 +90,7 @@ subscribe_test(_Config) ->
     ?assertEqual(<<7, ?SN_REGACK, 1:16, 1:16, 0:8>>, receive_response(Socket)),
     send_subscribe_msg(Socket, 0),
     ?assertEqual(<<8, ?SN_SUBACK, 0:8, 1:16, 1:16, 0:8>>, receive_response(Socket)),
+    send_unsubscribe_msg_predefined_topic(Socket, 1),
     send_disconnect_msg(Socket),
     ?assertEqual(<<2, ?SN_DISCONNECT>>, receive_response(Socket)),
     gen_udp:close(Socket).
@@ -109,7 +110,7 @@ publish(Qos, MsgId) ->
         send_register_msg(Socket),
         send_subscribe_msg(Socket, Qos),
         send_publish_msg(Socket, Qos, MsgId),
-        send_unsubscribe_msg(Socket),
+        send_unsubscribe_msg_topic_name(Socket),
         send_pingreq_msg(Socket),
         send_disconnect_msg(Socket)
     end,
@@ -120,7 +121,7 @@ publish_for_wait_will() ->
         send_register_msg(Socket),
         send_subscribe_msg(Socket, 0),
         send_publish_msg(Socket, 0),
-        send_unsubscribe_msg(Socket),
+        send_unsubscribe_msg_topic_name(Socket),
         send_pingreq_msg(Socket)
     end,
     send_connect_msg_for_wait_will(Fun).
@@ -196,7 +197,7 @@ send_willmsg_msg(Socket) ->
 send_register_msg(Socket) ->
     Length = 15,
     MsgType = ?SN_REGISTER,
-    TopicId = 1,
+    TopicId = 0,
     MsgId = 1,
     Topic = <<"testtopic">>,
     RegisterPacket = <<Length:8, MsgType:8, TopicId:16, MsgId:16, Topic/binary>>,
@@ -257,7 +258,22 @@ send_subscribe_msg(Socket, Qos) ->
             CleanSession:1, TopicIdType:2, MsgId:16, TopicId/binary>>,
     ok = gen_udp:send(Socket, ?HOST, ?PORT, SubscribePacket).    
 
-send_unsubscribe_msg(Socket) ->
+send_unsubscribe_msg_predefined_topic(Socket, TopicId) ->
+    Length = 13,
+    MsgType = ?SN_UNSUBSCRIBE,
+    Dup = 0,
+    Qos = 0,
+    Retain = 0,
+    Will = 0,
+    CleanSession = 0,
+    TopicIdType = 1,
+    MsgId = 1,
+    UnSubscribePacket = <<Length:8, MsgType:8, Dup:1, Qos:2, Retain:1, Will:1, 
+            CleanSession:1, TopicIdType:2, MsgId:16, TopicId:16>>,
+    ok = gen_udp:send(Socket, ?HOST, ?PORT, UnSubscribePacket).
+
+
+send_unsubscribe_msg_topic_name(Socket) ->
     Length = 13,
     MsgType = ?SN_UNSUBSCRIBE,
     Dup = 0,
@@ -268,9 +284,9 @@ send_unsubscribe_msg(Socket) ->
     TopicIdType = 0,
     MsgId = 1,
     TopicId = <<"subtopic">>,
-    UnSubscribePacket = <<Length:8, MsgType:8, Dup:1, Qos:2, Retain:1, Will:1, 
-            CleanSession:1, TopicIdType:2, MsgId:16, TopicId/binary>>,
-    ok = gen_udp:send(Socket, ?HOST, ?PORT, UnSubscribePacket). 
+    UnSubscribePacket = <<Length:8, MsgType:8, Dup:1, Qos:2, Retain:1, Will:1,
+        CleanSession:1, TopicIdType:2, MsgId:16, TopicId/binary>>,
+    ok = gen_udp:send(Socket, ?HOST, ?PORT, UnSubscribePacket).
 
 send_pingreq_msg(Socket)->
     Length = 2,

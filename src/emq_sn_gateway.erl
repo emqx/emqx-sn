@@ -126,8 +126,8 @@ wait_for_will_msg(Event, StateData) ->
     {next_state, wait_for_will_msg, StateData}.
 
 connected(?SN_REGISTER_MSG(TopicId, MsgId, TopicName), StateData = #state{client_id = ClientId}) ->
-    emq_sn_registry:register_topic(ClientId, TopicId, TopicName),
-    send_message(?SN_REGACK_MSG(TopicId, MsgId, 0), StateData),
+    NewTopicId = emq_sn_registry:register_topic(ClientId, TopicName),
+    send_message(?SN_REGACK_MSG(NewTopicId, MsgId, 0), StateData),
     {next_state, connected, StateData};
 
 connected(?SN_PUBLISH_MSG(Flags, TopicId, MsgId, Data), StateData = #state{client_id = ClientId, protocol = Proto}) ->

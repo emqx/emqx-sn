@@ -20,10 +20,13 @@
 
 -behaviour(gen_server).
 
+-define(LOG(Level, Format, Args),
+    lager:Level("MQTT-SN(registry): " ++ Format, Args)).
+
 %% API.
 -export([start_link/0, stop/0]).
 
--export([register_topic/3, lookup_topic/2, unregister_topic/1, lookup_topic_id/2]).
+-export([register_topic/2, lookup_topic/2, unregister_topic/1, lookup_topic_id/2]).
 
 %% gen_server.
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2,
@@ -43,9 +46,9 @@ start_link() ->
 stop() ->
     gen_server:call(?MODULE, stop).
 
--spec(register_topic(binary(), pos_integer(), binary()) -> ok).
-register_topic(ClientId, TopicId, TopicName) ->
-    gen_server:call(?MODULE, {register, ClientId, TopicId, TopicName}).
+-spec(register_topic(binary(), binary()) -> integer()).
+register_topic(ClientId, TopicName) ->
+    gen_server:call(?MODULE, {register, ClientId, TopicName}).
 
 -spec(lookup_topic(binary(), pos_integer()) -> undefined | binary()).
 lookup_topic(ClientId, TopicId) ->
@@ -72,6 +75,7 @@ unregister_topic(ClientId) ->
 init([]) ->
     %% ClientId -> [TopicId]
     ets:new(sn_topic, [bag, named_table, protected]),
+    ets:new(sn_topic_max_id, [set, named_table, protected]),
     %% {ClientId, TopicId} -> TopicName
     ets:new(sn_topic_name, [set, named_table, protected]),
     %% {ClientId, TopicName} ->TopicId 
@@ -79,11 +83,13 @@ init([]) ->
 
 	{ok, #state{}}.
 
-handle_call({register, ClientId, TopicId, TopicName}, _From, State) ->
-    ets:insert(sn_topic, {ClientId, TopicId}),
-    ets:insert(sn_topic_name, {{ClientId, TopicId}, TopicName}),
-    ets:insert(sn_topic_id, {{ClientId, TopicName}, TopicId}),
-	{reply, ok, State};
+handle_call({register, ClientId, TopicName}, _From, State) ->
+    case get_registered_id(ClientId, TopicName) of
+        undefined ->  % this topic has never been registered
+            {reply, register_new_topic(ClientId, TopicName), State, hibernate};
+        ExistTopicId ->
+            {reply, ExistTopicId, State, hibernate}
+    end;
 
 handle_call({unregister, ClientId}, _From, State) ->
     lists:foreach(
@@ -93,7 +99,7 @@ handle_call({unregister, ClientId}, _From, State) ->
             ets:delete(sn_topic_id, {ClientId, TopicName})
         end, ets:lookup(sn_topic, ClientId)),
     ets:delete(sn_topic, ClientId),
-    {reply, ok, State};
+    {reply, ok, State, hibernate};
 
 handle_call(stop, _From, State) ->
     {stop, normal, ok, State};
@@ -114,3 +120,33 @@ code_change(_OldVsn, State, _Extra) ->
 	{ok, State}.
 
 
+
+%%--------------------------------------------------------------------
+%% Internal Functions
+%%--------------------------------------------------------------------
+
+get_registered_id(ClientId, TopicName) ->
+    case ets:lookup(sn_topic_id, {ClientId, TopicName}) of
+        [] ->  % this topic has never been registered
+            undefined;
+        [{{ClientId, TopicName}, ExistTopicId}] ->  % this topic has been registered
+            ExistTopicId
+    end.
+
+register_new_topic(ClientId, TopicName) ->
+    NewTopicId = ets:update_counter(sn_topic_max_id, ClientId, 1, {2, 0}) - 1,
+    case NewTopicId >= 16#10000 of
+        true ->  % id overflow, replace the old one
+            TopicId = NewTopicId - 16#10000,
+            OldTopic = lookup_topic(ClientId, TopicId),
+            % DO NOT insert sn_topic, it's TopicId has already been there
+            ets:insert(sn_topic_name, {{ClientId, TopicId}, TopicName}),
+            ets:delete(sn_topic_id, {ClientId, OldTopic}),
+            ets:insert(sn_topic_id, {{ClientId, TopicName}, TopicId}),
+            TopicId;
+        false -> % this id is new
+            ets:insert(sn_topic, {ClientId, NewTopicId}),
+            ets:insert(sn_topic_name, {{ClientId, NewTopicId}, TopicName}),
+            ets:insert(sn_topic_id, {{ClientId, TopicName}, NewTopicId}),
+            NewTopicId
+    end.
