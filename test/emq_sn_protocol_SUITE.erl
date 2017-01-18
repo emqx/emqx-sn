@@ -7,17 +7,92 @@
 -define(HOST, "localhost").
 -define(PORT, 1884).
 
-all() -> [].
 
-subscribe() ->
-    subscribe(0).
-subscribe(Qos) ->
-    Fun = fun(Socket) ->
-        send_register_msg(Socket),
-        send_subscribe_msg(Socket, Qos),
-        send_disconnect_msg(Socket)
-    end,
-    send_connect_msg(Fun).
+init_per_suite(Config) ->
+    prepare_config(),
+    ?assertMatch({ok, _}, application:ensure_all_started(emqttd)),
+    ?assertMatch({ok, _}, application:ensure_all_started(emq_sn)),
+    ?assertEqual(ok, application:ensure_started(lager)),
+    lager_common_test_backend:bounce(debug),
+    Config.
+
+end_per_suite(_Config) ->
+    application:stop(lager),
+    application:stop(emq_sn),
+    application:stop(emqttd).
+
+prepare_config() ->
+    Configs = [{plugins_loaded_file,"{{ platform_data_dir }}/loaded_plugins"},
+        {plugins_etc_dir,"{{ platform_etc_dir }}/plugins/"},
+        {broker_sys_interval,60},
+        {cache_acl,true},
+        {acl_file,"{{ platform_etc_dir }}/acl.conf"},
+        {allow_anonymous,true},
+        {protocol,
+            [{max_clientid_len,1024},
+                {max_packet_size,65536},
+                {client_idle_timeout,30}]},
+        {session,
+            [{max_inflight,100},
+                {retry_interval,60},
+                {await_rel_timeout,20},
+                {max_awaiting_rel,0},
+                {collect_interval,0},
+                {expired_after,86400}]},
+        {queue,
+            [{priority,[]},
+                {type,simple},
+                {max_length,infinity},
+                {low_watermark,0.2},
+                {high_watermark,0.6},
+                {queue_qos0,true}]},
+        {pubsub,[{pool_size,8},{by_clientid,true},{async,true}]},
+        {bridge,[{max_queue_len,10000},{ping_down_interval,1}]},
+        {listeners,
+            [{tcp,1883,
+                [{connopts,[]},
+                    {sockopts,[{backlog,1024},{nodelay,true}]},
+                    {acceptors,8},
+                    {max_clients,1024}]},
+                {ssl,8883,
+                    [{ssl,
+                        [{handshake_timeout,15000},
+                            {keyfile,"{{ platform_etc_dir }}/certs/key.pem"},
+                            {certfile,"{{ platform_etc_dir }}/certs/cert.pem"}]},
+                        {connopts,[]},
+                        {sockopts,[{nodelay,true}]},
+                        {acceptors,4},
+                        {max_clients,512}]},
+                {http,8083,
+                    [{connopts,[]},
+                        {sockopts,[{nodelay,true}]},
+                        {acceptors,4},
+                        {max_clients,64}]},
+                {https,8084,
+                    [{ssl,
+                        [{handshake_timeout,15000},
+                            {keyfile,"{{ platform_etc_dir }}/certs/key.pem"},
+                            {certfile,"{{ platform_etc_dir }}/certs/cert.pem"}]},
+                        {connopts,[]},
+                        {sockopts,[{nodelay,true}]},
+                        {acceptors,4},
+                        {max_clients,64}]}]}],
+    [application:set_env(emqttd, Key, Val) || {Key, Val} <- Configs].
+
+
+all() -> [subscribe_test].
+
+subscribe_test(_Config) ->
+    {ok, Socket} = gen_udp:open(0, [binary]),
+    send_connect_msg(Socket),
+    ?assertEqual(<<3, ?SN_CONNACK, 0>>, receive_response(Socket)),
+    send_register_msg(Socket),
+    ?assertEqual(<<7, ?SN_REGACK, 1:16, 1:16, 0:8>>, receive_response(Socket)),
+    send_subscribe_msg(Socket, 0),
+    ?assertEqual(<<8, ?SN_SUBACK, 0:8, 1:16, 1:16, 0:8>>, receive_response(Socket)),
+    send_disconnect_msg(Socket),
+    ?assertEqual(<<2, ?SN_DISCONNECT>>, receive_response(Socket)),
+    gen_udp:close(Socket).
 
 
 publish()->
@@ -63,8 +138,7 @@ send_searchgw_msg() ->
             gen_udp:close(Socket)
         end.    
 
-send_connect_msg(Fun) ->
-    {ok, Socket} = gen_udp:open(0, [binary]),
+send_connect_msg(Socket) ->
     Length = 10,
     MsgType = ?SN_CONNECT,
     Dup = 0,
@@ -78,8 +152,7 @@ send_connect_msg(Fun) ->
     ClientId = <<"test">>,
     Packet = <<Length:8, MsgType:8, Dup:1, Qos:2, Retain:1, Will:1, 
             CleanSession:1, TopicIdType:2, ProtocolId:8, Duration:16, ClientId/binary>>,
-    ok = gen_udp:send(Socket, ?HOST, ?PORT, Packet),
-    lookup(Socket, Fun).    
+    ok = gen_udp:send(Socket, ?HOST, ?PORT, Packet).
 
 send_connect_msg_for_wait_will(Fun) ->
     {ok, Socket} = gen_udp:open(0, [binary]),
@@ -97,7 +170,7 @@ send_connect_msg_for_wait_will(Fun) ->
     ConnectPacket = <<Length:8, MsgType:8, Dup:1, Qos:2, Retain:1, Will:1, 
             CleanSession:1, TopicIdType:2, ProtocolId:8, Duration:16, ClientId/binary>>,
     ok = gen_udp:send(Socket, ?HOST, ?PORT, ConnectPacket),
-    lookup(Socket, Fun). 
+    lookup(Socket, Fun, false).
 
 send_willtopic_msg(Socket) ->
     Length = 7,
@@ -211,7 +284,7 @@ send_disconnect_msg(Socket) ->
     DisConnectPacket = <<Length:8, MsgType:8>>,
     ok = gen_udp:send(Socket, ?HOST, ?PORT, DisConnectPacket).
 
-lookup(Socket, Fun) ->
+lookup(Socket, Fun, GetResponse) ->
     receive
         {udp, Socket, _, _, Bin} ->
             %%io:format("client received:~p~n", [Bin]),
@@ -228,7 +301,8 @@ lookup(Socket, Fun) ->
                     io:format("wait for will msg~n"),
                     send_willmsg_msg(Socket);
                 <<7, ?SN_REGACK, TopicId:16, MsgId:16, ReturnCode:8>> ->
-                    io:format("recv regack TopicId: ~p, MsgId: ~p, ReturnCode: ~p~n", [TopicId, MsgId, ReturnCode]);
+                    io:format("recv regack TopicId: ~p, MsgId: ~p, ReturnCode: ~p~n", [TopicId, MsgId, ReturnCode]),
+                    0 = ReturnCode;
                 <<_Len:8, ?SN_PUBLISH, _:1, Qos:2, _:1, _:1, _:1, _:2, TopicId:16, MsgId:16, Data/binary>> ->
                     case Qos of
                         0 -> ok;
@@ -252,11 +326,23 @@ lookup(Socket, Fun) ->
                     io:format("recv unsuback MsgId: ~p~n", [MsgId]);
                 <<2, ?SN_PINGRESP>> ->
                     io:format("recv pingresp ~n");
-                _ ->
-                    ok
+                RawBin ->
+                    error("Unexpected udp data", RawBin)
             end,
-            lookup(Socket, Fun)
-        after 15000 ->
+            lookup(Socket, Fun, true)
+        after 5000 ->
             io:format("Socket closed~n"),
-            gen_udp:close(Socket)
+            gen_udp:close(Socket),
+            true = GetResponse
         end.
+
+
+receive_response(Socket) ->
+    receive
+        {udp, Socket, _, _, Bin} ->
+            io:format("receive_response Bin=~p~n", [Bin]),
+            Bin;
+        Other -> error(unexpected_udp_data, Other)
+    after 2000 ->
+        error(udp_receive_timeout, Socket)
+    end.

@@ -198,6 +198,8 @@ connected(?SN_PINGREQ_MSG(_ClientId), StateData) ->
 
 connected(?SN_DISCONNECT_MSG(_Duration), StateData = #state{protocol = Proto}) ->
     {stop, Reason, Proto1} = emqttd_protocol:received(?PACKET(?DISCONNECT), Proto),
+    %% TODO: handle duration
+    send_message(?SN_DISCONNECT_MSG(undefined), StateData),
     stop(Reason, StateData#state{protocol = Proto1});
 
 % connected(?SN_WILLTOPICUPD_MSG(Flags, Topic), StateData = #state{connpkt = ConnPkt, protocol = Proto}) ->
@@ -372,11 +374,11 @@ mqttsn_to_mqtt(?SN_PUBREL) -> ?PUBREL;
 mqttsn_to_mqtt(?SN_PUBCOMP) -> ?PUBCOMP.
 
 
-topicid_to_topicname(TopicType, TopicId, _ClientId) when TopicType == 0 ->
+topicid_to_topicname(0, TopicId, _ClientId) ->
     TopicId;
-topicid_to_topicname(TopicType, TopicId, ClientId) when TopicType == 1 ->
+topicid_to_topicname(1, TopicId, ClientId) ->
     emq_sn_registry:lookup_topic(ClientId, TopicId);
-topicid_to_topicname(TopicType, TopicId, _ClientId) when TopicType == 2 ->
+topicid_to_topicname(2, TopicId, _ClientId) ->
     case is_binary(TopicId) of
         true -> TopicId;
         false -> <<TopicId:16>>

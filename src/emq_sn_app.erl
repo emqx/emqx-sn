@@ -29,7 +29,7 @@
 %%--------------------------------------------------------------------
 
 start(_Type, _Args) ->
-    {ok, Listener} = application:get_env(?APP, listener),
+    Listener = application:get_env(?APP, listener, {1884, []}),
     emq_sn_sup:start_link(Listener).
 
 stop(_State) ->
