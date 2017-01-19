@@ -83,11 +83,19 @@ init([]) ->
 	{ok, #state{}}.
 
 handle_call({register, ClientId, TopicName}, _From, State) ->
-    case get_registered_id(ClientId, TopicName) of
-        undefined ->  % this topic has never been registered
-            {reply, register_new_topic(ClientId, TopicName), State, hibernate};
-        ExistTopicId ->
-            {reply, ExistTopicId, State, hibernate}
+    case wildcard((TopicName)) of
+        false ->
+            case get_registered_id(ClientId, TopicName) of
+                undefined ->  % this topic has never been registered
+                    {reply, register_new_topic(ClientId, TopicName), State, hibernate};
+                ExistTopicId ->
+                    {reply, ExistTopicId, State, hibernate}
+            end;
+        true ->
+            %% TopicId: in case of “accepted” the value that will be used as topic id by the gateway when sending PUBLISH
+            %% messages to the client (not relevant in case of subscriptions to a short topic name or to a topic name which
+            %% contains wildcard characters)
+            {reply, wildcard_topic, State, hibernate}
     end;
 
 handle_call({unregister, ClientId}, _From, State) ->
@@ -144,3 +152,16 @@ register_new_topic(ClientId, TopicName) ->
         false -> % id is full
             undefined
     end.
+
+-spec(wildcard(binary()|list()) -> true | false).
+wildcard(Topic) when is_binary(Topic) ->
+    TopicString = binary_to_list(Topic),
+    wildcard(TopicString);
+wildcard([]) ->
+    false;
+wildcard([$#|_]) ->
+    true;
+wildcard([$+|_]) ->
+    true;
+wildcard([_H|T]) ->
+    wildcard(T).

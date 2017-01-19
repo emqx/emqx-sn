@@ -38,7 +38,7 @@
 -export([init/1, handle_event/3, handle_sync_event/4, handle_info/3,
          terminate/3, code_change/4]).
 
--record(state, {gwid, gwinfo = <<>>, sock, peer, protocol, client_id, keepalive, connpkt}).
+-record(state, {gwid, gwinfo = <<>>, sock, peer, protocol, client_id, keepalive, connpkt, awaiting_suback = []}).
 
 -define(LOG(Level, Format, Args, State),
             lager:Level("MQTT-SN(~s): " ++ Format,
@@ -125,27 +125,20 @@ wait_for_will_msg(Event, StateData) ->
     ?LOG(error, "UNEXPECTED Event: ~p", [Event], StateData),
     {next_state, wait_for_will_msg, StateData}.
 
-connected(?SN_REGISTER_MSG(TopicId, MsgId, TopicName), StateData = #state{client_id = ClientId}) ->
-    NewTopicId = emq_sn_registry:register_topic(ClientId, TopicName),
-    send_message(?SN_REGACK_MSG(NewTopicId, MsgId, 0), StateData),
+connected(?SN_REGISTER_MSG(_TopicId, MsgId, TopicName), StateData = #state{client_id = ClientId}) ->
+    case emq_sn_registry:register_topic(ClientId, TopicName) of
+        undefined ->
+            ?LOG(error, "TopicId is full! ClientId=~p, TopicName=~p", [ClientId, TopicName], StateData),
+            send_message(?SN_REGACK_MSG(0, MsgId, ?SN_RC_INVALID_TOPIC_ID), StateData);
+        NewTopicId ->
+            ?LOG(debug, "register ClientId=~p, TopicName=~p, NewTopicId=~p", [ClientId, TopicName, NewTopicId], StateData),
+            send_message(?SN_REGACK_MSG(NewTopicId, MsgId, ?SN_RC_ACCECPTED), StateData)
+    end,
     {next_state, connected, StateData};
 
 connected(?SN_PUBLISH_MSG(Flags, TopicId, MsgId, Data), StateData = #state{client_id = ClientId, protocol = Proto}) ->
-    #mqtt_sn_flags{dup = Dup, qos = Qos, retain = Retain, topic_id_type = TopicIdType} = Flags,
-    case topicid_to_topicname(TopicIdType, TopicId, ClientId) of
-        undefined ->
-            send_message(?SN_PUBACK_MSG(TopicId, MsgId, ?SN_RC_INVALID_TOPIC_ID), StateData);
-        TopicName -> 
-            Publish = #mqtt_packet{header   = #mqtt_packet_header{type = ?PUBLISH, dup = Dup, qos = Qos, retain = Retain},
-                                   variable = #mqtt_packet_publish{topic_name = TopicName, packet_id = MsgId},
-                                   payload  = Data},
-            case emqttd_protocol:received(Publish, Proto) of
-                {ok, Proto1}           -> next_state(connected, StateData#state{protocol = Proto1});
-                {error, Error}         -> shutdown(Error, StateData);
-                {error, Error, Proto1} -> shutdown(Error, StateData#state{protocol = Proto1});
-                {stop, Reason, Proto1} -> stop(Reason, StateData#state{protocol = Proto1})
-            end
-    end;
+    #mqtt_sn_flags{topic_id_type = TopicIdType} = Flags,
+    do_publish(TopicIdType, TopicId, Data, Flags, MsgId, StateData);
 
 connected(?SN_PUBACK_MSG(_TopicId, MsgId, _ReturnCode), StateData = #state{protocol = Proto}) ->
     case emqttd_protocol:received(?PUBACK_PACKET(mqttsn_to_mqtt(?PUBACK), MsgId), Proto) of
@@ -164,33 +157,13 @@ connected(?SN_PUBREC_MSG(PubRec, MsgId), StateData = #state{protocol = Proto})
         {stop, Reason, Proto1} -> stop(Reason, StateData#state{protocol = Proto1})
     end;
 
-connected(?SN_SUBSCRIBE_MSG(Flags, MsgId, TopicId), StateData = #state{client_id = ClientId, protocol = Proto}) ->
+connected(?SN_SUBSCRIBE_MSG(Flags, MsgId, TopicId), StateData) ->
     #mqtt_sn_flags{qos = Qos, topic_id_type = TopicIdType} = Flags,
-    case topicid_to_topicname(TopicIdType, TopicId, ClientId) of
-        undefined ->
-            NewFlag = <<0:1, Qos:2, 0:5>>,
-            send_message(?SN_SUBACK_MSG(NewFlag, TopicId, MsgId, ?SN_RC_INVALID_TOPIC_ID), StateData);
-        TopicName ->
-            case emqttd_protocol:received(?SUBSCRIBE_PACKET(MsgId, [{TopicName, Qos}]), Proto) of
-                {ok, Proto1}           -> next_state(connected, StateData#state{protocol = Proto1});
-                {error, Error}         -> shutdown(Error, StateData);
-                {error, Error, Proto1} -> shutdown(Error, StateData#state{protocol = Proto1});
-                {stop, Reason, Proto1} -> stop(Reason, StateData#state{protocol = Proto1})
-            end
-    end;
+    do_subscribe(TopicIdType, TopicId, Qos, MsgId, StateData);
 
-connected(?SN_UNSUBSCRIBE_MSG(Flags, MsgId, TopicId), StateData = #state{client_id = ClientId, protocol = Proto}) ->
+connected(?SN_UNSUBSCRIBE_MSG(Flags, MsgId, TopicId), StateData) ->
     #mqtt_sn_flags{topic_id_type = TopicIdType} = Flags,
-    case topicid_to_topicname(TopicIdType, TopicId, ClientId) of
-        undefined -> stop(protocol_bad_topicidtype, StateData#state{protocol = Proto});  %% UNSUBACK has no ReturnCode
-        TopicName ->
-            case emqttd_protocol:received(?UNSUBSCRIBE_PACKET(MsgId, [TopicName]), Proto) of
-                {ok, Proto1}           -> next_state(connected, StateData#state{protocol = Proto1});
-                {error, Error}         -> shutdown(Error, StateData);
-                {error, Error, Proto1} -> shutdown(Error, StateData#state{protocol = Proto1});
-                {stop, Reason, Proto1} -> stop(Reason, StateData#state{protocol = Proto1})
-            end
-    end;
+    do_unsubscribe(TopicIdType, TopicId, MsgId, StateData);
 
 connected(?SN_PINGREQ_MSG(_ClientId), StateData) ->
     send_message(?SN_PINGRESP_MSG(), StateData),
@@ -247,14 +220,16 @@ handle_sync_event(Event, _From, StateName, StateData) ->
 
 handle_info({datagram, _From, Data}, StateName, StateData) ->
     {ok, Msg} = emq_sn_message:parse(Data),
-    ?LOG(info, "RECV ~p", [Msg], StateData),
+    ?LOG(info, "RECV ~p", [format(Msg)], StateData),
     ?MODULE:StateName(Msg, StateData); %% cool?
 
 %% Asynchronous SUBACK
-handle_info({suback, MsgId, [GrantedQos]}, StateName, StateData) ->
+handle_info({suback, MsgId, [GrantedQos]}, StateName, StateData=#state{awaiting_suback = Awaiting}) ->
     Flags = #mqtt_sn_flags{qos = GrantedQos},
-    send_message(?SN_SUBACK_MSG(Flags, 1, MsgId, 0), StateData),
-    next_state(StateName, StateData);
+    {MsgId, TopicId} = find_suback_topicid(MsgId, Awaiting),
+    ?LOG(debug, "suback Awaiting=~p, MsgId=~p, TopicId=~p", [Awaiting, MsgId, TopicId], StateData),
+    send_message(?SN_SUBACK_MSG(Flags, TopicId, MsgId, 0), StateData),
+    next_state(StateName, StateData#state{awaiting_suback = lists:delete({MsgId, TopicId}, Awaiting)});
 
 handle_info({deliver, Msg}, StateName, StateData = #state{client_id = ClientId}) ->
     #mqtt_packet{header   = #mqtt_packet_header{type = ?PUBLISH, dup = Dup, qos = Qos, retain = Retain},
@@ -356,7 +331,7 @@ send_publish(Dup, Qos, Retain, TopicIdType, TopicId, MsgId, Payload, StateData) 
 
 
 send_message(Msg, StateData = #state{sock = Sock, peer = {Host, Port}}) ->
-    ?LOG(debug, "SEND ~p~n", [Msg], StateData),
+    ?LOG(debug, "SEND ~p~n", [format(Msg)], StateData),
     gen_udp:send(Sock, Host, Port, emq_sn_message:serialize(Msg)).
 
 next_state(StateName, StateData) ->
@@ -374,16 +349,137 @@ mqttsn_to_mqtt(?SN_PUBREL) -> ?PUBREL;
 mqttsn_to_mqtt(?SN_PUBCOMP) -> ?PUBCOMP.
 
 
-topicid_to_topicname(0, TopicId, _ClientId) ->
-    TopicId;
-topicid_to_topicname(1, TopicId, ClientId) ->
-    emq_sn_registry:lookup_topic(ClientId, TopicId);
-topicid_to_topicname(2, TopicId, _ClientId) ->
-    case is_binary(TopicId) of
-        true -> TopicId;
-        false -> <<TopicId:16>>
-    end;
-topicid_to_topicname(_TopicType, _TopicId, _ClientId) ->
-    undefined.
 
+do_subscribe(?SN_NORMAL_TOPIC, TopicId, Qos, MsgId, StateData=#state{client_id = ClientId}) ->
+    case emq_sn_registry:register_topic(ClientId, TopicId)of
+        undefined ->
+            NewFlag = <<0:1, Qos:2, 0:5>>,
+            send_message(?SN_SUBACK_MSG(NewFlag, ?SN_INVALID_TOPIC_ID, MsgId, ?SN_RC_INVALID_TOPIC_ID), StateData),
+            next_state(connected, StateData);
+        wildcard_topic ->
+            subscribe_broker(TopicId, Qos, MsgId, ?SN_INVALID_TOPIC_ID, StateData);
+        NewTopicId ->
+            subscribe_broker(TopicId, Qos, MsgId, NewTopicId, StateData)
+    end;
+do_subscribe(?SN_PREDEFINED_TOPIC, TopicId, Qos, MsgId, StateData=#state{client_id = ClientId}) ->
+    case emq_sn_registry:lookup_topic(ClientId, TopicId) of
+        undefined ->
+            send_message(?SN_SUBACK_MSG(<<0:1, Qos:2, 0:5>>, TopicId, MsgId, ?SN_RC_INVALID_TOPIC_ID), StateData),
+            next_state(connected, StateData);
+        PredefinedTopic ->
+            subscribe_broker(PredefinedTopic, Qos, MsgId, TopicId, StateData)
+        end;
+do_subscribe(?SN_SHORT_TOPIC, TopicId, Qos, MsgId, StateData=#state{client_id = ClientId}) ->
+    TopicName = case is_binary(TopicId) of
+            true -> TopicId;
+            false -> <<TopicId:16>>
+        end,
+    subscribe_broker(TopicName, Qos, MsgId, ?SN_INVALID_TOPIC_ID, StateData);
+do_subscribe(_, TopicId, Qos, MsgId, StateData) ->
+    send_message(?SN_SUBACK_MSG(<<0:1, Qos:2, 0:5>>, TopicId, MsgId, ?SN_RC_INVALID_TOPIC_ID), StateData),
+    next_state(connected, StateData).
+
+
+
+do_unsubscribe(?SN_NORMAL_TOPIC, TopicId, MsgId, StateData) ->
+    unsubscribe_broker(TopicId, MsgId, StateData);
+do_unsubscribe(?SN_PREDEFINED_TOPIC, TopicId, MsgId, StateData=#state{client_id = ClientId}) ->
+    case emq_sn_registry:lookup_topic(ClientId, TopicId) of
+        undefined ->
+            send_message(?SN_UNSUBACK_MSG(MsgId), StateData),
+            next_state(connected, StateData);
+        PredefinedTopic ->
+            unsubscribe_broker(PredefinedTopic, MsgId, StateData)
+    end;
+do_unsubscribe(?SN_SHORT_TOPIC, TopicId, MsgId, StateData) ->
+    TopicName = case is_binary(TopicId) of
+                    true -> TopicId;
+                    false -> <<TopicId:16>>
+                end,
+    unsubscribe_broker(TopicName, MsgId, StateData);
+do_unsubscribe(_, _TopicId, MsgId, StateData) ->
+    send_message(?SN_UNSUBACK_MSG(MsgId), StateData),
+    next_state(connected, StateData).
+
+
+do_publish(?SN_PREDEFINED_TOPIC, TopicId, Data, Flags, MsgId, StateData=#state{client_id = ClientId}) ->
+    #mqtt_sn_flags{qos = Qos, dup = Dup, retain = Retain} = Flags,
+    case emq_sn_registry:lookup_topic(ClientId, TopicId) of
+        undefined ->
+            (Qos =/= ?QOS0) andalso send_message(?SN_PUBACK_MSG(TopicId, MsgId, ?SN_RC_INVALID_TOPIC_ID), StateData),
+            next_state(connected, StateData);
+        PredefinedTopic ->
+            publish_broker(PredefinedTopic, Data, Dup, Qos, Retain, MsgId, StateData)
+    end;
+do_publish(?SN_SHORT_TOPIC, TopicId, Data, Flags, MsgId, StateData) ->
+    #mqtt_sn_flags{qos = Qos, dup = Dup, retain = Retain} = Flags,
+    TopicName = case is_binary(TopicId) of
+                    true -> TopicId;
+                    false -> <<TopicId:16>>
+                end,
+    publish_broker(TopicName, Data, Dup, Qos, Retain, MsgId, StateData);
+do_publish(_, TopicId, _Data, #mqtt_sn_flags{qos = Qos}, MsgId, StateData) ->
+    (Qos =/= ?QOS0) andalso send_message(?SN_PUBACK_MSG(TopicId, MsgId, ?SN_RC_INVALID_TOPIC_ID), StateData),
+    next_state(connected, StateData).
+
+
+
+subscribe_broker(TopicName, Qos, MsgId, TopicId, StateData=#state{protocol = Proto, awaiting_suback = Awaiting}) ->
+    ?LOG(debug, "subscribe Topic=~p, MsgId=~p, TopicId=~p", [TopicName, MsgId, TopicId], StateData),
+    NewAwaiting = lists:append(Awaiting, [{MsgId, TopicId}]),
+    case emqttd_protocol:received(?SUBSCRIBE_PACKET(MsgId, [{TopicName, Qos}]), Proto) of
+        {ok, Proto1}           -> next_state(connected, StateData#state{protocol = Proto1, awaiting_suback = NewAwaiting});
+        {error, Error}         -> shutdown(Error, StateData);
+        {error, Error, Proto1} -> shutdown(Error, StateData#state{protocol = Proto1});
+        {stop, Reason, Proto1} -> stop(Reason, StateData#state{protocol = Proto1})
+    end.
+
+
+unsubscribe_broker(TopicName, MsgId, StateData=#state{protocol = Proto}) ->
+    ?LOG(debug, "unsubscribe Topic=~p, MsgId=~p", [TopicName, MsgId], StateData),
+    case emqttd_protocol:received(?UNSUBSCRIBE_PACKET(MsgId, [TopicName]), Proto) of
+        {ok, Proto1}           -> next_state(connected, StateData#state{protocol = Proto1});
+        {error, Error}         -> shutdown(Error, StateData);
+        {error, Error, Proto1} -> shutdown(Error, StateData#state{protocol = Proto1});
+        {stop, Reason, Proto1} -> stop(Reason, StateData#state{protocol = Proto1})
+    end.
+
+publish_broker(TopicName, Data, Dup, Qos, Retain, MsgId, StateData=#state{protocol = Proto}) ->
+    Publish = #mqtt_packet{header   = #mqtt_packet_header{type = ?PUBLISH, dup = Dup, qos = Qos, retain = Retain},
+        variable = #mqtt_packet_publish{topic_name = TopicName, packet_id = MsgId},
+        payload  = Data},
+    case emqttd_protocol:received(Publish, Proto) of
+        {ok, Proto1}           -> next_state(connected, StateData#state{protocol = Proto1});
+        {error, Error}         -> shutdown(Error, StateData);
+        {error, Error, Proto1} -> shutdown(Error, StateData#state{protocol = Proto1});
+        {stop, Reason, Proto1} -> stop(Reason, StateData#state{protocol = Proto1})
+    end.
+
+
+find_suback_topicid(MsgId, []) ->
+    {MsgId, 0};
+find_suback_topicid(MsgId, [{MsgId, TopicId}|_Rest]) ->
+    {MsgId, TopicId};
+find_suback_topicid(MsgId, [{_, _}|Rest]) ->
+    find_suback_topicid(MsgId, Rest).
+
+
+
+format(?SN_SUBSCRIBE_MSG(Flags, Msgid, Topic)) ->
+    lists:flatten(io_lib:format("mqtt_sn_message SN_SUBSCRIBE, ~p, MsgId=~w, TopicId=~w",
+        [format_flag(Flags), Msgid, Topic]));
+format(?SN_SUBACK_MSG(Flags, TopicId, MsgId, ReturnCode)) ->
+    lists:flatten(io_lib:format("mqtt_sn_message SN_SUBACK, ~p, MsgId=~w, TopicId=~w, ReturnCode=~w",
+        [format_flag(Flags), MsgId, TopicId, ReturnCode]));
+format(?SN_UNSUBSCRIBE_MSG(Flags, Msgid, Topic)) ->
+    lists:flatten(io_lib:format("mqtt_sn_message SN_UNSUBSCRIBE, ~p, MsgId=~w, TopicId=~w",
+        [format_flag(Flags), Msgid, Topic]));
+format(?SN_UNSUBACK_MSG(MsgId)) ->
+    lists:flatten(io_lib:format("mqtt_sn_message SN_UNSUBACK, MsgId=~w", [MsgId]));
+format(#mqtt_sn_message{type = Type, variable = Var}) ->
+    lists:flatten(io_lib:format("mqtt_sn_message type=~s, Var=~w", [emq_sn_message:message_type(Type), Var])).
+
+
+format_flag(#mqtt_sn_flags{dup = Dup, qos = Qos, retain = Retain, will = Will, clean_session = CleanSession, topic_id_type = TopicType}) ->
+    lists:flatten(io_lib:format("mqtt_sn_flags{dup=~p, qos=~p, retain=~p, will=~p, clean_session=~p, topic_id_type=~p}", [Dup, Qos, Retain, Will, CleanSession, TopicType])).
 

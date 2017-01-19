@@ -20,7 +20,7 @@
 
 -include("emq_sn.hrl").
 
--export([parse/1, serialize/1]).
+-export([parse/1, serialize/1, message_type/1]).
 
 -define(flag,  1/binary).
 -define(byte,  8/big-integer).
@@ -151,8 +151,10 @@ serialize(PubRec, MsgId) when PubRec == ?SN_PUBREC; PubRec == ?SN_PUBREL; PubRec
 serialize(Sub, {Flags = #mqtt_sn_flags{topic_id_type = IdType}, MsgId, Topic})
     when Sub == ?SN_SUBSCRIBE; Sub == ?SN_UNSUBSCRIBE ->
     <<(serialize_flags(Flags))/binary, MsgId:16, (serialize_topic(IdType, Topic))/binary>>;
+serialize(?SN_SUBACK, {Flags, 0, MsgId, ReturnCode}) ->
+    <<(serialize_flags(Flags#mqtt_sn_flags{topic_id_type = 0}))/binary, 0:?short, MsgId:?short, ReturnCode>>;
 serialize(?SN_SUBACK, {Flags, TopicId, MsgId, ReturnCode}) ->
-    <<(serialize_flags(Flags))/binary, TopicId:?short, MsgId:?short, ReturnCode>>;
+    <<(serialize_flags(Flags#mqtt_sn_flags{topic_id_type = 1}))/binary, TopicId:?short, MsgId:?short, ReturnCode>>;
 serialize(?SN_UNSUBACK, MsgId) ->
     <<MsgId:?short>>;
 serialize(?SN_PINGREQ, ClientId) ->
@@ -191,3 +193,61 @@ bool(undefined) -> 0.
 i(undefined) -> 0;
 i(I) when is_integer(I) -> I.
 
+
+
+message_type(16#00) ->
+    "SN_ADVERTISE";
+message_type(16#01) ->
+    "SN_SEARCHGW";
+message_type(16#02) ->
+    "SN_GWINFO";
+message_type(16#04) ->
+    "SN_CONNECT";
+message_type(16#05) ->
+    "SN_CONNACK";
+message_type(16#06) ->
+    "SN_WILLTOPICREQ";
+message_type(16#07) ->
+    "SN_WILLTOPIC";
+message_type(16#08) ->
+    "SN_WILLMSGREQ";
+message_type(16#09) ->
+    "SN_WILLMSG";
+message_type(16#0a) ->
+    "SN_REGISTER";
+message_type(16#0b) ->
+    "SN_REGACK";
+message_type(16#0c) ->
+    "SN_PUBLISH";
+message_type(16#0d) ->
+    "SN_PUBACK";
+message_type(16#0e) ->
+    "SN_PUBCOMP";
+message_type(16#0f) ->
+    "SN_PUBREC";
+message_type(16#10) ->
+    "SN_PUBREL";
+message_type(16#12) ->
+    "SN_SUBSCRIBE";
+message_type(16#13) ->
+    "SN_SUBACK";
+message_type(16#14) ->
+    "SN_UNSUBSCRIBE";
+message_type(16#15) ->
+    "SN_UNSUBACK";
+message_type(16#16) ->
+    "SN_PINGREQ";
+message_type(16#17) ->
+    "SN_PINGRESP";
+message_type(16#18) ->
+    "SN_DISCONNECT";
+message_type(16#1a) ->
+    "SN_WILLTOPICUPD";
+message_type(16#1b) ->
+    "SN_WILLTOPICRESP";
+message_type(16#1c) ->
+    "SN_WILLMSGUPD";
+message_type(16#1d) ->
+    "SN_WILLMSGRESP";
+message_type(Type) ->
+    io_lib:format("Unknown Type ~p", [Type]).
