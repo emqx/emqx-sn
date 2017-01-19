@@ -260,8 +260,9 @@ handle_info({suback, MsgId, [GrantedQos]}, StateName, StateData=#state{awaiting_
 
 handle_info({deliver, Msg}, StateName, StateData = #state{client_id = ClientId}) ->
     #mqtt_packet{header   = #mqtt_packet_header{type = ?PUBLISH, dup = Dup, qos = Qos, retain = Retain},
-                  variable = #mqtt_packet_publish{topic_name = TopicName, packet_id = MsgId},
+                  variable = #mqtt_packet_publish{topic_name = TopicName, packet_id = MsgId0},
                   payload  = Payload} = emqttd_message:to_packet(Msg),
+    MsgId = message_id(MsgId0),
     case emq_sn_registry:lookup_topic_id(ClientId, TopicName) of
         undefined -> 
             case byte_size(TopicName) of
@@ -496,12 +497,21 @@ find_suback_topicid(MsgId, [{_, _}|Rest]) ->
 
 
 register_and_notify_client(TopicName, Payload, Dup, Qos, Retain, MsgId, StateData=#state{client_id = ClientId}) ->
-    TopicId = emq_sn_registry:lookup_topic_id(ClientId, TopicName),
+    TopicId = emq_sn_registry:register_topic(ClientId, TopicName),
+    ?LOG(debug, "register TopicId=~p, TopicName=~p, Payload=~p, Dup=~p, Qos=~p, Retain=~p, MsgId=~p",
+        [TopicId, TopicName, Payload, Dup, Qos, Retain, MsgId], StateData),
     send_register(TopicName, TopicId, MsgId, StateData),
     send_publish(Dup, Qos, Retain, ?SN_PREDEFINED_TOPIC, TopicId, MsgId, Payload, StateData).
 
 
+message_id(undefined) ->
+    rand:uniform(16#FFFF);
+message_id(MsgId) ->
+    MsgId.
 
+format(?SN_PUBLISH_MSG(Flags, TopicId, MsgId, Data)) ->
+    lists:flatten(io_lib:format("mqtt_sn_message SN_PUBLISH, ~p, TopicId=~w, MsgId=~w, Payload=~w",
+        [format_flag(Flags), TopicId, MsgId, Data]));
 format(?SN_SUBSCRIBE_MSG(Flags, Msgid, Topic)) ->
     lists:flatten(io_lib:format("mqtt_sn_message SN_SUBSCRIBE, ~p, MsgId=~w, TopicId=~w",
         [format_flag(Flags), Msgid, Topic]));
@@ -513,6 +523,12 @@ format(?SN_UNSUBSCRIBE_MSG(Flags, Msgid, Topic)) ->
         [format_flag(Flags), Msgid, Topic]));
 format(?SN_UNSUBACK_MSG(MsgId)) ->
     lists:flatten(io_lib:format("mqtt_sn_message SN_UNSUBACK, MsgId=~w", [MsgId]));
+format(?SN_REGISTER_MSG(TopicId, MsgId, TopicName)) ->
+    lists:flatten(io_lib:format("mqtt_sn_message SN_REGISTER, TopicId=~w, MsgId=~w, TopicName=~w",
+        [TopicId, MsgId, TopicName]));
+format(?SN_REGACK_MSG(TopicId, MsgId, ReturnCode)) ->
+    lists:flatten(io_lib:format("mqtt_sn_message SN_REGACK, TopicId=~w, MsgId=~w, ReturnCode=~w",
+        [TopicId, MsgId, ReturnCode]));
 format(#mqtt_sn_message{type = Type, variable = Var}) ->
     lists:flatten(io_lib:format("mqtt_sn_message type=~s, Var=~w", [emq_sn_message:message_type(Type), Var])).
 

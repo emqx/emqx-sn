@@ -279,15 +279,23 @@ publish_qos0_test3(_Config) ->
     send_subscribe_msg_short_topic(Socket, Qos, <<"/#">>, MsgId),
     ?assertEqual(<<8, ?SN_SUBACK, Dup:1, Qos:2, Retain:1, Will:1, CleanSession:1, ?SN_NORMAL_TOPIC:2, TopicId0:16, MsgId:16, ?SN_RC_ACCECPTED>>,
         receive_response(Socket)),
-    send_publish_msg_short_topic(Socket, Qos, MsgId, <<"/T">>, <<20, 21, 22, 23>>),
-    ?assertEqual(<<8, ?SN_REGISTER, TopicId1:16, MsgId0:16, <<"/T">>/binary>>, receive_response(Socket)),
+
+    {ok, C} = emqttc:start_link([{host, "localhost"}, {client_id, <<"simpleClient">>}]),
+    emqttc:publish(C, <<"/abcd">>, <<"12345">>),
+
+    Data20 = receive_response(Socket),
+    io:format("Data20=~p~n", [Data20]),
+    <<11, ?SN_REGISTER, TopicId1:16, Rest20/binary>> = Data20,
+    <<MId:16, Rest21/binary>> = Rest20,
+    <<"/abcd">> = Rest21,
+
     send_regack_msg(Socket, TopicId1, MsgId0),
-    Eexp = <<11, ?SN_PUBLISH, Dup:1, Qos:2, Retain:1, Will:1, CleanSession:1, ?SN_SHORT_TOPIC:2, (<<"TR">>)/binary, MsgId0:16, <<20, 21, 22, 23>>/binary>>,
-    What = receive_response(Socket),
-    io:format("What=~p~n", [What]),
-    ?assertEqual(Eexp, What),
+    ?assertEqual(<<12, ?SN_PUBLISH, Dup:1, Qos:2, Retain:1, Will:1, CleanSession:1, ?SN_PREDEFINED_TOPIC:2, TopicId1:16, MsgId0:16, <<"12345">>/binary>>,
+        receive_response(Socket)),
     send_disconnect_msg(Socket),
     ?assertEqual(<<2, ?SN_DISCONNECT>>, receive_response(Socket)),
+
+    emqttc:disconnect(C),
     gen_udp:close(Socket).
 
 
@@ -616,6 +624,9 @@ receive_response(Socket) ->
         {udp, Socket, _, _, Bin} ->
             io:format("receive_response Bin=~p~n", [Bin]),
             Bin;
+        {mqttc, From, Data2} ->
+            io:format("receive_response() ignore mqttc From=~p, Data2=~p~n", [From, Data2]),
+            receive_response(Socket);
         Other -> {unexpected_udp_data, Other}
     after 2000 ->
         udp_receive_timeout
