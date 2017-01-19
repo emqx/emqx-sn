@@ -129,7 +129,10 @@ connected(?SN_REGISTER_MSG(_TopicId, MsgId, TopicName), StateData = #state{clien
     case emq_sn_registry:register_topic(ClientId, TopicName) of
         undefined ->
             ?LOG(error, "TopicId is full! ClientId=~p, TopicName=~p", [ClientId, TopicName], StateData),
-            send_message(?SN_REGACK_MSG(0, MsgId, ?SN_RC_INVALID_TOPIC_ID), StateData);
+            send_message(?SN_REGACK_MSG(?SN_INVALID_TOPIC_ID, MsgId, ?SN_RC_INVALID_TOPIC_ID), StateData);
+        wildcard_topic ->
+            ?LOG(error, "wildcard topic can not be registered! ClientId=~p, TopicName=~p", [ClientId, TopicName], StateData),
+            send_message(?SN_REGACK_MSG(?SN_INVALID_TOPIC_ID, MsgId, ?SN_RC_INVALID_TOPIC_ID), StateData);
         NewTopicId ->
             ?LOG(debug, "register ClientId=~p, TopicName=~p, NewTopicId=~p", [ClientId, TopicName, NewTopicId], StateData),
             send_message(?SN_REGACK_MSG(NewTopicId, MsgId, ?SN_RC_ACCECPTED), StateData)
@@ -357,8 +360,7 @@ mqttsn_to_mqtt(?SN_PUBCOMP) -> ?PUBCOMP.
 do_subscribe(?SN_NORMAL_TOPIC, TopicId, Qos, MsgId, StateData=#state{client_id = ClientId}) ->
     case emq_sn_registry:register_topic(ClientId, TopicId)of
         undefined ->
-            NewFlag = <<0:1, Qos:2, 0:5>>,
-            send_message(?SN_SUBACK_MSG(NewFlag, ?SN_INVALID_TOPIC_ID, MsgId, ?SN_RC_INVALID_TOPIC_ID), StateData),
+            send_message(?SN_SUBACK_MSG(#mqtt_sn_flags{qos = Qos}, ?SN_INVALID_TOPIC_ID, MsgId, ?SN_RC_INVALID_TOPIC_ID), StateData),
             next_state(connected, StateData);
         wildcard_topic ->
             subscribe_broker(TopicId, Qos, MsgId, ?SN_INVALID_TOPIC_ID, StateData);
@@ -368,7 +370,7 @@ do_subscribe(?SN_NORMAL_TOPIC, TopicId, Qos, MsgId, StateData=#state{client_id =
 do_subscribe(?SN_PREDEFINED_TOPIC, TopicId, Qos, MsgId, StateData=#state{client_id = ClientId}) ->
     case emq_sn_registry:lookup_topic(ClientId, TopicId) of
         undefined ->
-            send_message(?SN_SUBACK_MSG(<<0:1, Qos:2, 0:5>>, TopicId, MsgId, ?SN_RC_INVALID_TOPIC_ID), StateData),
+            send_message(?SN_SUBACK_MSG(#mqtt_sn_flags{qos = Qos}, TopicId, MsgId, ?SN_RC_INVALID_TOPIC_ID), StateData),
             next_state(connected, StateData);
         PredefinedTopic ->
             subscribe_broker(PredefinedTopic, Qos, MsgId, TopicId, StateData)
@@ -379,8 +381,8 @@ do_subscribe(?SN_SHORT_TOPIC, TopicId, Qos, MsgId, StateData) ->
             false -> <<TopicId:16>>
         end,
     subscribe_broker(TopicName, Qos, MsgId, ?SN_INVALID_TOPIC_ID, StateData);
-do_subscribe(_, TopicId, Qos, MsgId, StateData) ->
-    send_message(?SN_SUBACK_MSG(<<0:1, Qos:2, 0:5>>, TopicId, MsgId, ?SN_RC_INVALID_TOPIC_ID), StateData),
+do_subscribe(_, _TopicId, Qos, MsgId, StateData) ->
+    send_message(?SN_SUBACK_MSG(#mqtt_sn_flags{qos = Qos}, ?SN_INVALID_TOPIC_ID, MsgId, ?SN_RC_INVALID_TOPIC_ID), StateData),
     next_state(connected, StateData).
 
 
@@ -485,5 +487,6 @@ format(#mqtt_sn_message{type = Type, variable = Var}) ->
 
 
 format_flag(#mqtt_sn_flags{dup = Dup, qos = Qos, retain = Retain, will = Will, clean_session = CleanSession, topic_id_type = TopicType}) ->
-    lists:flatten(io_lib:format("mqtt_sn_flags{dup=~p, qos=~p, retain=~p, will=~p, clean_session=~p, topic_id_type=~p}", [Dup, Qos, Retain, Will, CleanSession, TopicType])).
-
+    lists:flatten(io_lib:format("mqtt_sn_flags{dup=~p, qos=~p, retain=~p, will=~p, clean_session=~p, topic_id_type=~p}", [Dup, Qos, Retain, Will, CleanSession, TopicType]));
+format_flag(_Flag) ->
+    "invalid flag".

@@ -157,10 +157,8 @@ serialize(PubRec, MsgId) when PubRec == ?SN_PUBREC; PubRec == ?SN_PUBREL; PubRec
 serialize(Sub, {Flags = #mqtt_sn_flags{topic_id_type = IdType}, MsgId, Topic})
     when Sub == ?SN_SUBSCRIBE; Sub == ?SN_UNSUBSCRIBE ->
     <<(serialize_flags(Flags))/binary, MsgId:16, (serialize_topic(IdType, Topic))/binary>>;
-serialize(?SN_SUBACK, {Flags, 0, MsgId, ReturnCode}) ->
-    <<(serialize_flags(Flags#mqtt_sn_flags{topic_id_type = 0}))/binary, 0:?short, MsgId:?short, ReturnCode>>;
 serialize(?SN_SUBACK, {Flags, TopicId, MsgId, ReturnCode}) ->
-    <<(serialize_flags(Flags#mqtt_sn_flags{topic_id_type = 1}))/binary, TopicId:?short, MsgId:?short, ReturnCode>>;
+    <<(serialize_flags(Flags))/binary, TopicId:?short, MsgId:?short, ReturnCode>>;
 serialize(?SN_UNSUBACK, MsgId) ->
     <<MsgId:?short>>;
 serialize(?SN_PINGREQ, ClientId) ->
