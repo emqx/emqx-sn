@@ -136,7 +136,7 @@ connected(?SN_REGISTER_MSG(_TopicId, MsgId, TopicName), StateData = #state{clien
     end,
     {next_state, connected, StateData};
 
-connected(?SN_PUBLISH_MSG(Flags, TopicId, MsgId, Data), StateData = #state{client_id = ClientId, protocol = Proto}) ->
+connected(?SN_PUBLISH_MSG(Flags, TopicId, MsgId, Data), StateData) ->
     #mqtt_sn_flags{topic_id_type = TopicIdType} = Flags,
     do_publish(TopicIdType, TopicId, Data, Flags, MsgId, StateData);
 
@@ -219,9 +219,13 @@ handle_sync_event(Event, _From, StateName, StateData) ->
     {reply, ignored, StateName, StateData}.
 
 handle_info({datagram, _From, Data}, StateName, StateData) ->
-    {ok, Msg} = emq_sn_message:parse(Data),
-    ?LOG(info, "RECV ~p", [format(Msg)], StateData),
-    ?MODULE:StateName(Msg, StateData); %% cool?
+     case emq_sn_message:parse(Data) of
+        {ok, Msg} ->
+            ?LOG(info, "RECV ~p", [format(Msg)], StateData),
+            ?MODULE:StateName(Msg, StateData); %% cool?
+        format_error ->
+            next_state(StateName, StateData)
+     end;
 
 %% Asynchronous SUBACK
 handle_info({suback, MsgId, [GrantedQos]}, StateName, StateData=#state{awaiting_suback = Awaiting}) ->
@@ -369,7 +373,7 @@ do_subscribe(?SN_PREDEFINED_TOPIC, TopicId, Qos, MsgId, StateData=#state{client_
         PredefinedTopic ->
             subscribe_broker(PredefinedTopic, Qos, MsgId, TopicId, StateData)
         end;
-do_subscribe(?SN_SHORT_TOPIC, TopicId, Qos, MsgId, StateData=#state{client_id = ClientId}) ->
+do_subscribe(?SN_SHORT_TOPIC, TopicId, Qos, MsgId, StateData) ->
     TopicName = case is_binary(TopicId) of
             true -> TopicId;
             false -> <<TopicId:16>>

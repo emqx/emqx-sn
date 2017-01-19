@@ -26,6 +26,9 @@
 -define(byte,  8/big-integer).
 -define(short, 16/big-integer).
 
+-define(LOG(Level, Format, Args),
+    lager:Level("MQTT-SN(message): " ++ Format, Args)).
+
 %%--------------------------------------------------------------------
 %% Parse MQTT-SN Message
 %%--------------------------------------------------------------------
@@ -36,7 +39,10 @@ parse(<<Len:?byte, Type:?byte, Var/binary>>) ->
     parse(Type, Len - 2, Var).
 
 parse(Type, Len, Var) when Len =:= size(Var) ->
-    {ok, #mqtt_sn_message{type = Type, variable = parse_var(Type, Var)}}.
+    {ok, #mqtt_sn_message{type = Type, variable = parse_var(Type, Var)}};
+parse(Type, Len, Var) ->
+    ?LOG(error, "format error: type=~p, len=~p, var=~p", [Type, Len, Var]),
+    format_error.
 
 parse_var(?SN_ADVERTISE, <<GwId:?byte, Duration:?short>>) ->
     {GwId, Duration};

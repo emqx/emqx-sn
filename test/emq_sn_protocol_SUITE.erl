@@ -7,6 +7,11 @@
 -define(HOST, "localhost").
 -define(PORT, 1884).
 
+-define(FLAG_DUP(X),X).
+-define(FLAG_QOS(X),X).
+-define(FLAG_RETAIN(X),X).
+-define(FLAG_SESSION(X),X).
+
 
 init_per_suite(Config) ->
     prepare_config(),
@@ -21,66 +26,8 @@ end_per_suite(_Config) ->
     application:stop(emq_sn),
     application:stop(emqttd).
 
-prepare_config() ->
-    Configs = [{plugins_loaded_file,"{{ platform_data_dir }}/loaded_plugins"},
-        {plugins_etc_dir,"{{ platform_etc_dir }}/plugins/"},
-        {broker_sys_interval,60},
-        {cache_acl,true},
-        {acl_file,"{{ platform_etc_dir }}/acl.conf"},
-        {allow_anonymous,true},
-        {protocol,
-            [{max_clientid_len,1024},
-                {max_packet_size,65536},
-                {client_idle_timeout,30}]},
-        {session,
-            [{max_inflight,100},
-                {retry_interval,60},
-                {await_rel_timeout,20},
-                {max_awaiting_rel,0},
-                {collect_interval,0},
-                {expired_after,86400}]},
-        {queue,
-            [{priority,[]},
-                {type,simple},
-                {max_length,infinity},
-                {low_watermark,0.2},
-                {high_watermark,0.6},
-                {queue_qos0,true}]},
-        {pubsub,[{pool_size,8},{by_clientid,true},{async,true}]},
-        {bridge,[{max_queue_len,10000},{ping_down_interval,1}]},
-        {listeners,
-            [{tcp,1883,
-                [{connopts,[]},
-                    {sockopts,[{backlog,1024},{nodelay,true}]},
-                    {acceptors,8},
-                    {max_clients,1024}]},
-                {ssl,8883,
-                    [{ssl,
-                        [{handshake_timeout,15000},
-                            {keyfile,"{{ platform_etc_dir }}/certs/key.pem"},
-                            {certfile,"{{ platform_etc_dir }}/certs/cert.pem"}]},
-                        {connopts,[]},
-                        {sockopts,[{nodelay,true}]},
-                        {acceptors,4},
-                        {max_clients,512}]},
-                {http,8083,
-                    [{connopts,[]},
-                        {sockopts,[{nodelay,true}]},
-                        {acceptors,4},
-                        {max_clients,64}]},
-                {https,8084,
-                    [{ssl,
-                        [{handshake_timeout,15000},
-                            {keyfile,"{{ platform_etc_dir }}/certs/key.pem"},
-                            {certfile,"{{ platform_etc_dir }}/certs/cert.pem"}]},
-                        {connopts,[]},
-                        {sockopts,[{nodelay,true}]},
-                        {acceptors,4},
-                        {max_clients,64}]}]}],
-    [application:set_env(emqttd, Key, Val) || {Key, Val} <- Configs].
 
-
-all() -> [subscribe_test].
+all() -> [subscribe_test, subscribe_test1, subscribe_test2].
 
 subscribe_test(_Config) ->
     Dup = 0,
@@ -92,9 +39,9 @@ subscribe_test(_Config) ->
     TopicId = 1,
     ReturnCode = 0,
     {ok, Socket} = gen_udp:open(0, [binary]),
-    send_connect_msg(Socket),
+    send_connect_msg(Socket, <<"test">>),
     ?assertEqual(<<3, ?SN_CONNACK, 0>>, receive_response(Socket)),
-    send_register_msg(Socket),
+    send_register_msg(Socket, <<"abcD">>, MsgId),
     ?assertEqual(<<7, ?SN_REGACK, TopicId:16, MsgId:16, 0:8>>, receive_response(Socket)),
     send_subscribe_msg_predefined_topic(Socket, Qos, TopicId),
     ?assertEqual(<<8, ?SN_SUBACK, Dup:1, Qos:2, Retain:1, Will:1, CleanSession:1, ?SN_PREDEFINED_TOPIC:2, TopicId:16, MsgId:16, ReturnCode>>,
@@ -106,32 +53,59 @@ subscribe_test(_Config) ->
     gen_udp:close(Socket).
 
 
-publish()->
-    publish(0).
+subscribe_test1(_Config) ->
+    Dup = 0,
+    Qos = 0,
+    Retain = 0,
+    Will = 0,
+    CleanSession = 0,
+    MsgId = 1,
+    TopicId = 1,
+    ReturnCode = 0,
+    {ok, Socket} = gen_udp:open(0, [binary]),
+    send_connect_msg(Socket, <<"test">>),
+    ?assertEqual(<<3, ?SN_CONNACK, 0>>, receive_response(Socket)),
+    send_register_msg(Socket, <<"abc">>, MsgId),
+    ?assertEqual(<<7, ?SN_REGACK, TopicId:16, MsgId:16, 0:8>>, receive_response(Socket)),
+    send_subscribe_msg_predefined_topic(Socket, Qos, TopicId),
+    ?assertEqual(<<8, ?SN_SUBACK, Dup:1, Qos:2, Retain:1, Will:1, CleanSession:1, ?SN_PREDEFINED_TOPIC:2, TopicId:16, MsgId:16, ReturnCode>>,
+        receive_response(Socket)),
+    send_unsubscribe_msg_normal_topic(Socket, <<"abc">>, MsgId),
+    ?assertEqual(<<4, ?SN_UNSUBACK, MsgId:16>>, receive_response(Socket)),
+    send_disconnect_msg(Socket),
+    ?assertEqual(<<2, ?SN_DISCONNECT>>, receive_response(Socket)),
+    gen_udp:close(Socket).
 
-publish(Qos) when Qos =:= 0->
-    publish(0, 0);
 
-publish(Qos) ->
-    publish(Qos, erlang:round(random:uniform(50000))+1).
+subscribe_test2(_Config) ->
+    Dup = 0,
+    Qos = 2,
+    Retain = 0,
+    Will = 0,
+    CleanSession = 0,
+    MsgId = 1,
+    TopicId = 0,
+    ReturnCode = 0,
+    {ok, Socket} = gen_udp:open(0, [binary]),
+    send_connect_msg(Socket, <<"ClientA">>),
+    ?assertEqual(<<3, ?SN_CONNACK, 0>>, receive_response(Socket)),
+    send_subscribe_msg_short_topic(Socket, Qos, <<"te">>),
+    ?assertEqual(<<8, ?SN_SUBACK, Dup:1, Qos:2, Retain:1, Will:1, CleanSession:1, ?SN_NORMAL_TOPIC:2, TopicId:16, MsgId:16, ReturnCode>>,
+        receive_response(Socket)),
+    send_unsubscribe_msg_short_topic(Socket, <<"te">>, MsgId),
+    ?assertEqual(<<4, ?SN_UNSUBACK, MsgId:16>>, receive_response(Socket)),
+    send_disconnect_msg(Socket),
+    ?assertEqual(<<2, ?SN_DISCONNECT>>, receive_response(Socket)),
+    gen_udp:close(Socket).
 
-publish(Qos, MsgId) ->
-    Fun = fun(Socket) ->
-        send_register_msg(Socket),
-        send_subscribe_msg(Socket, Qos),
-        send_publish_msg(Socket, Qos, MsgId),
-        send_unsubscribe_msg_topic_name(Socket),
-        send_pingreq_msg(Socket),
-        send_disconnect_msg(Socket)
-    end,
-    send_connect_msg(Fun).
+
 
 publish_for_wait_will() ->
     Fun = fun(Socket) ->
-        send_register_msg(Socket),
-        send_subscribe_msg(Socket, 0),
-        send_publish_msg(Socket, 0),
-        send_unsubscribe_msg_topic_name(Socket),
+        send_register_msg(Socket, <<"testtopic">>, mid(2)),
+        %send_subscribe_msg(Socket, 0),
+        %send_publish_msg(Socket, 0),
+        %send_unsubscribe_msg_topic_name(Socket),
         send_pingreq_msg(Socket)
     end,
     send_connect_msg_for_wait_will(Fun).
@@ -149,8 +123,8 @@ send_searchgw_msg() ->
             gen_udp:close(Socket)
         end.    
 
-send_connect_msg(Socket) ->
-    Length = 10,
+send_connect_msg(Socket, ClientId) ->
+    Length = 6 + byte_size(ClientId),
     MsgType = ?SN_CONNECT,
     Dup = 0,
     Qos = 0,
@@ -160,7 +134,6 @@ send_connect_msg(Socket) ->
     TopicIdType = 0,
     ProtocolId = 1,
     Duration = 10,
-    ClientId = <<"test">>,
     Packet = <<Length:8, MsgType:8, Dup:1, Qos:2, Retain:1, Will:1, 
             CleanSession:1, TopicIdType:2, ProtocolId:8, Duration:16, ClientId/binary>>,
     ok = gen_udp:send(Socket, ?HOST, ?PORT, Packet).
@@ -204,31 +177,38 @@ send_willmsg_msg(Socket) ->
     WillMsgPacket = <<Length:8, MsgType:8, WillMsg/binary>>,
     ok = gen_udp:send(Socket, ?HOST, ?PORT, WillMsgPacket).
 
-send_register_msg(Socket) ->
-    Length = 15,
+send_register_msg(Socket, TopicName, MsgId) ->
+    Length = 6 + byte_size(TopicName),
     MsgType = ?SN_REGISTER,
     TopicId = 0,
-    MsgId = 1,
-    Topic = <<"testtopic">>,
-    RegisterPacket = <<Length:8, MsgType:8, TopicId:16, MsgId:16, Topic/binary>>,
+    RegisterPacket = <<Length:8, MsgType:8, TopicId:16, MsgId:16, TopicName/binary>>,
     ok = gen_udp:send(Socket, ?HOST, ?PORT, RegisterPacket).
 
-send_publish_msg(Socket, Qos) ->
-    send_publish_msg(Socket, Qos, 0).
 
-send_publish_msg(Socket, Qos, MsgId) ->
-    Length = 16,
+send_publish_msg_predefined_topic(Socket, Qos, MsgId, TopicId, Data) ->
+    Length = 7 + byte_size(Data),
     MsgType = ?SN_PUBLISH,
     Dup = 0,
     Retain = 0,
     Will = 0,
     CleanSession = 0,
-    TopicIdType = 0,
-    TopicId = 1,
-    Data = <<"testtopic">>,
+    TopicIdType = 1,
     PublishPacket = <<Length:8, MsgType:8, Dup:1, Qos:2, Retain:1, Will:1, 
             CleanSession:1, TopicIdType:2,TopicId:16, MsgId:16, Data/binary>>,
     ok = gen_udp:send(Socket, ?HOST, ?PORT, PublishPacket).
+
+send_publish_msg_short_topic(Socket, Qos, MsgId, TopicName, Data) ->
+    Length = 7 + byte_size(Data),
+    MsgType = ?SN_PUBLISH,
+    Dup = 0,
+    Retain = 0,
+    Will = 0,
+    CleanSession = 0,
+    TopicIdType = 2,
+    PublishPacket = <<Length:8, MsgType:8, Dup:1, Qos:2, Retain:1, Will:1,
+        CleanSession:1, TopicIdType:2, TopicName/binary, MsgId:16, Data/binary>>,
+    ok = gen_udp:send(Socket, ?HOST, ?PORT, PublishPacket).
+
 
 send_puback_msg(Socket, TopicId, MsgId) ->
     Length = 4,
@@ -254,8 +234,7 @@ send_pubcomp_msg(Socket, MsgId) ->
     PubCompPacket = <<Length:8, MsgType:8, MsgId:16>>,
     ok = gen_udp:send(Socket, ?HOST, ?PORT, PubCompPacket).
 
-send_subscribe_msg(Socket, Qos) ->
-    Length = 14,
+send_subscribe_msg_normal_topic(Socket, Qos, Topic) ->
     MsgType = ?SN_SUBSCRIBE,
     Dup = 0,
     Retain = 0,
@@ -263,9 +242,9 @@ send_subscribe_msg(Socket, Qos) ->
     CleanSession = 0,
     TopicIdType = 0,
     MsgId = 1,
-    TopicId = <<"testtopic">>,
+    Length = byte_size(Topic) + 5,
     SubscribePacket = <<Length:8, MsgType:8, Dup:1, Qos:2, Retain:1, Will:1, 
-            CleanSession:1, TopicIdType:2, MsgId:16, TopicId/binary>>,
+            CleanSession:1, TopicIdType:2, MsgId:16, Topic/binary>>,
     ok = gen_udp:send(Socket, ?HOST, ?PORT, SubscribePacket).
 
 
@@ -282,22 +261,34 @@ send_subscribe_msg_predefined_topic(Socket, Qos, TopicId) ->
         CleanSession:1, TopicIdType:2, MsgId:16, TopicId:16>>,
     ok = gen_udp:send(Socket, ?HOST, ?PORT, SubscribePacket).
 
+
+send_subscribe_msg_short_topic(Socket, Qos, Topic) ->
+    Length = 7,
+    MsgType = ?SN_SUBSCRIBE,
+    Dup = 0,
+    Retain = 0,
+    Will = 0,
+    CleanSession = 0,
+    TopicIdType = 2,
+    MsgId = 1,
+    SubscribePacket = <<Length:8, MsgType:8, Dup:1, Qos:2, Retain:1, Will:1,
+        CleanSession:1, TopicIdType:2, MsgId:16, Topic/binary>>,
+    ok = gen_udp:send(Socket, ?HOST, ?PORT, SubscribePacket).
+
+
 send_unsubscribe_msg_predefined_topic(Socket, TopicId, MsgId) ->
     Length = 7,
     MsgType = ?SN_UNSUBSCRIBE,
     Dup = 0,
-    Qos = 0,
     Retain = 0,
     Will = 0,
     CleanSession = 0,
     TopicIdType = 1,
-    UnSubscribePacket = <<Length:8, MsgType:8, Dup:1, Qos:2, Retain:1, Will:1, 
+    UnSubscribePacket = <<Length:8, MsgType:8, Dup:1, 0:2, Retain:1, Will:1,
             CleanSession:1, TopicIdType:2, MsgId:16, TopicId:16>>,
     ok = gen_udp:send(Socket, ?HOST, ?PORT, UnSubscribePacket).
 
-
-send_unsubscribe_msg_topic_name(Socket) ->
-    Length = 13,
+send_unsubscribe_msg_normal_topic(Socket, TopicName, MsgId) ->
     MsgType = ?SN_UNSUBSCRIBE,
     Dup = 0,
     Qos = 0,
@@ -306,8 +297,20 @@ send_unsubscribe_msg_topic_name(Socket) ->
     CleanSession = 0,
     TopicIdType = 0,
     MsgId = 1,
-    TopicId = <<"subtopic">>,
+    Length = 5 + byte_size(TopicName),
     UnSubscribePacket = <<Length:8, MsgType:8, Dup:1, Qos:2, Retain:1, Will:1,
+        CleanSession:1, TopicIdType:2, MsgId:16, TopicName/binary>>,
+    ok = gen_udp:send(Socket, ?HOST, ?PORT, UnSubscribePacket).
+
+send_unsubscribe_msg_short_topic(Socket, TopicId, MsgId) ->
+    Length = 7,
+    MsgType = ?SN_UNSUBSCRIBE,
+    Dup = 0,
+    Retain = 0,
+    Will = 0,
+    CleanSession = 0,
+    TopicIdType = 1,
+    UnSubscribePacket = <<Length:8, MsgType:8, Dup:1, ?QOS0:2, Retain:1, Will:1,
         CleanSession:1, TopicIdType:2, MsgId:16, TopicId/binary>>,
     ok = gen_udp:send(Socket, ?HOST, ?PORT, UnSubscribePacket).
 
@@ -322,6 +325,8 @@ send_disconnect_msg(Socket) ->
     MsgType = ?SN_DISCONNECT,
     DisConnectPacket = <<Length:8, MsgType:8>>,
     ok = gen_udp:send(Socket, ?HOST, ?PORT, DisConnectPacket).
+
+mid(Id) -> Id.
 
 lookup(Socket, Fun, GetResponse) ->
     receive
@@ -385,3 +390,66 @@ receive_response(Socket) ->
     after 2000 ->
         error(udp_receive_timeout, Socket)
     end.
+
+
+
+
+prepare_config() ->
+    Configs = [{plugins_loaded_file,"{{ platform_data_dir }}/loaded_plugins"},
+        {plugins_etc_dir,"{{ platform_etc_dir }}/plugins/"},
+        {broker_sys_interval,60},
+        {cache_acl,true},
+        {acl_file,"{{ platform_etc_dir }}/acl.conf"},
+        {allow_anonymous,true},
+        {protocol,
+            [{max_clientid_len,1024},
+                {max_packet_size,65536},
+                {client_idle_timeout,30}]},
+        {session,
+            [{max_inflight,100},
+                {retry_interval,60},
+                {await_rel_timeout,20},
+                {max_awaiting_rel,0},
+                {collect_interval,0},
+                {expired_after,86400}]},
+        {queue,
+            [{priority,[]},
+                {type,simple},
+                {max_length,infinity},
+                {low_watermark,0.2},
+                {high_watermark,0.6},
+                {queue_qos0,true}]},
+        {pubsub,[{pool_size,8},{by_clientid,true},{async,true}]},
+        {bridge,[{max_queue_len,10000},{ping_down_interval,1}]},
+        {listeners,
+            [{tcp,1883,
+                [{connopts,[]},
+                    {sockopts,[{backlog,1024},{nodelay,true}]},
+                    {acceptors,8},
+                    {max_clients,1024}]},
+                {ssl,8883,
+                    [{ssl,
+                        [{handshake_timeout,15000},
+                            {keyfile,"{{ platform_etc_dir }}/certs/key.pem"},
+                            {certfile,"{{ platform_etc_dir }}/certs/cert.pem"}]},
+                        {connopts,[]},
+                        {sockopts,[{nodelay,true}]},
+                        {acceptors,4},
+                        {max_clients,512}]},
+                {http,8083,
+                    [{connopts,[]},
+                        {sockopts,[{nodelay,true}]},
+                        {acceptors,4},
+                        {max_clients,64}]},
+                {https,8084,
+                    [{ssl,
+                        [{handshake_timeout,15000},
+                            {keyfile,"{{ platform_etc_dir }}/certs/key.pem"},
+                            {certfile,"{{ platform_etc_dir }}/certs/cert.pem"}]},
+                        {connopts,[]},
+                        {sockopts,[{nodelay,true}]},
+                        {acceptors,4},
+                        {max_clients,64}]}]}],
+    [application:set_env(emqttd, Key, Val) || {Key, Val} <- Configs].
+
+

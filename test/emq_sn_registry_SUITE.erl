@@ -25,7 +25,7 @@
 
 -compile(export_all).
 
-all() -> [register_topic_test, register_topic_test2, register_topic_test3, register_topic_test4].
+all() -> [register_topic_test, register_topic_test2, register_topic_test3, register_topic_test4, register_topic_test4].
 
 
 init_per_suite(Config) ->
@@ -97,6 +97,12 @@ register_topic_test4(_Config) ->
     ?assertEqual(1, register_topic(<<"ClientId">>, <<"TopicD">>)),
     stop().
 
+
+register_topic_test5(_Config) ->
+    start_link(),
+    ?assertEqual(wildcard_topic, register_topic(<<"ClientId">>, <<"/TopicA/#">>)),
+    ?assertEqual(wildcard_topic, register_topic(<<"ClientId">>, <<"/+/TopicB">>)),
+    stop().
 
 
 register_a_lot(Max, Max) ->
