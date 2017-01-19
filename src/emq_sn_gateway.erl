@@ -143,13 +143,27 @@ connected(?SN_PUBLISH_MSG(Flags, TopicId, MsgId, Data), StateData) ->
     #mqtt_sn_flags{topic_id_type = TopicIdType} = Flags,
     do_publish(TopicIdType, TopicId, Data, Flags, MsgId, StateData);
 
-connected(?SN_PUBACK_MSG(_TopicId, MsgId, _ReturnCode), StateData = #state{protocol = Proto}) ->
-    case emqttd_protocol:received(?PUBACK_PACKET(mqttsn_to_mqtt(?PUBACK), MsgId), Proto) of
-        {ok, Proto1}           -> next_state(connected, StateData#state{protocol = Proto1});
-        {error, Error}         -> shutdown(Error, StateData);
-        {error, Error, Proto1} -> shutdown(Error, StateData#state{protocol = Proto1});
-        {stop, Reason, Proto1} -> stop(Reason, StateData#state{protocol = Proto1})
+connected(?SN_PUBACK_MSG(TopicId, MsgId, ReturnCode), StateData = #state{client_id = ClientId, protocol = Proto}) ->
+    case ReturnCode of
+        ?SN_RC_ACCECPTED ->
+            case emqttd_protocol:received(?PUBACK_PACKET(mqttsn_to_mqtt(?PUBACK), MsgId), Proto) of
+                {ok, Proto1}           -> next_state(connected, StateData#state{protocol = Proto1});
+                {error, Error}         -> shutdown(Error, StateData);
+                {error, Error, Proto1} -> shutdown(Error, StateData#state{protocol = Proto1});
+                {stop, Reason, Proto1} -> stop(Reason, StateData#state{protocol = Proto1})
+            end;
+        ?SN_RC_INVALID_TOPIC_ID ->
+            case emq_sn_registry:lookup_topic(ClientId, TopicId) of
+                undefined -> ok;
+                TopicName ->
+                    send_register(TopicName, TopicId, MsgId, StateData),
+                    next_state(connected, StateData)
+            end;
+        _ ->
+            ?LOG(error, "CAN NOT handle PUBACK ReturnCode=~p", [ReturnCode], StateData),
+            next_state(connected, StateData)
     end;
+
 
 connected(?SN_PUBREC_MSG(PubRec, MsgId), StateData = #state{protocol = Proto})
     when PubRec == ?SN_PUBREC; PubRec == ?SN_PUBREL; PubRec == ?SN_PUBCOMP ->
@@ -170,6 +184,12 @@ connected(?SN_UNSUBSCRIBE_MSG(Flags, MsgId, TopicId), StateData) ->
 
 connected(?SN_PINGREQ_MSG(_ClientId), StateData) ->
     send_message(?SN_PINGRESP_MSG(), StateData),
+    next_state(connected, StateData);
+
+connected(?SN_REGACK_MSG(TopicId, MsgId, ?SN_RC_ACCECPTED), StateData) ->
+    next_state(connected, StateData);
+connected(?SN_REGACK_MSG(TopicId, MsgId, ReturnCode), StateData) ->
+    ?LOG(error, "client does not accept register TopicId=~p, MsgId=~p, ReturnCode=~p", [TopicId, MsgId, ReturnCode], StateData),
     next_state(connected, StateData);
 
 connected(?SN_DISCONNECT_MSG(_Duration), StateData = #state{protocol = Proto}) ->
@@ -245,11 +265,14 @@ handle_info({deliver, Msg}, StateName, StateData = #state{client_id = ClientId})
     case emq_sn_registry:lookup_topic_id(ClientId, TopicName) of
         undefined -> 
             case byte_size(TopicName) of
-                2 -> send_publish(Dup, Qos, Retain, 2, TopicName, MsgId, Payload, StateData);  % use short topic name
-                _ -> ?LOG(error, "Before subscribing, please register topic: ~p", [TopicName], StateData)
+                2 ->
+                    <<TransTopicId:16>> = TopicName,
+                    send_publish(Dup, Qos, Retain, ?SN_SHORT_TOPIC, TransTopicId, MsgId, Payload, StateData);  % use short topic name
+                _ ->
+                    register_and_notify_client(TopicName, Payload, Dup, Qos, Retain, MsgId, StateData)
             end;
         TopicId -> 
-            send_publish(Dup, Qos, Retain, 1, TopicId, MsgId, Payload, StateData)   % use pre-defined topic id
+            send_publish(Dup, Qos, Retain, ?SN_PREDEFINED_TOPIC, TopicId, MsgId, Payload, StateData)   % use pre-defined topic id
     end,
     next_state(StateName, StateData);
 
@@ -324,9 +347,6 @@ transform(?PUBACK_PACKET(?PUBCOMP, MsgId)) ->
 transform(?UNSUBACK_PACKET(MsgId))->
     ?SN_UNSUBACK_MSG(MsgId).
 
-send_publish(Dup, Qos, Retain, TopicIdType, TopicName, MsgId, Payload, StateData) when is_binary(TopicName) ->
-    <<TopicId:16>> = TopicName,
-    send_publish(Dup, Qos, Retain, TopicIdType, TopicId, MsgId, Payload, StateData);
 send_publish(Dup, Qos, Retain, TopicIdType, TopicId, MsgId, Payload, StateData) ->
     MsgId1 = case Qos > 0 of
                  true -> MsgId;
@@ -334,6 +354,10 @@ send_publish(Dup, Qos, Retain, TopicIdType, TopicId, MsgId, Payload, StateData) 
              end,
     Flags = #mqtt_sn_flags{dup = Dup, qos = Qos, retain = Retain, topic_id_type = TopicIdType},
     Data = ?SN_PUBLISH_MSG(Flags, TopicId, MsgId1, Payload),
+    send_message(Data, StateData).
+
+send_register(TopicName, TopicId, MsgId, StateData) ->
+    Data = ?SN_REGISTER_MSG(TopicId, MsgId, TopicName),
     send_message(Data, StateData).
 
 
@@ -468,6 +492,13 @@ find_suback_topicid(MsgId, [{MsgId, TopicId}|_Rest]) ->
     {MsgId, TopicId};
 find_suback_topicid(MsgId, [{_, _}|Rest]) ->
     find_suback_topicid(MsgId, Rest).
+
+
+
+register_and_notify_client(TopicName, Payload, Dup, Qos, Retain, MsgId, StateData=#state{client_id = ClientId}) ->
+    TopicId = emq_sn_registry:lookup_topic_id(ClientId, TopicName),
+    send_register(TopicName, TopicId, MsgId, StateData),
+    send_publish(Dup, Qos, Retain, ?SN_PREDEFINED_TOPIC, TopicId, MsgId, Payload, StateData).
 
 
 

@@ -29,7 +29,8 @@ end_per_suite(_Config) ->
 
 
 all() -> [subscribe_test, subscribe_test1, subscribe_test2,
-    subscribe_test10, subscribe_test11, subscribe_test12, subscribe_test13].
+    subscribe_test10, subscribe_test11, subscribe_test12, subscribe_test13,
+    publish_qos0_test1, publish_qos0_test2, publish_qos0_test3].
 
 subscribe_test(_Config) ->
     Dup = 0,
@@ -213,6 +214,107 @@ subscribe_test13(_Config) ->
     gen_udp:close(Socket).
 
 
+publish_qos0_test1(_Config) ->
+    Dup = 0,
+    Qos = 0,
+    Retain = 0,
+    Will = 0,
+    CleanSession = 0,
+    MsgId = 1,
+    TopicId1 = 1,
+    {ok, Socket} = gen_udp:open(0, [binary]),
+    send_connect_msg(Socket, <<"test">>),
+    ?assertEqual(<<3, ?SN_CONNACK, 0>>, receive_response(Socket)),
+    send_subscribe_msg_normal_topic(Socket, Qos, <<"abc">>, MsgId),
+    ?assertEqual(<<8, ?SN_SUBACK, Dup:1, Qos:2, Retain:1, Will:1, CleanSession:1, ?SN_NORMAL_TOPIC:2, TopicId1:16, MsgId:16, ?SN_RC_ACCECPTED>>,
+        receive_response(Socket)),
+    send_publish_msg_predefined_topic(Socket, Qos, MsgId, TopicId1, <<20, 21, 22, 23>>),
+    Eexp = <<11, ?SN_PUBLISH, Dup:1, Qos:2, Retain:1, Will:1, CleanSession:1, ?SN_PREDEFINED_TOPIC:2, TopicId1:16, (mid(0)):16, <<20, 21, 22, 23>>/binary>>,
+    What = receive_response(Socket),
+    io:format("What=~p~n", [What]),
+    ?assertEqual(Eexp, What),
+    send_disconnect_msg(Socket),
+    ?assertEqual(<<2, ?SN_DISCONNECT>>, receive_response(Socket)),
+    gen_udp:close(Socket).
+
+
+publish_qos0_test2(_Config) ->
+    Dup = 0,
+    Qos = 0,
+    Retain = 0,
+    Will = 0,
+    CleanSession = 0,
+    MsgId = 1,
+    TopicId0 = 0,
+    TopicId1 = 1,
+    {ok, Socket} = gen_udp:open(0, [binary]),
+    send_connect_msg(Socket, <<"test">>),
+    ?assertEqual(<<3, ?SN_CONNACK, 0>>, receive_response(Socket)),
+    send_subscribe_msg_normal_topic(Socket, Qos, <<"#">>, MsgId),
+    ?assertEqual(<<8, ?SN_SUBACK, Dup:1, Qos:2, Retain:1, Will:1, CleanSession:1, ?SN_NORMAL_TOPIC:2, TopicId0:16, MsgId:16, ?SN_RC_ACCECPTED>>,
+        receive_response(Socket)),
+    send_publish_msg_short_topic(Socket, Qos, MsgId, <<"TR">>, <<20, 21, 22, 23>>),
+    Eexp = <<11, ?SN_PUBLISH, Dup:1, Qos:2, Retain:1, Will:1, CleanSession:1, ?SN_SHORT_TOPIC:2, (<<"TR">>)/binary, (mid(0)):16, <<20, 21, 22, 23>>/binary>>,
+    What = receive_response(Socket),
+    io:format("What=~p~n", [What]),
+    ?assertEqual(Eexp, What),
+    send_disconnect_msg(Socket),
+    ?assertEqual(<<2, ?SN_DISCONNECT>>, receive_response(Socket)),
+    gen_udp:close(Socket).
+
+
+publish_qos0_test3(_Config) ->
+    Dup = 0,
+    Qos = 0,
+    Retain = 0,
+    Will = 0,
+    CleanSession = 0,
+    MsgId0 = 0,
+    MsgId = 1,
+    TopicId0 = 0,
+    TopicId1 = 1,
+    {ok, Socket} = gen_udp:open(0, [binary]),
+    send_connect_msg(Socket, <<"test">>),
+    ?assertEqual(<<3, ?SN_CONNACK, 0>>, receive_response(Socket)),
+    send_subscribe_msg_short_topic(Socket, Qos, <<"/#">>, MsgId),
+    ?assertEqual(<<8, ?SN_SUBACK, Dup:1, Qos:2, Retain:1, Will:1, CleanSession:1, ?SN_NORMAL_TOPIC:2, TopicId0:16, MsgId:16, ?SN_RC_ACCECPTED>>,
+        receive_response(Socket)),
+    send_publish_msg_short_topic(Socket, Qos, MsgId, <<"/T">>, <<20, 21, 22, 23>>),
+    ?assertEqual(<<8, ?SN_REGISTER, TopicId1:16, MsgId0:16, <<"/T">>/binary>>, receive_response(Socket)),
+    send_regack_msg(Socket, TopicId1, MsgId0),
+    Eexp = <<11, ?SN_PUBLISH, Dup:1, Qos:2, Retain:1, Will:1, CleanSession:1, ?SN_SHORT_TOPIC:2, (<<"TR">>)/binary, MsgId0:16, <<20, 21, 22, 23>>/binary>>,
+    What = receive_response(Socket),
+    io:format("What=~p~n", [What]),
+    ?assertEqual(Eexp, What),
+    send_disconnect_msg(Socket),
+    ?assertEqual(<<2, ?SN_DISCONNECT>>, receive_response(Socket)),
+    gen_udp:close(Socket).
+
+
+publish_qos1_test1(_Config) ->
+    Dup = 0,
+    Qos = 1,
+    Retain = 0,
+    Will = 0,
+    CleanSession = 0,
+    MsgId = 1,
+    TopicId1 = 1,
+    {ok, Socket} = gen_udp:open(0, [binary]),
+    send_connect_msg(Socket, <<"test">>),
+    ?assertEqual(<<3, ?SN_CONNACK, 0>>, receive_response(Socket)),
+    send_subscribe_msg_normal_topic(Socket, Qos, <<"abc">>, MsgId),
+    ?assertEqual(<<8, ?SN_SUBACK, Dup:1, Qos:2, Retain:1, Will:1, CleanSession:1, ?SN_NORMAL_TOPIC:2, TopicId1:16, MsgId:16, ?SN_RC_ACCECPTED>>,
+        receive_response(Socket)),
+    send_publish_msg_predefined_topic(Socket, Qos, MsgId, TopicId1, <<20, 21, 22, 23>>),
+    Eexp = <<11, ?SN_PUBLISH, Dup:1, Qos:2, Retain:1, Will:1, CleanSession:1, ?SN_PREDEFINED_TOPIC:2, TopicId1:16, (mid(0)):16, <<20, 21, 22, 23>>/binary>>,
+    What = receive_response(Socket),
+    io:format("What=~p~n", [What]),
+    ?assertEqual(Eexp, What),
+    send_disconnect_msg(Socket),
+    ?assertEqual(<<2, ?SN_DISCONNECT>>, receive_response(Socket)),
+    gen_udp:close(Socket).
+
+
 publish_for_wait_will() ->
     Fun = fun(Socket) ->
         send_register_msg(Socket, <<"testtopic">>, mid(2)),
@@ -297,6 +399,12 @@ send_register_msg(Socket, TopicName, MsgId) ->
     RegisterPacket = <<Length:8, MsgType:8, TopicId:16, MsgId:16, TopicName/binary>>,
     ok = gen_udp:send(Socket, ?HOST, ?PORT, RegisterPacket).
 
+send_regack_msg(Socket, TopicId, MsgId) ->
+    Length = 7,
+    MsgType = ?SN_REGACK,
+    Packet = <<Length:8, MsgType:8, TopicId:16, MsgId:16, ?SN_RC_ACCECPTED>>,
+    ok = gen_udp:send(Socket, ?HOST, ?PORT, Packet).
+
 
 send_publish_msg_predefined_topic(Socket, Qos, MsgId, TopicId, Data) ->
     Length = 7 + byte_size(Data),
@@ -307,7 +415,7 @@ send_publish_msg_predefined_topic(Socket, Qos, MsgId, TopicId, Data) ->
     CleanSession = 0,
     TopicIdType = 1,
     PublishPacket = <<Length:8, MsgType:8, Dup:1, Qos:2, Retain:1, Will:1, 
-            CleanSession:1, TopicIdType:2,TopicId:16, MsgId:16, Data/binary>>,
+            CleanSession:1, TopicIdType:2, TopicId:16, MsgId:16, Data/binary>>,
     ok = gen_udp:send(Socket, ?HOST, ?PORT, PublishPacket).
 
 send_publish_msg_short_topic(Socket, Qos, MsgId, TopicName, Data) ->
@@ -508,9 +616,9 @@ receive_response(Socket) ->
         {udp, Socket, _, _, Bin} ->
             io:format("receive_response Bin=~p~n", [Bin]),
             Bin;
-        Other -> error(unexpected_udp_data, Other)
+        Other -> {unexpected_udp_data, Other}
     after 2000 ->
-        error(udp_receive_timeout, Socket)
+        udp_receive_timeout
     end.
 
 
