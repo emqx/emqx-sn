@@ -30,7 +30,8 @@ end_per_suite(_Config) ->
 
 all() -> [subscribe_test, subscribe_test1, subscribe_test2,
     subscribe_test10, subscribe_test11, subscribe_test12, subscribe_test13,
-    publish_qos0_test1, publish_qos0_test2, publish_qos0_test3].
+    publish_qos0_test1, publish_qos0_test2, publish_qos0_test3,
+    publish_qos1_test1, publish_qos1_test4].
 
 subscribe_test(_Config) ->
     Dup = 0,
@@ -299,6 +300,7 @@ publish_qos0_test3(_Config) ->
     gen_udp:close(Socket).
 
 
+
 publish_qos1_test1(_Config) ->
     Dup = 0,
     Qos = 1,
@@ -314,14 +316,29 @@ publish_qos1_test1(_Config) ->
     ?assertEqual(<<8, ?SN_SUBACK, Dup:1, Qos:2, Retain:1, Will:1, CleanSession:1, ?SN_NORMAL_TOPIC:2, TopicId1:16, MsgId:16, ?SN_RC_ACCECPTED>>,
         receive_response(Socket)),
     send_publish_msg_predefined_topic(Socket, Qos, MsgId, TopicId1, <<20, 21, 22, 23>>),
-    Eexp = <<11, ?SN_PUBLISH, Dup:1, Qos:2, Retain:1, Will:1, CleanSession:1, ?SN_PREDEFINED_TOPIC:2, TopicId1:16, (mid(0)):16, <<20, 21, 22, 23>>/binary>>,
-    What = receive_response(Socket),
-    io:format("What=~p~n", [What]),
-    ?assertEqual(Eexp, What),
+    ?assertEqual(<<7, ?SN_PUBACK, TopicId1:16, MsgId:16, ?SN_RC_ACCECPTED>>, receive_response(Socket)),
+    check_dispatched_message(Dup, Qos, Retain, Will, CleanSession, ?SN_PREDEFINED_TOPIC, TopicId1, <<20, 21, 22, 23>>, Socket),
     send_disconnect_msg(Socket),
     ?assertEqual(<<2, ?SN_DISCONNECT>>, receive_response(Socket)),
     gen_udp:close(Socket).
 
+
+
+
+publish_qos1_test4(_Config) ->
+    Qos = 1,
+    MsgId = 1,
+    TopicId5 = 5,
+    {ok, Socket} = gen_udp:open(0, [binary]),
+    send_connect_msg(Socket, <<"test">>),
+    ?assertEqual(<<3, ?SN_CONNACK, 0>>, receive_response(Socket)),
+
+    send_publish_msg_predefined_topic(Socket, Qos, MsgId, tid(5), <<20, 21, 22, 23>>),
+    ?assertEqual(<<7, ?SN_PUBACK, TopicId5:16, MsgId:16, ?SN_RC_INVALID_TOPIC_ID>>, receive_response(Socket)),
+
+    send_disconnect_msg(Socket),
+    ?assertEqual(<<2, ?SN_DISCONNECT>>, receive_response(Socket)),
+    gen_udp:close(Socket).
 
 publish_for_wait_will() ->
     Fun = fun(Socket) ->
@@ -633,6 +650,12 @@ receive_response(Socket) ->
     end.
 
 
+check_dispatched_message(Dup, Qos, Retain, Will, CleanSession, TopicIdType, TopicId, Payload, Socket) ->
+    PubMsg = receive_response(Socket),
+    io:format("check_dispatched_message ~p~n", [PubMsg]),
+    Length = 7 + byte_size(Payload),
+    ?assertMatch(<<Length, ?SN_PUBLISH, Dup:1, Qos:2, Retain:1, Will:1, CleanSession:1, TopicIdType:2, TopicId:16, MsgId:16, Payload/binary>>,
+        PubMsg).
 
 
 prepare_config() ->
