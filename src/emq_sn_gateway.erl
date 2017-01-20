@@ -130,10 +130,10 @@ connected(?SN_REGISTER_MSG(_TopicId, MsgId, TopicName), StateData = #state{clien
     case emq_sn_registry:register_topic(ClientId, TopicName) of
         undefined ->
             ?LOG(error, "TopicId is full! ClientId=~p, TopicName=~p", [ClientId, TopicName], StateData),
-            send_message(?SN_REGACK_MSG(?SN_INVALID_TOPIC_ID, MsgId, ?SN_RC_INVALID_TOPIC_ID), StateData);
+            send_message(?SN_REGACK_MSG(?SN_INVALID_TOPIC_ID, MsgId, ?SN_RC_NOT_SUPPORTED), StateData);
         wildcard_topic ->
             ?LOG(error, "wildcard topic can not be registered! ClientId=~p, TopicName=~p", [ClientId, TopicName], StateData),
-            send_message(?SN_REGACK_MSG(?SN_INVALID_TOPIC_ID, MsgId, ?SN_RC_INVALID_TOPIC_ID), StateData);
+            send_message(?SN_REGACK_MSG(?SN_INVALID_TOPIC_ID, MsgId, ?SN_RC_NOT_SUPPORTED), StateData);
         NewTopicId ->
             ?LOG(debug, "register ClientId=~p, TopicName=~p, NewTopicId=~p", [ClientId, TopicName, NewTopicId], StateData),
             send_message(?SN_REGACK_MSG(NewTopicId, MsgId, ?SN_RC_ACCECPTED), StateData)
@@ -455,7 +455,7 @@ do_publish(?SN_SHORT_TOPIC, TopicId, Data, Flags, MsgId, StateData) ->
             publish_broker(TopicName, Data, Dup, Qos, Retain, MsgId, TopicId, StateData)
     end;
 do_publish(_, TopicId, _Data, #mqtt_sn_flags{qos = Qos}, MsgId, StateData) ->
-    (Qos =/= ?QOS0) andalso send_message(?SN_PUBACK_MSG(TopicId, MsgId, ?SN_RC_INVALID_TOPIC_ID), StateData),
+    (Qos =/= ?QOS0) andalso send_message(?SN_PUBACK_MSG(TopicId, MsgId, ?SN_RC_NOT_SUPPORTED), StateData),
     next_state(connected, StateData).
 
 

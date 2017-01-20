@@ -12,6 +12,8 @@
 -define(FLAG_RETAIN(X),X).
 -define(FLAG_SESSION(X),X).
 
+% FLAG NOT USED
+-define(FNU, 0).
 
 
 init_per_suite(Config) ->
@@ -31,7 +33,8 @@ end_per_suite(_Config) ->
 all() -> [subscribe_test, subscribe_test1, subscribe_test2,
     subscribe_test10, subscribe_test11, subscribe_test12, subscribe_test13,
     publish_qos0_test1, publish_qos0_test2, publish_qos0_test3,
-    publish_qos1_test1, publish_qos1_test2, publish_qos1_test3, publish_qos1_test4, publish_qos1_test5].
+    publish_qos1_test1, publish_qos1_test2, publish_qos1_test3, publish_qos1_test4, publish_qos1_test5,
+    publish_qos2_test1].
 
 subscribe_test(_Config) ->
     Dup = 0,
@@ -157,9 +160,9 @@ subscribe_test11(_Config) ->
     send_register_msg(Socket, <<"abc">>, MsgId),
     ?assertEqual(<<7, ?SN_REGACK, TopicId1:16, MsgId:16, 0:8>>, receive_response(Socket)),
     send_register_msg(Socket, <<"/blue/#">>, MsgId),
-    ?assertEqual(<<7, ?SN_REGACK, TopicId0:16, MsgId:16, 2:8>>, receive_response(Socket)),
+    ?assertEqual(<<7, ?SN_REGACK, TopicId0:16, MsgId:16, ?SN_RC_NOT_SUPPORTED:8>>, receive_response(Socket)),
     send_register_msg(Socket, <<"/blue/+/white">>, MsgId),
-    ?assertEqual(<<7, ?SN_REGACK, TopicId0:16, MsgId:16, 2:8>>, receive_response(Socket)),
+    ?assertEqual(<<7, ?SN_REGACK, TopicId0:16, MsgId:16, ?SN_RC_NOT_SUPPORTED:8>>, receive_response(Socket)),
     send_register_msg(Socket, <<"/$sys/rain">>, MsgId),
     ?assertEqual(<<7, ?SN_REGACK, TopicId2:16, MsgId:16, 0:8>>, receive_response(Socket)),
     send_subscribe_msg_short_topic(Socket, Qos, <<"Q2">>, MsgId),
@@ -317,7 +320,7 @@ publish_qos1_test1(_Config) ->
         receive_response(Socket)),
     send_publish_msg_predefined_topic(Socket, Qos, MsgId, TopicId1, <<20, 21, 22, 23>>),
     ?assertEqual(<<7, ?SN_PUBACK, TopicId1:16, MsgId:16, ?SN_RC_ACCECPTED>>, receive_response(Socket)),
-    check_dispatched_message(Dup, Qos, Retain, Will, CleanSession, ?SN_PREDEFINED_TOPIC, TopicId1, <<20, 21, 22, 23>>, Socket),
+    check_dispatched_message(Dup, Qos, Retain, ?SN_PREDEFINED_TOPIC, TopicId1, <<20, 21, 22, 23>>, Socket),
     send_disconnect_msg(Socket),
     ?assertEqual(<<2, ?SN_DISCONNECT>>, receive_response(Socket)),
     gen_udp:close(Socket).
@@ -356,7 +359,7 @@ publish_qos1_test3(_Config) ->
     send_publish_msg_short_topic(Socket, Qos, MsgId, <<"ab">>, <<20, 21, 22, 23>>),
     <<TopicIdShort:16>> = <<"ab">>,
     ?assertEqual(<<7, ?SN_PUBACK, TopicIdShort:16, MsgId:16, ?SN_RC_ACCECPTED>>, receive_response(Socket)),
-    check_dispatched_message(Dup, Qos, Retain, Will, CleanSession, ?SN_SHORT_TOPIC, TopicIdShort, <<20, 21, 22, 23>>, Socket),
+    check_dispatched_message(Dup, Qos, Retain, ?SN_SHORT_TOPIC, TopicIdShort, <<20, 21, 22, 23>>, Socket),
     send_disconnect_msg(Socket),
     ?assertEqual(<<2, ?SN_DISCONNECT>>, receive_response(Socket)),
     gen_udp:close(Socket).
@@ -403,6 +406,25 @@ publish_qos1_test5(_Config) ->
     ?assertEqual(<<2, ?SN_DISCONNECT>>, receive_response(Socket)),
     gen_udp:close(Socket).
 
+
+publish_qos2_test1(_Config) ->
+    Qos = 2,
+    MsgId = 7,
+    TopicId1 = 1,
+    {ok, Socket} = gen_udp:open(0, [binary]),
+    send_connect_msg(Socket, <<"test">>),
+    ?assertEqual(<<3, ?SN_CONNACK, 0>>, receive_response(Socket)),
+    send_subscribe_msg_normal_topic(Socket, Qos, <<"/abc">>, MsgId),
+    ?assertEqual(<<8, ?SN_SUBACK, ?FNU:1, Qos:2, ?FNU:5, TopicId1:16, MsgId:16, ?SN_RC_ACCECPTED>>,
+        receive_response(Socket)),
+    send_publish_msg_predefined_topic(Socket, Qos, MsgId, TopicId1, <<20, 21, 22, 23>>),
+    ?assertEqual(<<4, ?SN_PUBREC, MsgId:16>>, receive_response(Socket)),
+    send_pubrel_msg(Socket, MsgId),
+    ?assertEqual(<<4, ?SN_PUBCOMP, MsgId:16>>, receive_response(Socket)),
+    check_dispatched_message(0, Qos, 0, ?SN_PREDEFINED_TOPIC, TopicId1, <<20, 21, 22, 23>>, Socket),
+    send_disconnect_msg(Socket),
+    ?assertEqual(<<2, ?SN_DISCONNECT>>, receive_response(Socket)),
+    gen_udp:close(Socket).
 
 
 publish_for_wait_will() ->
@@ -715,13 +737,19 @@ receive_response(Socket) ->
     end.
 
 
-check_dispatched_message(Dup, Qos, Retain, Will, CleanSession, TopicIdType, TopicId, Payload, Socket) ->
+check_dispatched_message(Dup, Qos, Retain, TopicIdType, TopicId, Payload, Socket) ->
     PubMsg = receive_response(Socket),
     Length = 7 + byte_size(Payload),
     io:format("check_dispatched_message ~p~n", [PubMsg]),
-    io:format("expected ~p xx ~p~n", [<<Length, ?SN_PUBLISH, Dup:1, Qos:2, Retain:1, Will:1, CleanSession:1, TopicIdType:2, TopicId:16>>, Payload]),
-    ?assertMatch(<<Length, ?SN_PUBLISH, Dup:1, Qos:2, Retain:1, Will:1, CleanSession:1, TopicIdType:2, TopicId:16, MsgId:16, Payload/binary>>,
-        PubMsg).
+    io:format("expected ~p xx ~p~n", [<<Length, ?SN_PUBLISH, Dup:1, Qos:2, Retain:1, ?FNU:2, TopicIdType:2, TopicId:16>>, Payload]),
+    <<Length, ?SN_PUBLISH, Dup:1, Qos:2, Retain:1, ?FNU:2, TopicIdType:2, TopicId:16, MsgId:16, Payload/binary>> = PubMsg,
+    case Qos of
+        0 -> ok;
+        1 -> send_puback_msg(Socket, TopicId, MsgId);
+        2 -> send_pubrel_msg(Socket, MsgId),
+            ?assertEqual(<<4, ?SN_PUBCOMP, MsgId:16>>, receive_response(Socket))
+    end,
+    ok.
 
 
 prepare_config() ->
