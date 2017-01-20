@@ -255,7 +255,7 @@ handle_info({suback, MsgId, [GrantedQos]}, StateName, StateData=#state{awaiting_
     Flags = #mqtt_sn_flags{qos = GrantedQos},
     {MsgId, TopicId} = find_suback_topicid(MsgId, Awaiting),
     ?LOG(debug, "suback Awaiting=~p, MsgId=~p, TopicId=~p", [Awaiting, MsgId, TopicId], StateData),
-    send_message(?SN_SUBACK_MSG(Flags, TopicId, MsgId, 0), StateData),
+    send_message(?SN_SUBACK_MSG(Flags, TopicId, MsgId, ?SN_RC_ACCECPTED), StateData),
     next_state(StateName, StateData#state{awaiting_suback = lists:delete({MsgId, TopicId}, Awaiting)});
 
 handle_info({deliver, Msg}, StateName, StateData = #state{client_id = ClientId}) ->
@@ -448,7 +448,13 @@ do_publish(?SN_SHORT_TOPIC, TopicId, Data, Flags, MsgId, StateData) ->
                     true -> TopicId;
                     false -> <<TopicId:16>>
                 end,
-    publish_broker(TopicName, Data, Dup, Qos, Retain, MsgId, StateData);
+    case emq_sn_registry:wildcard(TopicName) of
+        true ->
+            (Qos =/= ?QOS0) andalso send_message(?SN_PUBACK_MSG(TopicId, MsgId, ?SN_RC_NOT_SUPPORTED), StateData),
+            next_state(connected, StateData);
+        false ->
+            publish_broker(TopicName, Data, Dup, Qos, Retain, MsgId, StateData)
+    end;
 do_publish(_, TopicId, _Data, #mqtt_sn_flags{qos = Qos}, MsgId, StateData) ->
     (Qos =/= ?QOS0) andalso send_message(?SN_PUBACK_MSG(TopicId, MsgId, ?SN_RC_INVALID_TOPIC_ID), StateData),
     next_state(connected, StateData).

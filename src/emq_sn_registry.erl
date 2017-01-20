@@ -26,7 +26,7 @@
 %% API.
 -export([start_link/0, stop/0]).
 
--export([register_topic/2, lookup_topic/2, unregister_topic/1, lookup_topic_id/2]).
+-export([register_topic/2, lookup_topic/2, unregister_topic/1, lookup_topic_id/2, wildcard/1]).
 
 %% gen_server.
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2,
