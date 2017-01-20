@@ -331,7 +331,7 @@ code_change(_OldVsn, StateName, StateData, _Extra) ->
 transform(?CONNACK_PACKET(0), _QueuePid) ->
     ?SN_CONNACK_MSG(0);
 
-transform(?CONNACK_PACKET(_ReturnCode), QueuePid) ->
+transform(?CONNACK_PACKET(_ReturnCode), _QueuePid) ->
     ?SN_CONNACK_MSG(?SN_RC_CONGESTION);
 
 transform(?PUBACK_PACKET(?PUBACK, MsgId), QueuePid) ->

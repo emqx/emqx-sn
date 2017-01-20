@@ -32,7 +32,7 @@
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2,
          terminate/2, code_change/3]).
 
--record(state, {awaiting_puback = []}).
+-record(state, {awaiting_puback}).
 
 %%--------------------------------------------------------------------
 %% API
@@ -57,16 +57,19 @@ get_puback(Pid, MsgId) ->
 %%--------------------------------------------------------------------
 
 init([]) ->
-	{ok, #state{}}.
+	{ok, #state{awaiting_puback = maps:new()}}.
 
 handle_call({insert_puback, TopicId, MsgId}, _From, State=#state{awaiting_puback = Awaiting}) ->
-    AwaitingNew = lists:append(Awaiting, [{TopicId, MsgId}]),
+    AwaitingNew = maps:put(MsgId, TopicId, Awaiting),
     {reply, ok, State#state{awaiting_puback = AwaitingNew}, hibernate};
 
 handle_call({get_puback, MsgId}, _From, State=#state{awaiting_puback = Awaiting}) ->
-    {Ret, AwaitingNew} = fetch_puback(MsgId, Awaiting),
-    {reply, Ret, State#state{awaiting_puback = AwaitingNew}, hibernate};
-
+    TopicId = maps:get(MsgId, Awaiting, 0),
+    AwaitingNew = case TopicId of
+                      undefined -> Awaiting;
+                      _ -> maps:remove(MsgId, Awaiting)
+                  end,
+    {reply, {TopicId, MsgId}, State#state{awaiting_puback = AwaitingNew}, hibernate};
 
 handle_call(stop, _From, State) ->
     {stop, normal, ok, State};
@@ -91,22 +94,5 @@ code_change(_OldVsn, State, _Extra) ->
 %%--------------------------------------------------------------------
 %% Internal Functions
 %%--------------------------------------------------------------------
-
-
-fetch_puback(MsgId, Awaiting) ->
-    case length(Awaiting) > 0 of
-        true ->
-            {TopicId, MsgId0} = lists:nth(1, Awaiting),
-            AwaitingNew = lists:delete({TopicId, MsgId}, Awaiting),
-            case MsgId0 =:= MsgId of
-                true ->
-                    {{TopicId, MsgId0}, AwaitingNew};
-                false ->
-                    fetch_puback(MsgId, AwaitingNew)
-            end;
-        false ->
-            ?LOG(error, "no TopicId found against MsgId=~p", [MsgId]),
-            {{1, MsgId}, []}
-    end.
 
 

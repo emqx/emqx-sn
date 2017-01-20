@@ -39,5 +39,5 @@ init([{Port, Opts}]) ->
                {esockd_udp, server, [mqtt_sn, Port, Opts, MFA]},
                  permanent, 5000, worker, [esockd_udp]},
 
-    {ok, { {one_for_all, 10, 3600}, [?CHILD(emq_sn), ?CHILD(emq_sn_registry), GwSup, UdpSrv] }}.
+    {ok, { {one_for_all, 10, 3600}, [?CHILD(emq_sn_registry), GwSup, UdpSrv] }}.
 
