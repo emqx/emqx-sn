@@ -38,7 +38,7 @@
 -export([init/1, handle_event/3, handle_sync_event/4, handle_info/3,
          terminate/3, code_change/4]).
 
--record(state, {gwid, gwinfo = <<>>, sock, peer, protocol, client_id, keepalive, connpkt, awaiting_suback = []}).
+-record(state, {gwid, gwinfo = <<>>, sock, peer, protocol, client_id, keepalive, connpkt, queue_pid, awaiting_suback = []}).
 
 -define(LOG(Level, Format, Args, State),
             lager:Level("MQTT-SN(~s): " ++ Format,
@@ -61,8 +61,9 @@ unsubscribe(GwPid, Topics) ->
 %% gen_fsm.
 init([Sock, Peer]) ->
     put(sn_gw, Peer), %%TODO:
-    State = #state{gwid = 1, sock = Sock, peer = Peer},
-    SendFun = fun(Packet) -> send_message(transform(Packet), State) end,
+    {ok, QueuePid} = emq_sn_gateway_queue:start_link(),
+    State = #state{gwid = 1, sock = Sock, peer = Peer, queue_pid = QueuePid},
+    SendFun = fun(Packet) -> send_message(transform(Packet, QueuePid), State) end,
     PktOpts = [{max_clientid_len, 24}, {max_packet_size, 256}],
     ProtoState = emqttd_protocol:init(Peer, SendFun, PktOpts),
     {ok, idle, State#state{protocol = ProtoState}, 3000}.
@@ -327,25 +328,26 @@ terminate(Reason, _StateName, _StateData = #state{client_id = ClientId, keepaliv
 code_change(_OldVsn, StateName, StateData, _Extra) ->
     {ok, StateName, StateData}.
 
-transform(?CONNACK_PACKET(0)) ->
+transform(?CONNACK_PACKET(0), _QueuePid) ->
     ?SN_CONNACK_MSG(0);
 
-transform(?CONNACK_PACKET(_ReturnCode)) ->
+transform(?CONNACK_PACKET(_ReturnCode), QueuePid) ->
     ?SN_CONNACK_MSG(?SN_RC_CONGESTION);
 
-transform(?PUBACK_PACKET(?PUBACK, MsgId)) ->
-    ?SN_PUBACK_MSG(1, MsgId, 0);
+transform(?PUBACK_PACKET(?PUBACK, MsgId), QueuePid) ->
+    {TopicId, MsgId} = emq_sn_gateway_queue:get_puback(QueuePid, MsgId),
+    ?SN_PUBACK_MSG(TopicId, MsgId, ?SN_RC_ACCECPTED);
 
-transform(?PUBACK_PACKET(?PUBREC, MsgId)) ->
+transform(?PUBACK_PACKET(?PUBREC, MsgId), _QueuePid) ->
     ?SN_PUBREC_MSG(?SN_PUBREC, MsgId);
 
-transform(?PUBACK_PACKET(?PUBREL, MsgId)) ->
+transform(?PUBACK_PACKET(?PUBREL, MsgId), _QueuePid) ->
     ?SN_PUBREC_MSG(?SN_PUBREL, MsgId);
 
-transform(?PUBACK_PACKET(?PUBCOMP, MsgId)) ->
+transform(?PUBACK_PACKET(?PUBCOMP, MsgId), _QueuePid) ->
     ?SN_PUBREC_MSG(?SN_PUBCOMP, MsgId);
 
-transform(?UNSUBACK_PACKET(MsgId))->
+transform(?UNSUBACK_PACKET(MsgId), _QueuePid)->
     ?SN_UNSUBACK_MSG(MsgId).
 
 send_publish(Dup, Qos, Retain, TopicIdType, TopicId, MsgId, Payload, StateData) ->
@@ -440,20 +442,17 @@ do_publish(?SN_PREDEFINED_TOPIC, TopicId, Data, Flags, MsgId, StateData=#state{c
             (Qos =/= ?QOS0) andalso send_message(?SN_PUBACK_MSG(TopicId, MsgId, ?SN_RC_INVALID_TOPIC_ID), StateData),
             next_state(connected, StateData);
         PredefinedTopic ->
-            publish_broker(PredefinedTopic, Data, Dup, Qos, Retain, MsgId, StateData)
+            publish_broker(PredefinedTopic, Data, Dup, Qos, Retain, MsgId, TopicId, StateData)
     end;
 do_publish(?SN_SHORT_TOPIC, TopicId, Data, Flags, MsgId, StateData) ->
     #mqtt_sn_flags{qos = Qos, dup = Dup, retain = Retain} = Flags,
-    TopicName = case is_binary(TopicId) of
-                    true -> TopicId;
-                    false -> <<TopicId:16>>
-                end,
+    TopicName = <<TopicId:16>>,
     case emq_sn_registry:wildcard(TopicName) of
         true ->
             (Qos =/= ?QOS0) andalso send_message(?SN_PUBACK_MSG(TopicId, MsgId, ?SN_RC_NOT_SUPPORTED), StateData),
             next_state(connected, StateData);
         false ->
-            publish_broker(TopicName, Data, Dup, Qos, Retain, MsgId, StateData)
+            publish_broker(TopicName, Data, Dup, Qos, Retain, MsgId, TopicId, StateData)
     end;
 do_publish(_, TopicId, _Data, #mqtt_sn_flags{qos = Qos}, MsgId, StateData) ->
     (Qos =/= ?QOS0) andalso send_message(?SN_PUBACK_MSG(TopicId, MsgId, ?SN_RC_INVALID_TOPIC_ID), StateData),
@@ -481,7 +480,8 @@ unsubscribe_broker(TopicName, MsgId, StateData=#state{protocol = Proto}) ->
         {stop, Reason, Proto1} -> stop(Reason, StateData#state{protocol = Proto1})
     end.
 
-publish_broker(TopicName, Data, Dup, Qos, Retain, MsgId, StateData=#state{protocol = Proto}) ->
+publish_broker(TopicName, Data, Dup, Qos, Retain, MsgId, TopicId, StateData=#state{protocol = Proto, queue_pid = QueuePid}) ->
+    (Qos =/= ?QOS0) andalso emq_sn_gateway_queue:insert_puback(QueuePid, TopicId, MsgId),
     Publish = #mqtt_packet{header   = #mqtt_packet_header{type = ?PUBLISH, dup = Dup, qos = Qos, retain = Retain},
         variable = #mqtt_packet_publish{topic_name = TopicName, packet_id = MsgId},
         payload  = Data},
