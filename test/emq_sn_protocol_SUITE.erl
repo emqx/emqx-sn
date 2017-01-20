@@ -34,7 +34,7 @@ all() -> [subscribe_test, subscribe_test1, subscribe_test2,
     subscribe_test10, subscribe_test11, subscribe_test12, subscribe_test13,
     publish_qos0_test1, publish_qos0_test2, publish_qos0_test3,
     publish_qos1_test1, publish_qos1_test2, publish_qos1_test3, publish_qos1_test4, publish_qos1_test5,
-    publish_qos2_test1].
+    publish_qos2_test1, publish_qos2_test2].
 
 subscribe_test(_Config) ->
     Dup = 0,
@@ -422,6 +422,28 @@ publish_qos2_test1(_Config) ->
     send_pubrel_msg(Socket, MsgId),
     ?assertEqual(<<4, ?SN_PUBCOMP, MsgId:16>>, receive_response(Socket)),
     check_dispatched_message(0, Qos, 0, ?SN_PREDEFINED_TOPIC, TopicId1, <<20, 21, 22, 23>>, Socket),
+    send_disconnect_msg(Socket),
+    ?assertEqual(<<2, ?SN_DISCONNECT>>, receive_response(Socket)),
+    gen_udp:close(Socket).
+
+
+publish_qos2_test2(_Config) ->
+    Qos = 2,
+    MsgId = 7,
+    TopicId0 = 0,
+    TopicId1 = 1,
+    {ok, Socket} = gen_udp:open(0, [binary]),
+    send_connect_msg(Socket, <<"test">>),
+    ?assertEqual(<<3, ?SN_CONNACK, 0>>, receive_response(Socket)),
+    send_subscribe_msg_normal_topic(Socket, Qos, <<"/#">>, MsgId),
+    ?assertEqual(<<8, ?SN_SUBACK, ?FNU:1, Qos:2, ?FNU:5, TopicId0:16, MsgId:16, ?SN_RC_ACCECPTED>>,
+        receive_response(Socket)),
+    send_publish_msg_short_topic(Socket, Qos, MsgId, <<"/a">>, <<20, 21, 22, 23>>),
+    ?assertEqual(<<4, ?SN_PUBREC, MsgId:16>>, receive_response(Socket)),
+    send_pubrel_msg(Socket, MsgId),
+    ?assertEqual(<<4, ?SN_PUBCOMP, MsgId:16>>, receive_response(Socket)),
+    <<TopicIdShort:16>> = <<"/a">>,
+    check_dispatched_message(0, Qos, 0, ?SN_SHORT_TOPIC, TopicIdShort, <<20, 21, 22, 23>>, Socket),
     send_disconnect_msg(Socket),
     ?assertEqual(<<2, ?SN_DISCONNECT>>, receive_response(Socket)),
     gen_udp:close(Socket).

@@ -87,6 +87,8 @@ parse_var(?SN_DISCONNECT, <<>>) ->
     undefined;
 parse_var(?SN_DISCONNECT, <<Duration:?short>>) ->
     Duration;
+parse_var(?SN_WILLTOPICUPD, <<>>) ->
+    {undefined, undefined};
 parse_var(?SN_WILLTOPICUPD, <<Flags:?flag, WillTopic/binary>>) ->
     {parse_flags(?SN_WILLTOPICUPD, Flags), WillTopic};
 parse_var(?SN_WILLMSGUPD, WillMsg) ->

@@ -38,7 +38,11 @@
 -export([init/1, handle_event/3, handle_sync_event/4, handle_info/3,
          terminate/3, code_change/4]).
 
--record(state, {gwid, gwinfo = <<>>, sock, peer, protocol, client_id, keepalive, connpkt, queue_pid, awaiting_suback = []}).
+-record(will,  {will_retain = false             :: boolean(),
+                 will_qos    = ?QOS_0             :: mqtt_qos(),
+                 will_topic  = undefined         :: undefined | binary(),
+                 will_msg    = undefined         :: undefined | binary()}).
+-record(state, {gwid, gwinfo = <<>>, sock, peer, protocol, client_id, will, keepalive, connpkt, queue_pid, awaiting_suback = []}).
 
 -define(LOG(Level, Format, Args, State),
             lager:Level("MQTT-SN(~s): " ++ Format,
@@ -96,27 +100,25 @@ idle(?SN_CONNECT_MSG(Flags, _ProtoId, Duration, ClientId), StateData = #state{pr
 
 idle(Event, StateData) ->
     %%TODO:...
-    ?LOG(error, "UNEXPECTED Event: ~p", [Event], StateData),
+    ?LOG(error, "idle UNEXPECTED Event: ~p", [Event], StateData),
     {next_state, idle, StateData}.
 
-wait_for_will_topic(?SN_WILLTOPIC_MSG(Flags, Topic), StateData = #state{connpkt = ConnPkt}) ->
+wait_for_will_topic(?SN_WILLTOPIC_MSG(Flags, Topic), StateData) ->
     #mqtt_sn_flags{qos = Qos, retain = Retain} = Flags,
-    ConnPkt1 = ConnPkt#mqtt_packet_connect{will_retain = Retain,
-                                           will_qos    = Qos,
-                                           will_topic  = Topic,
-                                           will_flag   = true},
+    Will = #will{will_retain = Retain,
+                  will_qos    = Qos,
+                  will_topic  = Topic},
     send_message(?SN_WILLMSGREQ_MSG(), StateData),
-    {next_state, wait_for_will_msg, StateData#state{connpkt = ConnPkt1}};
+    {next_state, wait_for_will_msg, StateData#state{will = Will}};
 
-wait_for_will_topic(_Event, StateData) ->
-    %%TODO: LOG error
+wait_for_will_topic(Event, StateData) ->
+    ?LOG(error, "wait_for_will_topic UNEXPECTED Event: ~p", [Event], StateData),
     {next_state, wait_for_will_topic, StateData}.
 
-wait_for_will_msg(?SN_WILLMSG_MSG(Msg), StateData = #state{protocol = Proto, connpkt = ConnPkt}) ->
-    %%TODO: protocol connect
-    ConnPkt1 = ConnPkt#mqtt_packet_connect{will_msg = Msg},
-    case emqttd_protocol:received(?CONNECT_PACKET(ConnPkt1), Proto) of
-        {ok, Proto1}           -> next_state(connected, StateData#state{protocol = Proto1});
+wait_for_will_msg(?SN_WILLMSG_MSG(Msg), StateData = #state{protocol = Proto, will = Will, connpkt = ConnPkt}) ->
+    WillNew = Will#will{will_msg = Msg},
+    case emqttd_protocol:received(?CONNECT_PACKET(ConnPkt), Proto) of
+        {ok, Proto1}           -> next_state(connected, StateData#state{protocol = Proto1, will = WillNew});
         {error, Error}         -> shutdown(Error, StateData);
         {error, Error, Proto1} -> shutdown(Error, StateData#state{protocol = Proto1});
         {stop, Reason, Proto1} -> stop(Reason, StateData#state{protocol = Proto1})
@@ -199,23 +201,20 @@ connected(?SN_DISCONNECT_MSG(_Duration), StateData = #state{protocol = Proto}) -
     send_message(?SN_DISCONNECT_MSG(undefined), StateData),
     stop(Reason, StateData#state{protocol = Proto1});
 
-% connected(?SN_WILLTOPICUPD_MSG(Flags, Topic), StateData = #state{connpkt = ConnPkt, protocol = Proto}) ->
-%     #mqtt_sn_flags{qos = Qos, retain = Retain} = Flags,
-%     ConnPkt1 = ConnPkt#mqtt_packet_connect{will_retain = Retain,
-%                                            will_qos    = Qos,
-%                                            will_topic  = Topic},
-%     send_message(?SN_WILLTOPICRESP_MSG(0), StateData),
-%     % Proto1 = will_topic_update(ConnPkt1, Proto),
-%     {next_state, connected, StateData#state{protocol = Proto}};
+connected(?SN_WILLTOPICUPD_MSG(Flags, Topic), StateData = #state{will = Will}) ->
+    WillNew = case Topic of
+        undefined -> undefined;
+        _ -> update_will_topic(Will, Flags, Topic)
+    end,
+    send_message(?SN_WILLTOPICRESP_MSG(0), StateData),
+    {next_state, connected, StateData#state{will = WillNew}};
 
-% connected(?SN_WILLMSGUPD_MSG(Msg), StateData = #state{connpkt = ConnPkt, protocol = Proto}) ->
-%     ConnPkt1 = ConnPkt#mqtt_packet_connect{will_msg = Msg},
-%     send_message(?SN_WILLMSGRESP_MSG(0), StateData),
-%     % Proto1 = will_msg_update(ConnPkt1, Proto),
-%     {next_state, connected, StateData#state{protocol = Proto}};
+connected(?SN_WILLMSGUPD_MSG(Msg), StateData = #state{will = Will}) ->
+    send_message(?SN_WILLMSGRESP_MSG(0), StateData),
+    {next_state, connected, StateData#state{will = update_will_msg(Will, Msg)}};
 
 connected(Event, StateData) ->
-    ?LOG(error, "UNEXPECTED Event: ~p", [Event], StateData),
+    ?LOG(error, "connected UNEXPECTED Event: ~p", [Event], StateData),
     {next_state, connected, StateData}.
 
 handle_event(Event, StateName, StateData) ->
@@ -293,12 +292,13 @@ handle_info({keepalive, start, Interval}, StateName, StateData = #state{sock = S
     KeepAlive = emqttd_keepalive:start(StatFun, Interval, {keepalive, check}),
     next_state(StateName, StateData#state{keepalive = KeepAlive});
 
-handle_info({keepalive, check}, StateName, StateData = #state{keepalive = KeepAlive}) ->
+handle_info({keepalive, check}, StateName, StateData = #state{keepalive = KeepAlive, will = Will, protocol = Proto}) ->
     case emqttd_keepalive:check(KeepAlive) of
         {ok, KeepAlive1} ->
             next_state(StateName, StateData#state{keepalive = KeepAlive1});
         {error, timeout} ->
             ?LOG(debug, "Keepalive timeout", [], StateData),
+            do_publish_will(StateData),
             shutdown(keepalive_timeout, StateData);
         {error, Error} ->
             ?LOG(warning, "Keepalive error - ~p", [Error], StateData),
@@ -458,6 +458,19 @@ do_publish(_, TopicId, _Data, #mqtt_sn_flags{qos = Qos}, MsgId, StateData) ->
     (Qos =/= ?QOS0) andalso send_message(?SN_PUBACK_MSG(TopicId, MsgId, ?SN_RC_NOT_SUPPORTED), StateData),
     next_state(connected, StateData).
 
+do_publish_will(#state{will = undefined}) ->
+    ok;
+do_publish_will(#state{will = #will{will_msg = undefined}}) ->
+    ok;
+do_publish_will(#state{will = #will{will_topic = undefined}}) ->
+    ok;
+do_publish_will(#state{will = Will, protocol = Proto}) ->
+    #will{will_qos = Qos, will_retain = Retain, will_topic = Topic, will_msg = Payload } = Will,
+    Publish = #mqtt_packet{header   = #mqtt_packet_header{type = ?PUBLISH, dup = false, qos = Qos, retain = Retain},
+        variable = #mqtt_packet_publish{topic_name = Topic, packet_id = 1000},
+        payload  = Payload},
+    emqttd_protocol:received(Publish, Proto),
+    Qos =:= ?QOS2 andalso emqttd_protocol:received(?PUBACK_PACKET(?PUBREL, 1000), Proto).
 
 
 subscribe_broker(TopicName, Qos, MsgId, TopicId, StateData=#state{protocol = Proto, awaiting_suback = Awaiting}) ->
@@ -514,6 +527,16 @@ message_id(undefined) ->
     rand:uniform(16#FFFF);
 message_id(MsgId) ->
     MsgId.
+
+update_will_topic(undefined, #mqtt_sn_flags{qos = Qos, retain = Retain}, Topic) ->
+    #will{will_qos = Qos, will_retain = Retain, will_topic = Topic};
+update_will_topic(Will=#will{}, #mqtt_sn_flags{qos = Qos, retain = Retain}, Topic) ->
+    Will#will{will_qos = Qos, will_retain = Retain, will_topic = Topic}.
+
+update_will_msg(undefined, Msg) ->
+    #will{will_msg = Msg};
+update_will_msg(Will=#will{}, Msg) ->
+    Will#will{will_msg = Msg}.
 
 format(?SN_PUBLISH_MSG(Flags, TopicId, MsgId, Data)) ->
     lists:flatten(io_lib:format("mqtt_sn_message SN_PUBLISH, ~p, TopicId=~w, MsgId=~w, Payload=~w",
