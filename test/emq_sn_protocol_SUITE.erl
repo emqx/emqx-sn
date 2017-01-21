@@ -15,18 +15,20 @@
 % FLAG NOT USED
 -define(FNU, 0).
 
+all() -> [broadcast_test1].
 
-
-all() -> [subscribe_test, subscribe_test1, subscribe_test2,
+all5555() -> [subscribe_test, subscribe_test1, subscribe_test2,
     subscribe_test10, subscribe_test11, subscribe_test12, subscribe_test13,
     publish_qos0_test1, publish_qos0_test2, publish_qos0_test3,
     publish_qos1_test1, publish_qos1_test2, publish_qos1_test3, publish_qos1_test4, publish_qos1_test5,
     publish_qos2_test1, publish_qos2_test2,
-    will_test1, will_test2, will_test3, will_test4, will_test5].
+    will_test1, will_test2, will_test3, will_test4, will_test5,
+    broadcast_test1].
 
 
 init_per_suite(Config) ->
     prepare_config(),
+    application:get_env(emq_sn, duration, 2),
     ?assertMatch({ok, _}, application:ensure_all_started(emqttd)),
     ?assertMatch({ok, _}, application:ensure_all_started(emq_sn)),
     ?assertEqual(ok, application:ensure_started(lager)),
@@ -598,18 +600,24 @@ will_test5(_Config) ->
     gen_udp:close(Socket).
 
 
-send_searchgw_msg() ->
-    {ok, Socket} = gen_udp:open(0, [binary]),
+broadcast_test1(_Config) ->
+    {ok, Socket} = gen_udp:open( 0, [binary, {broadcast, true}]),
+    Address = get_udp_broadcast_address(),
+    ?assertEqual(<<5, ?SN_ADVERTISE, 1, 2:16>>, receive_response(Socket)),
+    send_searchgw_msg(Socket, Address),
+    ?assertEqual(<<3, ?SN_GWINFO, 1>>, receive_response(Socket)),
+    timer:sleep(5000),
+    ?assertEqual(<<5, ?SN_ADVERTISE, 1, 2:16>>, receive_response(Socket)),
+    gen_udp:close(Socket).
+
+
+
+send_searchgw_msg(Socket, Addr) ->
     Length = 3,
     MsgType = ?SN_CONNECT,
     Radius = 0,
-    ok = gen_udp:send(Socket, ?HOST, ?PORT, <<Length:8, MsgType:8, Radius:8>>),
-    receive
-        {udp, Socket, _, _, Bin} ->
-            io:format("client received:~p~n", [Bin])
-        after 2000 ->
-            gen_udp:close(Socket)
-        end.    
+    ok = gen_udp:send(Socket, Addr, ?PORT, <<Length:8, MsgType:8, Radius:8>>).
+
 
 send_connect_msg(Socket, ClientId) ->
     Length = 6 + byte_size(ClientId),
@@ -879,6 +887,13 @@ check_dispatched_message(Dup, Qos, Retain, TopicIdType, TopicId, Payload, Socket
             ?assertEqual(<<4, ?SN_PUBCOMP, MsgId:16>>, receive_response(Socket))
     end,
     ok.
+
+
+get_udp_broadcast_address() ->
+    {ok, IfList} = inet:getifaddrs(),
+    {_, LoOpts} = proplists:lookup("lo", IfList),
+    {_, BroadAddress} = proplists:lookup(broadaddr, LoOpts),
+    BroadAddress.
 
 
 prepare_config() ->

@@ -42,7 +42,7 @@
                  will_qos    = ?QOS_0             :: mqtt_qos(),
                  will_topic  = undefined         :: undefined | binary(),
                  will_msg    = undefined         :: undefined | binary()}).
--record(state, {gwid, gwinfo = <<>>, sock, peer, protocol, client_id, will, keepalive, connpkt, queue_pid, awaiting_suback = []}).
+-record(state, {sock, peer, protocol, client_id, will, keepalive, connpkt, queue_pid, awaiting_suback = []}).
 
 -define(LOG(Level, Format, Args, State),
             lager:Level("MQTT-SN(~s): " ++ Format,
@@ -52,7 +52,6 @@
 start_link(Sock, Peer) ->
     gen_fsm:start_link(?MODULE, [Sock, Peer], []).
 
-%% TODO:
 
 subscribe(GwPid, TopicTable) ->
     gen_fsm:send_event(GwPid, {subscribe, TopicTable}).
@@ -60,13 +59,10 @@ subscribe(GwPid, TopicTable) ->
 unsubscribe(GwPid, Topics) ->
     gen_fsm:send_event(GwPid, {unsubscribe, Topics}).
 
-%% TODO:
-
 %% gen_fsm.
 init([Sock, Peer]) ->
-    put(sn_gw, Peer), %%TODO:
     {ok, QueuePid} = emq_sn_gateway_queue:start_link(),
-    State = #state{gwid = 1, sock = Sock, peer = Peer, queue_pid = QueuePid},
+    State = #state{sock = Sock, peer = Peer, queue_pid = QueuePid},
     SendFun = fun(Packet) -> send_message(transform(Packet, QueuePid), State) end,
     PktOpts = [{max_clientid_len, 24}, {max_packet_size, 256}],
     ProtoState = emqttd_protocol:init(Peer, SendFun, PktOpts),
@@ -75,12 +71,7 @@ init([Sock, Peer]) ->
 idle(timeout, StateData) ->
     {stop, idle_timeout, StateData};
 
-idle(?SN_SEARCHGW_MSG(_Radius), StateData = #state{gwid = GwId, gwinfo = GwInfo}) ->
-    send_message(?SN_GWINFO_MSG(GwId, GwInfo), StateData),
-    {next_state, idle, StateData};
-
 idle(?SN_CONNECT_MSG(Flags, _ProtoId, Duration, ClientId), StateData = #state{protocol = Proto}) ->
-    %%TODO:
     #mqtt_sn_flags{will = Will, clean_session = CleanSession} = Flags,
     ConnPkt = #mqtt_packet_connect{client_id  = ClientId,
                                    clean_sess = CleanSession,
@@ -99,7 +90,6 @@ idle(?SN_CONNECT_MSG(Flags, _ProtoId, Duration, ClientId), StateData = #state{pr
     end;
 
 idle(Event, StateData) ->
-    %%TODO:...
     ?LOG(error, "idle UNEXPECTED Event: ~p", [Event], StateData),
     {next_state, idle, StateData}.
 
