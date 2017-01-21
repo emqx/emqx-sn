@@ -96,6 +96,10 @@
         #mqtt_sn_message{type     = ?SN_WILLTOPIC,
                          variable = {Flags, Topic}}).
 
+-define(SN_WILLTOPIC_EMPTY_MSG,
+    #mqtt_sn_message{type     = ?SN_WILLTOPIC,
+        variable = undefined}).
+
 -define(SN_WILLMSGREQ_MSG(),
         #mqtt_sn_message{type = ?SN_WILLMSGREQ}).
 

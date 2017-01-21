@@ -56,6 +56,8 @@ parse_var(?SN_CONNACK, <<ReturnCode:?byte>>) ->
     ReturnCode;
 parse_var(?SN_WILLTOPICREQ, <<>>) ->
     undefined;
+parse_var(?SN_WILLTOPIC, <<>>) ->
+    undefined;
 parse_var(?SN_WILLTOPIC, <<Flags:?flag, WillTopic/binary>>) ->
     {parse_flags(?SN_WILLTOPIC, Flags), WillTopic};
 parse_var(?SN_WILLMSGREQ, <<>>) ->

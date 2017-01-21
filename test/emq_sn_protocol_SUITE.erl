@@ -16,6 +16,15 @@
 -define(FNU, 0).
 
 
+
+all() -> [subscribe_test, subscribe_test1, subscribe_test2,
+    subscribe_test10, subscribe_test11, subscribe_test12, subscribe_test13,
+    publish_qos0_test1, publish_qos0_test2, publish_qos0_test3,
+    publish_qos1_test1, publish_qos1_test2, publish_qos1_test3, publish_qos1_test4, publish_qos1_test5,
+    publish_qos2_test1, publish_qos2_test2,
+    will_test1, will_test2, will_test3, will_test4, will_test5].
+
+
 init_per_suite(Config) ->
     prepare_config(),
     ?assertMatch({ok, _}, application:ensure_all_started(emqttd)),
@@ -30,11 +39,6 @@ end_per_suite(_Config) ->
     application:stop(emqttd).
 
 
-all() -> [subscribe_test, subscribe_test1, subscribe_test2,
-    subscribe_test10, subscribe_test11, subscribe_test12, subscribe_test13,
-    publish_qos0_test1, publish_qos0_test2, publish_qos0_test3,
-    publish_qos1_test1, publish_qos1_test2, publish_qos1_test3, publish_qos1_test4, publish_qos1_test5,
-    publish_qos2_test1, publish_qos2_test2].
 
 subscribe_test(_Config) ->
     Dup = 0,
@@ -431,7 +435,6 @@ publish_qos2_test2(_Config) ->
     Qos = 2,
     MsgId = 7,
     TopicId0 = 0,
-    TopicId1 = 1,
     {ok, Socket} = gen_udp:open(0, [binary]),
     send_connect_msg(Socket, <<"test">>),
     ?assertEqual(<<3, ?SN_CONNACK, 0>>, receive_response(Socket)),
@@ -449,15 +452,151 @@ publish_qos2_test2(_Config) ->
     gen_udp:close(Socket).
 
 
-publish_for_wait_will() ->
-    Fun = fun(Socket) ->
-        send_register_msg(Socket, <<"testtopic">>, mid(2)),
-        %send_subscribe_msg(Socket, 0),
-        %send_publish_msg(Socket, 0),
-        %send_unsubscribe_msg_topic_name(Socket),
-        send_pingreq_msg(Socket)
-    end,
-    send_connect_msg_for_wait_will(Fun).
+will_test1(_Config) ->
+    Qos = 1,
+    Duration = 1,
+    {ok, Socket} = gen_udp:open(0, [binary]),
+    send_connect_msg_with_will(Socket, Duration),
+    ?assertEqual(<<2, ?SN_WILLTOPICREQ>>, receive_response(Socket)),
+    send_willtopic_msg(Socket, <<"abc">>, Qos),
+    ?assertEqual(<<2, ?SN_WILLMSGREQ>>, receive_response(Socket)),
+    send_willmsg_msg(Socket, <<10, 11, 12, 13, 14>>),
+    ?assertEqual(<<3, ?SN_CONNACK, 0>>, receive_response(Socket)),
+    send_pingreq_msg(Socket),
+    ?assertEqual(<<2, ?SN_PINGRESP>>, receive_response(Socket)),
+
+    {ok, C} = emqttc:start_link([{host, "localhost"}, {client_id, <<"simpleClient">>}]),
+    ?assertEqual(connected, receive_emqttc_response()),
+    emqttc:subscribe(C, <<"abc">>, ?QOS1),
+    timer:sleep(10000),
+
+    receive_response(Socket), % ignore PUBACK
+    ?assertEqual({publish, <<"abc">>, <<10, 11, 12, 13, 14>>}, receive_emqttc_response()),
+
+    send_disconnect_msg(Socket),
+    ?assertEqual(udp_receive_timeout, receive_response(Socket)),
+    emqttc:disconnect(C),
+    gen_udp:close(Socket).
+
+
+
+will_test2(_Config) ->
+    Qos = 2,
+    Duration = 1,
+    {ok, Socket} = gen_udp:open(0, [binary]),
+    send_connect_msg_with_will(Socket, Duration),
+    ?assertEqual(<<2, ?SN_WILLTOPICREQ>>, receive_response(Socket)),
+    send_willtopic_msg(Socket, <<"goodbye">>, Qos),
+    ?assertEqual(<<2, ?SN_WILLMSGREQ>>, receive_response(Socket)),
+    send_willmsg_msg(Socket, <<10, 11, 12, 13, 14>>),
+    ?assertEqual(<<3, ?SN_CONNACK, 0>>, receive_response(Socket)),
+    send_pingreq_msg(Socket),
+    ?assertEqual(<<2, ?SN_PINGRESP>>, receive_response(Socket)),
+
+    {ok, C} = emqttc:start_link([{host, "localhost"}, {client_id, <<"simpleClient">>}]),
+    ?assertEqual(connected, receive_emqttc_response()),
+    emqttc:subscribe(C, <<"goodbye">>, ?QOS1),
+    timer:sleep(10000),
+
+    receive_response(Socket), % ignore PUBACK
+    receive_response(Socket), % ignore PUBCOMP
+    ?assertEqual({publish, <<"goodbye">>, <<10, 11, 12, 13, 14>>}, receive_emqttc_response()),
+
+    send_disconnect_msg(Socket),
+    ?assertEqual(udp_receive_timeout, receive_response(Socket)),
+    emqttc:disconnect(C),
+    gen_udp:close(Socket).
+
+
+
+will_test3(_Config) ->
+    Duration = 1,
+    {ok, Socket} = gen_udp:open(0, [binary]),
+    send_connect_msg_with_will(Socket, Duration),
+    ?assertEqual(<<2, ?SN_WILLTOPICREQ>>, receive_response(Socket)),
+    send_willtopic_empty_msg(Socket),
+    ?assertEqual(<<3, ?SN_CONNACK, 0>>, receive_response(Socket)),
+    send_pingreq_msg(Socket),
+    ?assertEqual(<<2, ?SN_PINGRESP>>, receive_response(Socket)),
+
+    {ok, C} = emqttc:start_link([{host, "localhost"}, {client_id, <<"simpleClient">>}]),
+    ?assertEqual(connected, receive_emqttc_response()),
+    emqttc:subscribe(C, <<"goodbye">>, ?QOS1),
+    timer:sleep(10000),
+
+    ?assertEqual(udp_receive_timeout, receive_response(Socket)),
+    ?assertEqual(emqttc_receive_timeout, receive_emqttc_response()),
+
+    send_disconnect_msg(Socket),
+    ?assertEqual(udp_receive_timeout, receive_response(Socket)),
+    emqttc:disconnect(C),
+    gen_udp:close(Socket).
+
+
+
+will_test4(_Config) ->
+    Qos = 1,
+    Duration = 1,
+    {ok, Socket} = gen_udp:open(0, [binary]),
+    send_connect_msg_with_will(Socket, Duration),
+    ?assertEqual(<<2, ?SN_WILLTOPICREQ>>, receive_response(Socket)),
+    send_willtopic_msg(Socket, <<"abc">>, Qos),
+    ?assertEqual(<<2, ?SN_WILLMSGREQ>>, receive_response(Socket)),
+    send_willmsg_msg(Socket, <<10, 11, 12, 13, 14>>),
+    ?assertEqual(<<3, ?SN_CONNACK, 0>>, receive_response(Socket)),
+    send_pingreq_msg(Socket),
+    ?assertEqual(<<2, ?SN_PINGRESP>>, receive_response(Socket)),
+    send_willtopicupd_msg(Socket, <<"/XYZ">>, ?QOS1),
+    ?assertEqual(<<3, ?SN_WILLTOPICRESP, ?SN_RC_ACCECPTED>>, receive_response(Socket)),
+    send_willmsgupd_msg(Socket, <<"1A2B3C">>),
+    ?assertEqual(<<3, ?SN_WILLMSGRESP, ?SN_RC_ACCECPTED>>, receive_response(Socket)),
+
+    {ok, C} = emqttc:start_link([{host, "localhost"}, {client_id, <<"simpleClient">>}]),
+    ?assertEqual(connected, receive_emqttc_response()),
+    emqttc:subscribe(C, <<"abc">>, ?QOS1),
+    emqttc:subscribe(C, <<"/XYZ">>, ?QOS1),
+    timer:sleep(10000),
+
+    receive_response(Socket), % ignore PUBACK
+    ?assertEqual({publish, <<"/XYZ">>, <<"1A2B3C">>}, receive_emqttc_response()),
+
+    send_disconnect_msg(Socket),
+    ?assertEqual(udp_receive_timeout, receive_response(Socket)),
+    emqttc:disconnect(C),
+    gen_udp:close(Socket).
+
+
+
+will_test5(_Config) ->
+    Qos = 1,
+    Duration = 1,
+    {ok, Socket} = gen_udp:open(0, [binary]),
+    send_connect_msg_with_will(Socket, Duration),
+    ?assertEqual(<<2, ?SN_WILLTOPICREQ>>, receive_response(Socket)),
+    send_willtopic_msg(Socket, <<"abc">>, Qos),
+    ?assertEqual(<<2, ?SN_WILLMSGREQ>>, receive_response(Socket)),
+    send_willmsg_msg(Socket, <<10, 11, 12, 13, 14>>),
+    ?assertEqual(<<3, ?SN_CONNACK, 0>>, receive_response(Socket)),
+    send_pingreq_msg(Socket),
+    ?assertEqual(<<2, ?SN_PINGRESP>>, receive_response(Socket)),
+    send_willtopicupd_empty_msg(Socket),
+    ?assertEqual(<<3, ?SN_WILLTOPICRESP, ?SN_RC_ACCECPTED>>, receive_response(Socket)),
+
+
+    {ok, C} = emqttc:start_link([{host, "localhost"}, {client_id, <<"simpleClient">>}]),
+    ?assertEqual(connected, receive_emqttc_response()),
+    emqttc:subscribe(C, <<"abc">>, ?QOS1),
+    emqttc:subscribe(C, <<"/XYZ">>, ?QOS1),
+    timer:sleep(10000),
+
+    ?assertEqual(udp_receive_timeout, receive_response(Socket)),
+    ?assertEqual(emqttc_receive_timeout, receive_emqttc_response()),
+
+    send_disconnect_msg(Socket),
+    ?assertEqual(udp_receive_timeout, receive_response(Socket)),
+    emqttc:disconnect(C),
+    gen_udp:close(Socket).
+
 
 send_searchgw_msg() ->
     {ok, Socket} = gen_udp:open(0, [binary]),
@@ -487,44 +626,52 @@ send_connect_msg(Socket, ClientId) ->
             CleanSession:1, TopicIdType:2, ProtocolId:8, Duration:16, ClientId/binary>>,
     ok = gen_udp:send(Socket, ?HOST, ?PORT, Packet).
 
-send_connect_msg_for_wait_will(Fun) ->
-    {ok, Socket} = gen_udp:open(0, [binary]),
+send_connect_msg_with_will(Socket, Duration) ->
     Length = 10,
-    MsgType = ?SN_CONNECT,
-    Dup = 0,
-    Qos = 0,
-    Retain = 0,
     Will = 1,
     CleanSession = 1,
-    TopicIdType = 0,
     ProtocolId = 1,
-    Duration = 10,
     ClientId = <<"test">>,
-    ConnectPacket = <<Length:8, MsgType:8, Dup:1, Qos:2, Retain:1, Will:1, 
-            CleanSession:1, TopicIdType:2, ProtocolId:8, Duration:16, ClientId/binary>>,
-    ok = gen_udp:send(Socket, ?HOST, ?PORT, ConnectPacket),
-    lookup(Socket, Fun, false).
+    ConnectPacket = <<Length:8, ?SN_CONNECT:8, ?FNU:4, Will:1,
+            CleanSession:1, ?FNU:2, ProtocolId:8, Duration:16, ClientId/binary>>,
+    ok = gen_udp:send(Socket, ?HOST, ?PORT, ConnectPacket).
 
-send_willtopic_msg(Socket) ->
-    Length = 7,
+send_willtopic_msg(Socket, Topic, Qos) ->
+    Length = 3+byte_size(Topic),
     MsgType = ?SN_WILLTOPIC,
-    Dup = 0,
-    Qos = 1,
     Retain = 0,
-    Will = 0,
-    CleanSession = 0,
-    TopicIdType = 0,
-    WillTopic = <<"will">>,
-    WillTopicPacket = <<Length:8, MsgType:8, Dup:1, Qos:2, Retain:1, Will:1, 
-            CleanSession:1, TopicIdType:2, WillTopic/binary>>,
-    ok = gen_udp:send(Socket, ?HOST, ?PORT, WillTopicPacket).    
+    WillTopicPacket = <<Length:8, MsgType:8, ?FNU:1, Qos:2, Retain:1, ?FNU:4, Topic/binary>>,
+    ok = gen_udp:send(Socket, ?HOST, ?PORT, WillTopicPacket).
 
-send_willmsg_msg(Socket) ->
-    Length = 9,
-    MsgType = ?SN_WILLMSG,
-    WillMsg = <<"willmsg">>,
-    WillMsgPacket = <<Length:8, MsgType:8, WillMsg/binary>>,
+send_willtopic_empty_msg(Socket) ->
+    Length = 2,
+    MsgType = ?SN_WILLTOPIC,
+    WillTopicPacket = <<Length:8, MsgType:8>>,
+    ok = gen_udp:send(Socket, ?HOST, ?PORT, WillTopicPacket).
+
+send_willmsg_msg(Socket, Msg) ->
+    Length = 2+byte_size(Msg),
+    WillMsgPacket = <<Length:8, ?SN_WILLMSG:8, Msg/binary>>,
     ok = gen_udp:send(Socket, ?HOST, ?PORT, WillMsgPacket).
+
+send_willtopicupd_msg(Socket, Topic, Qos) ->
+    Length = 3+byte_size(Topic),
+    MsgType = ?SN_WILLTOPICUPD,
+    Retain = 0,
+    WillTopicPacket = <<Length:8, MsgType:8, ?FNU:1, Qos:2, Retain:1, ?FNU:4, Topic/binary>>,
+    ok = gen_udp:send(Socket, ?HOST, ?PORT, WillTopicPacket).
+
+send_willtopicupd_empty_msg(Socket) ->
+    Length = 2,
+    MsgType = ?SN_WILLTOPICUPD,
+    WillTopicPacket = <<Length:8, MsgType:8>>,
+    ok = gen_udp:send(Socket, ?HOST, ?PORT, WillTopicPacket).
+
+send_willmsgupd_msg(Socket, Msg) ->
+    Length = 2+byte_size(Msg),
+    MsgType = ?SN_WILLMSGUPD,
+    WillTopicPacket = <<Length:8, MsgType:8, Msg/binary>>,
+    ok = gen_udp:send(Socket, ?HOST, ?PORT, WillTopicPacket).
 
 send_register_msg(Socket, TopicName, MsgId) ->
     Length = 6 + byte_size(TopicName),
@@ -692,58 +839,6 @@ send_disconnect_msg(Socket) ->
 mid(Id) -> Id.
 tid(Id) -> Id.
 
-lookup(Socket, Fun, GetResponse) ->
-    receive
-        {udp, Socket, _, _, Bin} ->
-            %%io:format("client received:~p~n", [Bin]),
-            case Bin of
-                <<3, ?SN_GWINFO, GwId:8, GwAdd/binary>> ->
-                    io:format("recv gwinfo GwId: ~p, GwAdd: ~p~n", [GwId, GwAdd]);
-                <<3, ?SN_CONNACK, 0>> ->
-                    io:format("recv connack~n"),
-                    Fun(Socket);
-                <<2, ?SN_WILLTOPICREQ>> ->
-                    io:format("wait for will topic~n"),
-                    send_willtopic_msg(Socket);
-                <<2, ?SN_WILLMSGREQ>> ->
-                    io:format("wait for will msg~n"),
-                    send_willmsg_msg(Socket);
-                <<7, ?SN_REGACK, TopicId:16, MsgId:16, ReturnCode:8>> ->
-                    io:format("recv regack TopicId: ~p, MsgId: ~p, ReturnCode: ~p~n", [TopicId, MsgId, ReturnCode]),
-                    0 = ReturnCode;
-                <<_Len:8, ?SN_PUBLISH, _:1, Qos:2, _:1, _:1, _:1, _:2, TopicId:16, MsgId:16, Data/binary>> ->
-                    case Qos of
-                        0 -> ok;
-                        1 -> send_puback_msg(Socket, TopicId, MsgId);
-                        2 -> send_pubrec_msg(Socket, MsgId)
-                    end,
-                    io:format("recv publish Qos: ~p, TopicId: ~p, MsgId: ~p, Data: ~p~n", [Qos, TopicId, MsgId, Data]);
-                <<7, ?SN_PUBACK, TopicId:16, MsgId:16, ReturnCode:8>> ->
-                    io:format("recv puback TopicId: ~p, MsgId: ~p, ReturnCode: ~p~n", [TopicId, MsgId, ReturnCode]);
-                <<4, ?SN_PUBCOMP, MsgId:16>> ->
-                    io:format("recv pubcomp MsgId: ~p~n", [MsgId]);
-                <<4, ?SN_PUBREC, MsgId:16>> ->
-                    io:format("recv pubrec MsgId: ~p~n", [MsgId]),
-                    send_pubrel_msg(Socket, MsgId);
-                <<4, ?SN_PUBREL, MsgId:16>> ->
-                    io:format("recv pubrel MsgId: ~p~n", [MsgId]),
-                    send_pubcomp_msg(Socket, MsgId);
-                <<8, ?SN_SUBACK, Flags:8, TopicId:16, MsgId:16, ReturnCode:8>> ->
-                    io:format("recv suback Flags: ~p, TopicId: ~p, MsgId: ~p, ReturnCode: ~p~n", [Flags, TopicId, MsgId, ReturnCode]);
-                <<4, ?SN_UNSUBACK, MsgId:16>> ->
-                    io:format("recv unsuback MsgId: ~p~n", [MsgId]);
-                <<2, ?SN_PINGRESP>> ->
-                    io:format("recv pingresp ~n");
-                RawBin ->
-                    error("Unexpected udp data", RawBin)
-            end,
-            lookup(Socket, Fun, true)
-        after 5000 ->
-            io:format("Socket closed~n"),
-            gen_udp:close(Socket),
-            true = GetResponse
-        end.
-
 
 receive_response(Socket) ->
     receive
@@ -756,6 +851,18 @@ receive_response(Socket) ->
         Other -> {unexpected_udp_data, Other}
     after 2000 ->
         udp_receive_timeout
+    end.
+
+
+receive_emqttc_response() ->
+    receive
+        {mqttc, _From, Data2} ->
+            Data2;
+        {publish, Topic, Payload} ->
+            {publish, Topic, Payload};
+        Other -> {unexpected_emqttc_data, Other}
+    after 2000 ->
+        emqttc_receive_timeout
     end.
 
 

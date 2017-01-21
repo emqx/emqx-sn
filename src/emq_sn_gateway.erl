@@ -103,6 +103,15 @@ idle(Event, StateData) ->
     ?LOG(error, "idle UNEXPECTED Event: ~p", [Event], StateData),
     {next_state, idle, StateData}.
 
+wait_for_will_topic(?SN_WILLTOPIC_EMPTY_MSG, StateData=#state{connpkt = ConnPkt, protocol = Proto}) ->
+    % empty willtopic means delete will
+    case emqttd_protocol:received(?CONNECT_PACKET(ConnPkt), Proto) of
+        {ok, Proto1}           -> next_state(connected, StateData#state{protocol = Proto1, will = undefined});
+        {error, Error}         -> shutdown(Error, StateData);
+        {error, Error, Proto1} -> shutdown(Error, StateData#state{protocol = Proto1});
+        {stop, Reason, Proto1} -> stop(Reason, StateData#state{protocol = Proto1})
+    end;
+
 wait_for_will_topic(?SN_WILLTOPIC_MSG(Flags, Topic), StateData) ->
     #mqtt_sn_flags{qos = Qos, retain = Retain} = Flags,
     Will = #will{will_retain = Retain,
@@ -189,7 +198,7 @@ connected(?SN_PINGREQ_MSG(_ClientId), StateData) ->
     send_message(?SN_PINGRESP_MSG(), StateData),
     next_state(connected, StateData);
 
-connected(?SN_REGACK_MSG(TopicId, MsgId, ?SN_RC_ACCECPTED), StateData) ->
+connected(?SN_REGACK_MSG(_TopicId, _MsgId, ?SN_RC_ACCECPTED), StateData) ->
     next_state(connected, StateData);
 connected(?SN_REGACK_MSG(TopicId, MsgId, ReturnCode), StateData) ->
     ?LOG(error, "client does not accept register TopicId=~p, MsgId=~p, ReturnCode=~p", [TopicId, MsgId, ReturnCode], StateData),
@@ -292,7 +301,7 @@ handle_info({keepalive, start, Interval}, StateName, StateData = #state{sock = S
     KeepAlive = emqttd_keepalive:start(StatFun, Interval, {keepalive, check}),
     next_state(StateName, StateData#state{keepalive = KeepAlive});
 
-handle_info({keepalive, check}, StateName, StateData = #state{keepalive = KeepAlive, will = Will, protocol = Proto}) ->
+handle_info({keepalive, check}, StateName, StateData = #state{keepalive = KeepAlive}) ->
     case emqttd_keepalive:check(KeepAlive) of
         {ok, KeepAlive1} ->
             next_state(StateName, StateData#state{keepalive = KeepAlive1});
