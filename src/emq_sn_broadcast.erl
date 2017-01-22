@@ -54,9 +54,9 @@ stop() ->
 %%--------------------------------------------------------------------
 
 init([Duration, GwId]) ->
-    IP = get_boradcast_ip(),
     {ok, Sock} = gen_udp:open(0, [binary, {broadcast, true}]),
-    State = #state{bc_address = IP, sock = Sock, duration = Duration, gwid = GwId},
+    IpList = get_boradcast_ip(),
+    State = #state{bc_address = IpList, sock = Sock, duration = Duration, gwid = GwId},
     send_advertise(State),
 	{ok, State#state{tref = start_timer(Duration)}}.
 
@@ -90,19 +90,31 @@ code_change(_OldVsn, State, _Extra) ->
 %% Internal Functions
 %%--------------------------------------------------------------------
 
-send_advertise(#state{bc_address = IP, sock = Sock, gwid = GwId, duration = Duration}) ->
-    ?LOG(debug, "SEND SN_ADVERTISE to ~p~n", [IP]),
-    gen_udp:send(Sock, IP, ?PORT, emq_sn_message:serialize(?SN_ADVERTISE_MSG(GwId, Duration))).
+send_advertise(#state{bc_address = IpList, sock = Sock, gwid = GwId, duration = Duration}) ->
+    Data = emq_sn_message:serialize(?SN_ADVERTISE_MSG(GwId, Duration)),
+    send_advertise(Sock, IpList, Data).
 
+send_advertise(_Sock, [], _Data) ->
+    ok;
+send_advertise(Sock, [IP|T], Data) ->
+    ?LOG(debug, "SEND SN_ADVERTISE to ~p~n", [IP]),
+    gen_udp:send(Sock, IP, ?PORT, Data),
+    send_advertise(Sock, T, Data).
 
 start_timer(Duration) ->
     erlang:send_after(timer:seconds(Duration), self(), broadcast_advertise).
 
 
 get_boradcast_ip() ->
-    case inet:ifget("eth0", [broadaddr]) of
-        {ok, [{broadaddr, Ip}]} ->
-            Ip;
-        _ -> error(no_inet_if_found)
+    {ok, IfList} = inet:getiflist(),
+    B = [inet:ifget(X, [broadaddr]) || X <- IfList],
+    extract_ip(B, []).
+
+extract_ip([], Acc) ->
+    Acc;
+extract_ip([{ok,[{broadaddr,IP}]}|T], Acc) ->
+    case lists:member(IP, Acc) of
+        true -> extract_ip(T, Acc);
+        false -> extract_ip(T, [IP | Acc])
     end.
 
