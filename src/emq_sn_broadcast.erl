@@ -72,10 +72,10 @@ handle_cast(_Msg, State) ->
 
 handle_info(broadcast_advertise, State=#state{duration = Duration}) ->
     send_advertise(State),
-    {noreply, State#state{tref = start_timer(Duration)}};
+    {noreply, State#state{tref = start_timer(Duration)}, hibernate};
 
 handle_info(_Info, State) ->
-	{noreply, State}.
+	{noreply, State, hibernate}.
 
 terminate(_Reason, #state{tref = Timer}) ->
     erlang:cancel_timer(Timer),

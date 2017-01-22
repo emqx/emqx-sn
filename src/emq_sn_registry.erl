@@ -115,10 +115,10 @@ handle_call(_Request, _From, State) ->
 	{reply, ignored, State}.
 
 handle_cast(_Msg, State) ->
-	{noreply, State}.
+	{noreply, State, hibernate}.
 
 handle_info(_Info, State) ->
-	{noreply, State}.
+	{noreply, State, hibernate}.
 
 terminate(_Reason, _State) ->
 	ok.
