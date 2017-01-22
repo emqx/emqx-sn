@@ -94,6 +94,10 @@ idle(?SN_CONNECT_MSG(Flags, _ProtoId, Duration, ClientId), StateData = #state{id
             end
     end;
 
+idle(?SN_ADVERTISE_MSG(_GwId, _Radius), StateData) ->
+    % ignore
+    {next_state, idle, StateData};
+
 idle(Event, StateData) ->
     ?LOG(error, "idle UNEXPECTED Event: ~p", [Event], StateData),
     {next_state, idle, StateData}.
@@ -115,6 +119,10 @@ wait_for_will_topic(?SN_WILLTOPIC_MSG(Flags, Topic), StateData) ->
     send_message(?SN_WILLMSGREQ_MSG(), StateData),
     {next_state, wait_for_will_msg, StateData#state{will = Will}};
 
+wait_for_will_topic(?SN_ADVERTISE_MSG(_GwId, _Radius), StateData) ->
+    % ignore
+    {next_state, wait_for_will_topic, StateData};
+
 wait_for_will_topic(Event, StateData) ->
     ?LOG(error, "wait_for_will_topic UNEXPECTED Event: ~p", [Event], StateData),
     {next_state, wait_for_will_topic, StateData}.
@@ -127,6 +135,10 @@ wait_for_will_msg(?SN_WILLMSG_MSG(Msg), StateData = #state{protocol = Proto, wil
         {error, Error, Proto1} -> shutdown(Error, StateData#state{protocol = Proto1});
         {stop, Reason, Proto1} -> stop(Reason, StateData#state{protocol = Proto1})
     end;
+
+wait_for_will_msg(?SN_ADVERTISE_MSG(_GwId, _Radius), StateData) ->
+    % ignore
+    {next_state, wait_for_will_msg, StateData};
 
 wait_for_will_msg(Event, StateData) ->
     ?LOG(error, "UNEXPECTED Event: ~p", [Event], StateData),
@@ -216,6 +228,10 @@ connected(?SN_WILLTOPICUPD_MSG(Flags, Topic), StateData = #state{will = Will}) -
 connected(?SN_WILLMSGUPD_MSG(Msg), StateData = #state{will = Will}) ->
     send_message(?SN_WILLMSGRESP_MSG(0), StateData),
     {next_state, connected, StateData#state{will = update_will_msg(Will, Msg)}};
+
+connected(?SN_ADVERTISE_MSG(_GwId, _Radius), StateData) ->
+    % ignore
+    {next_state, connected, StateData};
 
 connected(Event, StateData) ->
     ?LOG(error, "connected UNEXPECTED Event: ~p", [Event], StateData),
