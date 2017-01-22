@@ -42,7 +42,7 @@ parse(Type, Len, Var) when Len =:= size(Var) ->
     {ok, #mqtt_sn_message{type = Type, variable = parse_var(Type, Var)}};
 parse(Type, Len, Var) ->
     ?LOG(error, "format error: type=~p, len=~p, var=~p", [Type, Len, Var]),
-    format_error.
+    error(format_error).
 
 parse_var(?SN_ADVERTISE, <<GwId:?byte, Duration:?short>>) ->
     {GwId, Duration};
@@ -98,7 +98,9 @@ parse_var(?SN_WILLMSGUPD, WillMsg) ->
 parse_var(?SN_WILLTOPICRESP, <<ReturnCode:?byte>>) ->
     ReturnCode;
 parse_var(?SN_WILLMSGRESP, <<ReturnCode:?byte>>) ->
-    ReturnCode.
+    ReturnCode;
+parse_var(_Type, _Var) ->
+    error(format_error).
  
 parse_flags(?SN_CONNECT, <<_D:1, _Q:2, _R:1, Will:1, CleanSession:1, _IdType:2>>) ->
     #mqtt_sn_flags{will = bool(Will), clean_session = bool(CleanSession)};
@@ -112,7 +114,9 @@ parse_flags(Sub, <<Dup:1, Qos:2, _R:1, _Will:1, _C:1, IdType:2>>)
 parse_flags(?SN_SUBACK, <<_D:1, Qos:2, _R:1, _W:1, _C:1, _Id:2>>) ->
     #mqtt_sn_flags{qos = Qos};
 parse_flags(?SN_WILLTOPICUPD, <<_D:1, Qos:2, Retain:1, _W:1, _C:1, _Id:2>>) ->
-    #mqtt_sn_flags{qos = Qos, retain = bool(Retain)}.
+    #mqtt_sn_flags{qos = Qos, retain = bool(Retain)};
+parse_flags(_Type, _) ->
+    error(format_error).
 
 parse_topic(2#00, Topic)     -> Topic;
 parse_topic(2#01, <<Id:16>>) -> Id;

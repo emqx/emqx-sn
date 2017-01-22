@@ -30,7 +30,7 @@
 
 start(_Type, _Args) ->
     Listener = application:get_env(?APP, listener, {1884, []}),
-    Duration = application:get_env(?APP, duration, 15*60),
+    Duration = application:get_env(?APP, advertise_duration, 15*60),
     GwId = application:get_env(?APP, gateway_id, 1),
     emq_sn_sup:start_link(Listener, Duration, GwId).
 

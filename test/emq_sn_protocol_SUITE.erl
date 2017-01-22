@@ -15,9 +15,8 @@
 % FLAG NOT USED
 -define(FNU, 0).
 
-all() -> [broadcast_test1].
 
-all5555() -> [subscribe_test, subscribe_test1, subscribe_test2,
+all() -> [subscribe_test, subscribe_test1, subscribe_test2,
     subscribe_test10, subscribe_test11, subscribe_test12, subscribe_test13,
     publish_qos0_test1, publish_qos0_test2, publish_qos0_test3,
     publish_qos1_test1, publish_qos1_test2, publish_qos1_test3, publish_qos1_test4, publish_qos1_test5,
@@ -599,24 +598,23 @@ will_test5(_Config) ->
     emqttc:disconnect(C),
     gen_udp:close(Socket).
 
+broadcast_test2(_Config) ->
+    timer:sleep(15000).
 
 broadcast_test1(_Config) ->
-    {ok, Socket} = gen_udp:open( 0, [binary, {broadcast, true}]),
-    Address = get_udp_broadcast_address(),
-    ?assertEqual(<<5, ?SN_ADVERTISE, 1, 2:16>>, receive_response(Socket)),
-    send_searchgw_msg(Socket, Address),
+    {ok, Socket} = gen_udp:open( 0, [binary]),
+    send_searchgw_msg(Socket),
     ?assertEqual(<<3, ?SN_GWINFO, 1>>, receive_response(Socket)),
-    timer:sleep(5000),
-    ?assertEqual(<<5, ?SN_ADVERTISE, 1, 2:16>>, receive_response(Socket)),
+    timer:sleep(12000),
     gen_udp:close(Socket).
 
 
 
-send_searchgw_msg(Socket, Addr) ->
+send_searchgw_msg(Socket) ->
     Length = 3,
-    MsgType = ?SN_CONNECT,
+    MsgType = ?SN_SEARCHGW,
     Radius = 0,
-    ok = gen_udp:send(Socket, Addr, ?PORT, <<Length:8, MsgType:8, Radius:8>>).
+    ok = gen_udp:send(Socket, ?HOST, ?PORT, <<Length:8, MsgType:8, Radius:8>>).
 
 
 send_connect_msg(Socket, ClientId) ->
@@ -890,10 +888,11 @@ check_dispatched_message(Dup, Qos, Retain, TopicIdType, TopicId, Payload, Socket
 
 
 get_udp_broadcast_address() ->
-    {ok, IfList} = inet:getifaddrs(),
-    {_, LoOpts} = proplists:lookup("lo", IfList),
-    {_, BroadAddress} = proplists:lookup(broadaddr, LoOpts),
-    BroadAddress.
+    %{ok, IfList} = inet:getifaddrs(),
+    %{_, LoOpts} = proplists:lookup("lo", IfList),
+    %{_, BroadAddress} = proplists:lookup(broadaddr, LoOpts),
+    %BroadAddress.
+    "255.255.255.255".
 
 
 prepare_config() ->

@@ -25,7 +25,7 @@
 -include_lib("emqttd/include/emqttd_protocol.hrl").
 
 %% API.
--export([start_link/2]).
+-export([start_link/3]).
 
 %% SUB/UNSUB Asynchronously. Called by plugins.
 -export([subscribe/2, unsubscribe/2]).
@@ -42,15 +42,15 @@
                  will_qos    = ?QOS_0             :: mqtt_qos(),
                  will_topic  = undefined         :: undefined | binary(),
                  will_msg    = undefined         :: undefined | binary()}).
--record(state, {sock, peer, protocol, client_id, will, keepalive, connpkt, queue_pid, awaiting_suback = []}).
+-record(state, {gwid, sock, peer, protocol, client_id, will, keepalive, connpkt, queue_pid, awaiting_suback = [], idle_tref = undefined}).
 
 -define(LOG(Level, Format, Args, State),
             lager:Level("MQTT-SN(~s): " ++ Format,
                         [esockd_net:format(State#state.peer) | Args])).
 
--spec(start_link(inet:socket(), {inet:ip_address(), inet:port()}) -> {ok, pid()}).
-start_link(Sock, Peer) ->
-    gen_fsm:start_link(?MODULE, [Sock, Peer], []).
+-spec(start_link(inet:socket(), {inet:ip_address(), inet:port()}, integer()) -> {ok, pid()}).
+start_link(Sock, Peer, GwId) ->
+    gen_fsm:start_link(?MODULE, [Sock, Peer, GwId], []).
 
 
 subscribe(GwPid, TopicTable) ->
@@ -60,18 +60,23 @@ unsubscribe(GwPid, Topics) ->
     gen_fsm:send_event(GwPid, {unsubscribe, Topics}).
 
 %% gen_fsm.
-init([Sock, Peer]) ->
+init([Sock, Peer, GwId]) ->
     {ok, QueuePid} = emq_sn_gateway_queue:start_link(),
     State = #state{sock = Sock, peer = Peer, queue_pid = QueuePid},
     SendFun = fun(Packet) -> send_message(transform(Packet, QueuePid), State) end,
     PktOpts = [{max_clientid_len, 24}, {max_packet_size, 256}],
     ProtoState = emqttd_protocol:init(Peer, SendFun, PktOpts),
-    {ok, idle, State#state{protocol = ProtoState}, 3000}.
+    {ok, idle, State#state{gwid = GwId, protocol = ProtoState}, 3000}.
 
-idle(timeout, StateData) ->
-    {stop, idle_timeout, StateData};
 
-idle(?SN_CONNECT_MSG(Flags, _ProtoId, Duration, ClientId), StateData = #state{protocol = Proto}) ->
+idle(?SN_SEARCHGW_MSG(_Radius), StateData = #state{idle_tref = Ref, gwid = GwId}) ->
+    cancel_idle_timer(Ref),
+    send_message(?SN_GWINFO_MSG(GwId, <<>>), StateData),
+    {next_state, idle, StateData#state{idle_tref = start_idle_timer()}};
+
+
+idle(?SN_CONNECT_MSG(Flags, _ProtoId, Duration, ClientId), StateData = #state{idle_tref = Ref, protocol = Proto}) ->
+    cancel_idle_timer(Ref),
     #mqtt_sn_flags{will = Will, clean_session = CleanSession} = Flags,
     ConnPkt = #mqtt_packet_connect{client_id  = ClientId,
                                    clean_sess = CleanSession,
@@ -241,11 +246,11 @@ handle_sync_event(Event, _From, StateName, StateData) ->
     {reply, ignored, StateName, StateData}.
 
 handle_info({datagram, _From, Data}, StateName, StateData) ->
-     case emq_sn_message:parse(Data) of
+     case catch emq_sn_message:parse(Data) of
         {ok, Msg} ->
             ?LOG(info, "RECV ~p", [format(Msg)], StateData),
             ?MODULE:StateName(Msg, StateData); %% cool?
-        format_error ->
+        {'EXIT',{format_error,_Stack}} ->
             next_state(StateName, StateData)
      end;
 
@@ -306,6 +311,13 @@ handle_info({keepalive, check}, StateName, StateData = #state{keepalive = KeepAl
 
 handle_info({'$gen_cast', {subscribe, Topics}}, StateName, StateData) ->
     ?LOG(debug, "ignore subscribe Topics=~p", [Topics], StateData),
+    {next_state, StateName, StateData};
+
+
+handle_info(idle_timeout, idle, StateData) ->
+    ?LOG(debug, "idle_timeout and quit", [], StateData),
+    stop(idle_timeout, StateData);
+handle_info(idle_timeout, StateName, StateData) ->
     {next_state, StateName, StateData};
 
 handle_info(Info, StateName, StateData) ->
@@ -536,6 +548,14 @@ update_will_msg(undefined, Msg) ->
     #will{will_msg = Msg};
 update_will_msg(Will=#will{}, Msg) ->
     Will#will{will_msg = Msg}.
+
+start_idle_timer() ->
+    erlang:send_after(timer:seconds(10), self(), idle_timeout).
+cancel_idle_timer(undefined) ->
+    ok;
+cancel_idle_timer(Ref) ->
+    erlang:cancel_timer(Ref).
+
 
 format(?SN_PUBLISH_MSG(Flags, TopicId, MsgId, Data)) ->
     lists:flatten(io_lib:format("mqtt_sn_message SN_PUBLISH, ~p, TopicId=~w, MsgId=~w, Payload=~w",

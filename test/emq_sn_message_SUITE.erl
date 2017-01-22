@@ -28,7 +28,8 @@
 all() -> [advertise_test, searchgw_test, gwinfo_test, connect_test, connack_test, willtopicreq_test, willtopic_test,
     willmsgreq_test, willmsg_test, register_test, regack_test, publish_test, puback_test, pubrec_test, pubrel_test,
     pubcomp_test, subscribe_test, suback_test, unsubscribe_test, unsuback_test, pingreq_test, pingresp_test,
-    disconnect_test, willtopicupd_test, willmsgupd_test, willmsgresp_test].
+    disconnect_test, willtopicupd_test, willmsgupd_test, willmsgresp_test,
+    random_test].
 
 
 init_per_suite(Config) ->
@@ -155,4 +156,30 @@ willmsgresp_test(_Config) ->
     UpdResp = #mqtt_sn_message{type = ?SN_WILLMSGRESP, variable = 0},
     ?assertEqual({ok, UpdResp}, parse(serialize(UpdResp))).
 
+
+random_test(_Config) ->
+    random_test_body(),
+    random_test_body(),
+    random_test_body(),
+    random_test_body(),
+    random_test_body(),
+    random_test_body().
+
+random_test_body() ->
+    Data = generate_random_binary(),
+    case catch parse(Data) of
+        {ok, _Msg} -> ok;
+        {'EXIT',{format_error,_Stack}} -> ok
+    end.
+
+
+generate_random_binary() ->
+    Len = rand:uniform(300),
+    gen_next(Len, <<>>).
+
+gen_next(0, Acc) ->
+    Acc;
+gen_next(N, Acc) ->
+    Byte = rand:uniform(256) - 1,
+    gen_next(N-1, <<Acc/binary, Byte:8>>).
 

@@ -30,14 +30,14 @@ start_link(Listener, Duration, GwId) ->
 init([{Port, Opts}, Duration, GwId]) ->
 
     BcSrv = {emq_sn_broadcast,
-        {emq_sn_broadcast, start_link, [Duration, GwId]},
-        permanent, infinity, worker, [emq_sn_broadcast]},
+                {emq_sn_broadcast, start_link, [[Duration, GwId]]},
+                    permanent, brutal_kill, worker, [emq_sn_broadcast]},
 
     GwSup = {emq_sn_gateway_sup,
               {emq_sn_gateway_sup, start_link, []},
                 permanent, infinity, supervisor, [emq_sn_gateway_sup]},
 
-    MFA = {emq_sn_gateway_sup, start_gateway, []},
+    MFA = {emq_sn_gateway_sup, start_gateway, [GwId]},
 
     UdpSrv = {emq_sn_udp_server,
                {esockd_udp, server, [mqtt_sn, Port, Opts, MFA]},
