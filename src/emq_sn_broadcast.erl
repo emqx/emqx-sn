@@ -32,7 +32,7 @@
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2,
          terminate/2, code_change/3]).
 
--record(state, {broadaddr, sock, duration, gwid, tref}).
+-record(state, {sock, duration, gwid, tref}).
 
 -define(PORT, 1884).
 
@@ -42,7 +42,6 @@
 
 -spec(start_link(list()) -> {ok, pid()}).
 start_link(Args) ->
-    ?LOG(debug, "broad process Args=~p", [Args]),
 	gen_server:start_link({local, ?MODULE}, ?MODULE, Args, []).
 
 -spec(stop() -> ok).
@@ -55,12 +54,8 @@ stop() ->
 %%--------------------------------------------------------------------
 
 init([Duration, GwId]) ->
-    %{ok, IfList} = inet:getifaddrs(),
-    %{_, LoOpts} = proplists:lookup("lo", IfList),
-    %{_, BroadAddress} = proplists:lookup(broadaddr, LoOpts),
-
     {ok, Sock} = gen_udp:open(0, [binary, {broadcast, true}]),
-    State = #state{broadaddr = {255, 255, 255, 255}, sock = Sock, duration = Duration, gwid = GwId},
+    State = #state{sock = Sock, duration = Duration, gwid = GwId},
     send_advertise(State),
 	{ok, State#state{tref = start_timer(Duration)}}.
 
