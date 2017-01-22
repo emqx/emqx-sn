@@ -27,7 +27,7 @@ all() -> [subscribe_test, subscribe_test1, subscribe_test2,
 
 init_per_suite(Config) ->
     prepare_config(),
-    application:get_env(emq_sn, duration, 2),
+    application:set_env(emq_sn, advertise_duration, 2),
     ?assertMatch({ok, _}, application:ensure_all_started(emqttd)),
     ?assertMatch({ok, _}, application:ensure_all_started(emq_sn)),
     ?assertEqual(ok, application:ensure_started(lager)),
@@ -605,7 +605,7 @@ broadcast_test1(_Config) ->
     {ok, Socket} = gen_udp:open( 0, [binary]),
     send_searchgw_msg(Socket),
     ?assertEqual(<<3, ?SN_GWINFO, 1>>, receive_response(Socket)),
-    timer:sleep(12000),
+    timer:sleep(600),
     gen_udp:close(Socket).
 
 
