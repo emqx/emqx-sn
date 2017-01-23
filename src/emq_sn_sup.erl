@@ -20,24 +20,28 @@
 
 -behaviour(supervisor).
 
--export([start_link/1, init/1]).
+-export([start_link/3, init/1]).
 
 -define(CHILD(I), {I, {I, start_link, []}, permanent, 5000, worker, [I]}).
 
-start_link(Listener) ->
-	supervisor:start_link({local, ?MODULE}, ?MODULE, [Listener]).
+start_link(Listener, Duration, GwId) ->
+	supervisor:start_link({local, ?MODULE}, ?MODULE, [Listener, Duration, GwId]).
 
-init([{Port, Opts}]) ->
+init([{Port, Opts}, Duration, GwId]) ->
+
+    BcSrv = {emq_sn_broadcast,
+                {emq_sn_broadcast, start_link, [[Duration, GwId]]},
+                    permanent, brutal_kill, worker, [emq_sn_broadcast]},
 
     GwSup = {emq_sn_gateway_sup,
               {emq_sn_gateway_sup, start_link, []},
                 permanent, infinity, supervisor, [emq_sn_gateway_sup]},
 
-    MFA = {emq_sn_gateway_sup, start_gateway, []},
+    MFA = {emq_sn_gateway_sup, start_gateway, [GwId]},
 
     UdpSrv = {emq_sn_udp_server,
                {esockd_udp, server, [mqtt_sn, Port, Opts, MFA]},
                  permanent, 5000, worker, [esockd_udp]},
 
-    {ok, { {one_for_all, 10, 3600}, [?CHILD(emq_sn), ?CHILD(emq_sn_registry), GwSup, UdpSrv] }}.
+    {ok, { {one_for_all, 10, 3600}, [BcSrv, ?CHILD(emq_sn_registry), GwSup, UdpSrv] }}.
 

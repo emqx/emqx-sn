@@ -20,11 +20,14 @@
 
 -include("emq_sn.hrl").
 
--export([parse/1, serialize/1]).
+-export([parse/1, serialize/1, message_type/1]).
 
 -define(flag,  1/binary).
 -define(byte,  8/big-integer).
 -define(short, 16/big-integer).
+
+-define(LOG(Level, Format, Args),
+    lager:Level("MQTT-SN(message): " ++ Format, Args)).
 
 %%--------------------------------------------------------------------
 %% Parse MQTT-SN Message
@@ -36,7 +39,10 @@ parse(<<Len:?byte, Type:?byte, Var/binary>>) ->
     parse(Type, Len - 2, Var).
 
 parse(Type, Len, Var) when Len =:= size(Var) ->
-    {ok, #mqtt_sn_message{type = Type, variable = parse_var(Type, Var)}}.
+    {ok, #mqtt_sn_message{type = Type, variable = parse_var(Type, Var)}};
+parse(Type, Len, Var) ->
+    ?LOG(error, "format error: type=~p, len=~p, var=~p", [Type, Len, Var]),
+    error(format_error).
 
 parse_var(?SN_ADVERTISE, <<GwId:?byte, Duration:?short>>) ->
     {GwId, Duration};
@@ -49,6 +55,8 @@ parse_var(?SN_CONNECT, <<Flags:?flag, ProtocolId:?byte, Duration:?short, ClientI
 parse_var(?SN_CONNACK, <<ReturnCode:?byte>>) ->
     ReturnCode;
 parse_var(?SN_WILLTOPICREQ, <<>>) ->
+    undefined;
+parse_var(?SN_WILLTOPIC, <<>>) ->
     undefined;
 parse_var(?SN_WILLTOPIC, <<Flags:?flag, WillTopic/binary>>) ->
     {parse_flags(?SN_WILLTOPIC, Flags), WillTopic};
@@ -81,6 +89,8 @@ parse_var(?SN_DISCONNECT, <<>>) ->
     undefined;
 parse_var(?SN_DISCONNECT, <<Duration:?short>>) ->
     Duration;
+parse_var(?SN_WILLTOPICUPD, <<>>) ->
+    {undefined, undefined};
 parse_var(?SN_WILLTOPICUPD, <<Flags:?flag, WillTopic/binary>>) ->
     {parse_flags(?SN_WILLTOPICUPD, Flags), WillTopic};
 parse_var(?SN_WILLMSGUPD, WillMsg) ->
@@ -88,7 +98,9 @@ parse_var(?SN_WILLMSGUPD, WillMsg) ->
 parse_var(?SN_WILLTOPICRESP, <<ReturnCode:?byte>>) ->
     ReturnCode;
 parse_var(?SN_WILLMSGRESP, <<ReturnCode:?byte>>) ->
-    ReturnCode.
+    ReturnCode;
+parse_var(_Type, _Var) ->
+    error(format_error).
  
 parse_flags(?SN_CONNECT, <<_D:1, _Q:2, _R:1, Will:1, CleanSession:1, _IdType:2>>) ->
     #mqtt_sn_flags{will = bool(Will), clean_session = bool(CleanSession)};
@@ -102,7 +114,9 @@ parse_flags(Sub, <<Dup:1, Qos:2, _R:1, _Will:1, _C:1, IdType:2>>)
 parse_flags(?SN_SUBACK, <<_D:1, Qos:2, _R:1, _W:1, _C:1, _Id:2>>) ->
     #mqtt_sn_flags{qos = Qos};
 parse_flags(?SN_WILLTOPICUPD, <<_D:1, Qos:2, Retain:1, _W:1, _C:1, _Id:2>>) ->
-    #mqtt_sn_flags{qos = Qos, retain = bool(Retain)}.
+    #mqtt_sn_flags{qos = Qos, retain = bool(Retain)};
+parse_flags(_Type, _) ->
+    error(format_error).
 
 parse_topic(2#00, Topic)     -> Topic;
 parse_topic(2#01, <<Id:16>>) -> Id;
@@ -191,122 +205,61 @@ bool(undefined) -> 0.
 i(undefined) -> 0;
 i(I) when is_integer(I) -> I.
 
--ifdef(TEST).
 
--include_lib("eunit/include/eunit.hrl").
 
-advertise_test() ->
-    Adv = ?SN_ADVERTISE_MSG(1, 100),
-    ?assertEqual({ok, Adv}, parse(serialize(Adv))).
-
-searchgw_test() ->
-    Sgw = #mqtt_sn_message{type = ?SN_SEARCHGW, variable = 1},
-    ?assertEqual({ok, Sgw}, parse(serialize(Sgw))).
-
-gwinfo_test() ->
-    GwInfo = #mqtt_sn_message{type = ?SN_GWINFO, variable = {2, <<"EMQGW">>}},
-    ?assertEqual({ok, GwInfo}, parse(serialize(GwInfo))).
-
-connect_test() ->
-    Flags = #mqtt_sn_flags{will = true, clean_session = true},
-    Conn = #mqtt_sn_message{type = ?SN_CONNECT, variable = {Flags, 4, 300, <<"ClientId">>}},
-    ?assertEqual({ok, Conn}, parse(serialize(Conn))).
-
-connack_test() ->
-    ConnAck = #mqtt_sn_message{type = ?SN_CONNACK, variable = 2},
-    ?assertEqual({ok, ConnAck}, parse(serialize(ConnAck))).
-    
-willtopicreq_test() ->
-    WtReq = #mqtt_sn_message{type = ?SN_WILLTOPICREQ},
-    ?assertEqual({ok, WtReq}, parse(serialize(WtReq))).
-
-willtopic_test() ->
-    Flags = #mqtt_sn_flags{qos = 1, retain = false},
-    Wt = #mqtt_sn_message{type = ?SN_WILLTOPIC, variable = {Flags, <<"WillTopic">>}},
-    ?assertEqual({ok, Wt}, parse(serialize(Wt))).
-
-willmsgreq_test() ->
-   WmReq = #mqtt_sn_message{type = ?SN_WILLMSGREQ},
-   ?assertEqual({ok, WmReq}, parse(serialize(WmReq))).
-
-willmsg_test() ->
-    WlMsg = #mqtt_sn_message{type = ?SN_WILLMSG, variable = <<"WillMsg">>},
-    ?assertEqual({ok, WlMsg}, parse(serialize(WlMsg))).
-
-register_test() ->
-    RegMsg = ?SN_REGISTER_MSG(1, 2, <<"Topic">>),
-    ?assertEqual({ok, RegMsg}, parse(serialize(RegMsg))).
-    
-regack_test() ->
-    RegAck = ?SN_REGACK_MSG(1, 2, 0),
-    ?assertEqual({ok, RegAck}, parse(serialize(RegAck))).
-    
-publish_test() ->
-    Flags = #mqtt_sn_flags{dup = false, qos = 1, retain = false, topic_id_type = 2#01},
-    PubMsg = #mqtt_sn_message{type = ?SN_PUBLISH, variable = {Flags, 1, 2, <<"Payload">>}},
-    ?assertEqual({ok, PubMsg}, parse(serialize(PubMsg))).
-
-puback_test() ->
-    PubAck = #mqtt_sn_message{type = ?SN_PUBACK, variable = {1, 2, 0}},
-    ?assertEqual({ok, PubAck}, parse(serialize(PubAck))).
-
-pubrec_test() ->
-    PubRec =  #mqtt_sn_message{type = ?SN_PUBREC, variable = 16#1234},
-    ?assertEqual({ok, PubRec}, parse(serialize(PubRec))).
-
-pubrel_test() ->
-    PubRel =  #mqtt_sn_message{type = ?SN_PUBREL, variable = 16#1234},
-    ?assertEqual({ok, PubRel}, parse(serialize(PubRel))).
-
-pubcomp_test() ->
-    PubComp =  #mqtt_sn_message{type = ?SN_PUBCOMP, variable = 16#1234},
-    ?assertEqual({ok, PubComp}, parse(serialize(PubComp))).
-
-subscribe_test() ->
-    Flags = #mqtt_sn_flags{dup = false, qos = 1, topic_id_type = 16#01},
-    SubMsg = #mqtt_sn_message{type = ?SN_SUBSCRIBE, variable = {Flags, 16#4321, 16}},
-    ?assertEqual({ok, SubMsg}, parse(serialize(SubMsg))).
-
-suback_test() ->
-    Flags = #mqtt_sn_flags{qos = 1},
-    SubAck = #mqtt_sn_message{type = ?SN_SUBACK, variable = {Flags, 98, 89, 0}},
-    ?assertEqual({ok, SubAck}, parse(serialize(SubAck))).
-
-unsubscribe_test() ->
-    Flags = #mqtt_sn_flags{dup = false, qos = 1, topic_id_type = 16#01},
-    UnSub = #mqtt_sn_message{type = ?SN_UNSUBSCRIBE, variable = {Flags, 16#4321, 16}},
-    ?assertEqual({ok, UnSub}, parse(serialize(UnSub))).
-
-unsuback_test() ->
-    UnsubAck = #mqtt_sn_message{type = ?SN_UNSUBACK, variable = 72},
-    ?assertEqual({ok, UnsubAck}, parse(serialize(UnsubAck))).
-
-pingreq_test() ->
-    Ping = #mqtt_sn_message{type = ?SN_PINGREQ, variable = <<>>},
-    ?assertEqual({ok, Ping}, parse(serialize(Ping))),
-    Ping1 = #mqtt_sn_message{type = ?SN_PINGREQ, variable = <<"ClientId">>},
-    ?assertEqual({ok, Ping1}, parse(serialize(Ping1))).
-
-pingresp_test() ->
-    PingResp = #mqtt_sn_message{type = ?SN_PINGRESP},
-    ?assertEqual({ok, PingResp}, parse(serialize(PingResp))).
-
-disconnect_test() ->
-    Disconn = #mqtt_sn_message{type = ?SN_DISCONNECT},
-    ?assertEqual({ok, Disconn}, parse(serialize(Disconn))).
-
-willtopicupd_test() ->
-    Flags = #mqtt_sn_flags{qos = 1, retain = true},
-    WtUpd = #mqtt_sn_message{type = ?SN_WILLTOPICUPD, variable = {Flags, <<"Topic">>}},
-    ?assertEqual({ok, WtUpd}, parse(serialize(WtUpd))).
-
-willmsgupd_test() ->
-    WlMsgUpd = #mqtt_sn_message{type = ?SN_WILLMSGUPD, variable = <<"WillMsg">>},
-    ?assertEqual({ok, WlMsgUpd}, parse(serialize(WlMsgUpd))).
-
-willmsgresp_test() ->
-    UpdResp = #mqtt_sn_message{type = ?SN_WILLMSGRESP, variable = 0},
-    ?assertEqual({ok, UpdResp}, parse(serialize(UpdResp))).
-
--endif.
-
+message_type(16#00) ->
+    "SN_ADVERTISE";
+message_type(16#01) ->
+    "SN_SEARCHGW";
+message_type(16#02) ->
+    "SN_GWINFO";
+message_type(16#04) ->
+    "SN_CONNECT";
+message_type(16#05) ->
+    "SN_CONNACK";
+message_type(16#06) ->
+    "SN_WILLTOPICREQ";
+message_type(16#07) ->
+    "SN_WILLTOPIC";
+message_type(16#08) ->
+    "SN_WILLMSGREQ";
+message_type(16#09) ->
+    "SN_WILLMSG";
+message_type(16#0a) ->
+    "SN_REGISTER";
+message_type(16#0b) ->
+    "SN_REGACK";
+message_type(16#0c) ->
+    "SN_PUBLISH";
+message_type(16#0d) ->
+    "SN_PUBACK";
+message_type(16#0e) ->
+    "SN_PUBCOMP";
+message_type(16#0f) ->
+    "SN_PUBREC";
+message_type(16#10) ->
+    "SN_PUBREL";
+message_type(16#12) ->
+    "SN_SUBSCRIBE";
+message_type(16#13) ->
+    "SN_SUBACK";
+message_type(16#14) ->
+    "SN_UNSUBSCRIBE";
+message_type(16#15) ->
+    "SN_UNSUBACK";
+message_type(16#16) ->
+    "SN_PINGREQ";
+message_type(16#17) ->
+    "SN_PINGRESP";
+message_type(16#18) ->
+    "SN_DISCONNECT";
+message_type(16#1a) ->
+    "SN_WILLTOPICUPD";
+message_type(16#1b) ->
+    "SN_WILLTOPICRESP";
+message_type(16#1c) ->
+    "SN_WILLMSGUPD";
+message_type(16#1d) ->
+    "SN_WILLMSGRESP";
+message_type(Type) ->
+    io_lib:format("Unknown Type ~p", [Type]).

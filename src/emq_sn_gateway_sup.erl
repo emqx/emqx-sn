@@ -20,7 +20,7 @@
 
 -behaviour(supervisor).
 
--export([start_link/0, start_gateway/2, init/1]).
+-export([start_link/0, start_gateway/3, init/1]).
 
 %% @doc Start MQTT-SN Gateway Supervisor.
 -spec(start_link() -> {ok, pid()}).
@@ -28,12 +28,12 @@ start_link() ->
 	supervisor:start_link({local, ?MODULE}, ?MODULE, []).
 
 %% @doc Start a MQTT-SN Gateway.
--spec(start_gateway(inet:socket(), {inet:ip_address(), inet:port()}) -> {ok, pid()}).
-start_gateway(Sock, Peer) ->
-    supervisor:start_child(?MODULE, [Sock, Peer]).
+-spec(start_gateway(integer(), inet:socket(), {inet:ip_address(), inet:port()}) -> {ok, pid()}).
+start_gateway(GwId, Sock, Peer) ->
+    supervisor:start_child(?MODULE, [GwId, Sock, Peer]).
 
 init([]) ->
     {ok, {{simple_one_for_one, 0, 1},
-          [{sn_gateway, {emq_sn_gateway, start_link, []},
-              temporary, 5000, worker, [emq_sn_gateway]}]}}.
+            [{sn_gateway, {emq_sn_gateway, start_link, []},
+                temporary, 5000, worker, [emq_sn_gateway]}]}}.
 
