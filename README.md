@@ -14,7 +14,11 @@ mqtt.sn.port = 1884
 
 ## Usage
 
-### simple 
+### NOTE
+Topic ID is per-client, and will be cleared if client disconnected with broker or keep-alive failure is detected in broker.
+Please register your topics again each time connected with broker.
+
+### Example
 
 examples/simple_example.erl
 
