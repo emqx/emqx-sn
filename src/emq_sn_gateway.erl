@@ -264,7 +264,7 @@ handle_sync_event(Event, _From, StateName, StateData) ->
 handle_info({datagram, _From, Data}, StateName, StateData) ->
      case catch emq_sn_message:parse(Data) of
         {ok, Msg} ->
-            ?LOG(info, "RECV ~p", [format(Msg)], StateData),
+            ?LOG(info, "RECV ~p at state ~p", [format(Msg), StateName], StateData),
             ?MODULE:StateName(Msg, StateData); %% cool?
         {'EXIT',{format_error,_Stack}} ->
             next_state(StateName, StateData)
@@ -309,8 +309,13 @@ handle_info({keepalive, start, Interval}, StateName, StateData = #state{sock = S
                     {error, Error}              -> {error, Error}
                 end
              end,
-    KeepAlive = emqttd_keepalive:start(StatFun, Interval, {keepalive, check}),
-    next_state(StateName, StateData#state{keepalive = KeepAlive});
+    case emqttd_keepalive:start(StatFun, Interval, {keepalive, check}) of
+        {ok, KeepAlive} ->
+            next_state(StateName, StateData#state{keepalive = KeepAlive});
+        {error, Error} ->
+            ?LOG(warning, "Keepalive error - ~p", [Error], StateData),
+            shutdown(Error, StateData)
+    end;
 
 handle_info({keepalive, check}, StateName, StateData = #state{keepalive = KeepAlive}) ->
     case emqttd_keepalive:check(KeepAlive) of
