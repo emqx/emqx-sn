@@ -20,10 +20,13 @@
 
 -behaviour(gen_server).
 
+-define(LOG(Level, Format, Args),
+    lager:Level("MQTT-SN(registry): " ++ Format, Args)).
+
 %% API.
 -export([start_link/0, stop/0]).
 
--export([register_topic/3, lookup_topic/2, unregister_topic/1, lookup_topic_id/2]).
+-export([register_topic/2, lookup_topic/2, unregister_topic/1, lookup_topic_id/2, wildcard/1]).
 
 %% gen_server.
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2,
@@ -43,9 +46,9 @@ start_link() ->
 stop() ->
     gen_server:call(?MODULE, stop).
 
--spec(register_topic(binary(), pos_integer(), binary()) -> ok).
-register_topic(ClientId, TopicId, TopicName) ->
-    gen_server:call(?MODULE, {register, ClientId, TopicId, TopicName}).
+-spec(register_topic(binary(), binary()) -> integer()).
+register_topic(ClientId, TopicName) ->
+    gen_server:call(?MODULE, {register, ClientId, TopicName}).
 
 -spec(lookup_topic(binary(), pos_integer()) -> undefined | binary()).
 lookup_topic(ClientId, TopicId) ->
@@ -63,7 +66,7 @@ lookup_topic_id(ClientId,TopicName) ->
 
 -spec(unregister_topic(binary()) -> ok).
 unregister_topic(ClientId) ->
-    gen_server:cast(?MODULE, {unregister, ClientId}).
+    gen_server:call(?MODULE, {unregister, ClientId}).
 
 %%--------------------------------------------------------------------
 %% gen_server Callbacks
@@ -79,11 +82,31 @@ init([]) ->
 
 	{ok, #state{}}.
 
-handle_call({register, ClientId, TopicId, TopicName}, _From, State) ->
-    ets:insert(sn_topic, {ClientId, TopicId}),
-    ets:insert(sn_topic_name, {{ClientId, TopicId}, TopicName}),
-    ets:insert(sn_topic_id, {{ClientId, TopicName}, TopicId}),
-	{reply, ok, State};
+handle_call({register, ClientId, TopicName}, _From, State) ->
+    case wildcard((TopicName)) of
+        false ->
+            case get_registered_id(ClientId, TopicName) of
+                undefined ->  % this topic has never been registered
+                    {reply, register_new_topic(ClientId, TopicName), State, hibernate};
+                ExistTopicId ->
+                    {reply, ExistTopicId, State, hibernate}
+            end;
+        true ->
+            %% TopicId: in case of “accepted” the value that will be used as topic id by the gateway when sending PUBLISH
+            %% messages to the client (not relevant in case of subscriptions to a short topic name or to a topic name which
+            %% contains wildcard characters)
+            {reply, wildcard_topic, State, hibernate}
+    end;
+
+handle_call({unregister, ClientId}, _From, State) ->
+    lists:foreach(
+        fun({_, TopicId}) ->
+            [{_, TopicName}] = ets:lookup(sn_topic_name, {ClientId, TopicId}),
+            ets:delete(sn_topic_name, {ClientId, TopicId}),
+            ets:delete(sn_topic_id, {ClientId, TopicName})
+        end, ets:lookup(sn_topic, ClientId)),
+    ets:delete(sn_topic, ClientId),
+    {reply, ok, State, hibernate};
 
 handle_call(stop, _From, State) ->
     {stop, normal, ok, State};
@@ -91,21 +114,11 @@ handle_call(stop, _From, State) ->
 handle_call(_Request, _From, State) ->
 	{reply, ignored, State}.
 
-handle_cast({unregister, ClientId}, State) ->
-    lists:foreach(
-        fun({_, TopicId}) -> 
-            [{_, TopicName}] = ets:lookup(sn_topic_name, {ClientId, TopicId}),
-            ets:delete(sn_topic_name, {ClientId, TopicId}),
-            ets:delete(sn_topic_id, {ClientId, TopicName})
-        end, ets:lookup(sn_topic_id, ClientId)),
-    ets:delete(sn_topic, ClientId),
-	{noreply, State};
-
 handle_cast(_Msg, State) ->
-	{noreply, State}.
+	{noreply, State, hibernate}.
 
 handle_info(_Info, State) ->
-	{noreply, State}.
+	{noreply, State, hibernate}.
 
 terminate(_Reason, _State) ->
 	ok.
@@ -113,20 +126,42 @@ terminate(_Reason, _State) ->
 code_change(_OldVsn, State, _Extra) ->
 	{ok, State}.
 
--ifdef(TEST).
 
--include_lib("eunit/include/eunit.hrl").
 
-register_topic_test() ->
-    start_link(),
-    register_topic(<<"ClientId">>, 1, <<"Topic1">>),
-    register_topic(<<"ClientId">>, 2, <<"Topic2">>),
-    ?assertEqual(<<"Topic1">>, lookup_topic(<<"ClientId">>, 1)),
-    ?assertEqual(<<"Topic2">>, lookup_topic(<<"ClientId">>, 2)),
-    unregister_topic(<<"ClientId">>),
-    ?assertEqual(undefined, lookup_topic(<<"ClientId">>, 1)),
-    ?assertEqual(undefined, lookup_topic(<<"ClientId">>, 2)),
-    stop().
+%%--------------------------------------------------------------------
+%% Internal Functions
+%%--------------------------------------------------------------------
 
--endif.
+get_registered_id(ClientId, TopicName) ->
+    case ets:lookup(sn_topic_id, {ClientId, TopicName}) of
+        [] ->  % this topic has never been registered
+            undefined;
+        [{{ClientId, TopicName}, ExistTopicId}] ->  % this topic has been registered
+            ExistTopicId
+    end.
 
+register_new_topic(ClientId, TopicName) ->
+    %% The values “0x0000” and “0xFFFF” are reserved and therefore should not be used.
+    NewTopicId = length(ets:lookup(sn_topic, ClientId)) + 1,
+    case NewTopicId < 16#FFFF of
+        true ->  % this id is new
+            ets:insert(sn_topic, {ClientId, NewTopicId}),
+            ets:insert(sn_topic_name, {{ClientId, NewTopicId}, TopicName}),
+            ets:insert(sn_topic_id, {{ClientId, TopicName}, NewTopicId}),
+            NewTopicId;
+        false -> % id is full
+            undefined
+    end.
+
+-spec(wildcard(binary()|list()) -> true | false).
+wildcard(Topic) when is_binary(Topic) ->
+    TopicString = binary_to_list(Topic),
+    wildcard(TopicString);
+wildcard([]) ->
+    false;
+wildcard([$#|_]) ->
+    true;
+wildcard([$+|_]) ->
+    true;
+wildcard([_H|T]) ->
+    wildcard(T).
