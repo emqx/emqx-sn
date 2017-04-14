@@ -116,5 +116,7 @@ extract_ip([{ok,[{broadaddr,IP}]}|T], Acc) ->
     case lists:member(IP, Acc) of
         true -> extract_ip(T, Acc);
         false -> extract_ip(T, [IP | Acc])
-    end.
+    end;
+extract_ip([_H|T], Acc) ->
+    extract_ip(T, Acc).
 
