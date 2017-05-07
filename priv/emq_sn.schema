@@ -15,6 +15,28 @@
   {datatype, integer}
 ]}.
 
+{mapping, "mqtt.sn.username", "emq_sn.username", [
+  {datatype, string}
+]}.
+
+{mapping, "mqtt.sn.password", "emq_sn.password", [
+  {datatype, string}
+]}.
+
+
 {translation, "emq_sn.listener", fun(Conf) ->
-  Port = cuttlefish:conf_get("mqtt.sn.port", Conf), {Port, []}
+  Port = cuttlefish:conf_get("mqtt.sn.port", Conf),
+  {Port, []}
 end}.
+
+
+{translation, "emq_sn.username", fun(Conf) ->
+  Username = cuttlefish:conf_get("mqtt.sn.username", Conf),
+  list_to_binary(Username)
+end}.
+
+{translation, "emq_sn.password", fun(Conf) ->
+  Password = cuttlefish:conf_get("mqtt.sn.password", Conf),
+  list_to_binary(Password)
+end}.
+
