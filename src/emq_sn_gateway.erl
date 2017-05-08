@@ -47,6 +47,7 @@
 -define(LOG(Level, Format, Args, State),
             lager:Level("MQTT-SN(~s): " ++ Format,
                         [esockd_net:format(State#state.peer) | Args])).
+-define(APP, emq_sn).
 
 -spec(start_link(inet:socket(), {inet:ip_address(), inet:port()}, integer()) -> {ok, pid()}).
 start_link(Sock, Peer, GwId) ->
@@ -77,10 +78,14 @@ idle(?SN_SEARCHGW_MSG(_Radius), StateData = #state{idle_tref = Ref, gwid = GwId}
 
 idle(?SN_CONNECT_MSG(Flags, _ProtoId, Duration, ClientId), StateData = #state{idle_tref = Ref, protocol = Proto}) ->
     cancel_idle_timer(Ref),
+    Username = application:get_env(?APP, username, undefined),
+    Password = application:get_env(?APP, password, undefined),
     #mqtt_sn_flags{will = Will, clean_session = CleanSession} = Flags,
     ConnPkt = #mqtt_packet_connect{client_id  = ClientId,
-                                   clean_sess = CleanSession,
-                                   keep_alive = Duration},
+                                    clean_sess = CleanSession,
+                                    username = Username,
+                                    password = Password,
+                                    keep_alive = Duration},
     case Will of
         true  ->
             send_message(?SN_WILLTOPICREQ_MSG(), StateData#state{connpkt = ConnPkt}),
