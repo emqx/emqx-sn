@@ -17,13 +17,13 @@ mqtt.sn.password = abc
 ```
 
 - mqtt.sn.port
-  * The UDP port which emqx-sn is listening on.
+  * The UDP port which emq-sn is listening on.
 - mqtt.sn.advertise_duration
-  * The duration(seconds) that emqx-sn broadcast ADVERTISE message through.
+  * The duration(seconds) that emq-sn broadcast ADVERTISE message through.
 - mqtt.sn.gateway_id
   * Gateway id in ADVERTISE message.
 - mqtt.sn.username
-  * This parameter is optional. If specified, emqx-sn will connect EMQX core with this username. It is useful if any auth plug-in is enabled.
+  * This parameter is optional. If specified, emq-sn will connect EMQTTD core with this username. It is useful if any auth plug-in is enabled.
 - mqtt.sn.password
   * This parameter is optional. Pair with username above.
 

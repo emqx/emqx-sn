@@ -39,7 +39,7 @@ init_per_suite(Config) ->
     Config.
 
 end_per_suite(_Config) ->
-    application:stop(emqx_sn).
+    application:stop(emq_sn).
 
 
 
