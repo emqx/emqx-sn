@@ -29,11 +29,11 @@ all() -> [register_topic_test, register_topic_test2, register_topic_test3, regis
 
 
 init_per_suite(Config) ->
-    application:start(lager),
+    lager_common_test_backend:bounce(debug),
     Config.
 
 end_per_suite(_Config) ->
-    application:stop(lager).
+    ok.
 
 
 
@@ -72,10 +72,10 @@ register_topic_test2(_Config) ->
 
 
 register_topic_test3(_Config) ->
-    io:format("register_topic_test3 will take long long time ...~n"),
+    lager:debug("register_topic_test3 will take long long time ...~n"),
     start_link(),
     register_a_lot(1, 16#fffe),
-    io:format("start overflow~n"),
+    lager:debug("start overflow test~n"),
     ?assertEqual(undefined, register_topic(<<"ClientId">>, <<"TopicABC">>)),
     timer:sleep(500),
     ?assertEqual(1, lookup_topic_id(<<"ClientId">>, <<"Topic1">>)),
@@ -111,7 +111,7 @@ register_a_lot(Max, Max) ->
     ok;
 register_a_lot(N, Max) ->
     case (N rem 1024) of
-        0 -> io:format("register_a_lot N=~p~n", [N]);
+        0 -> lager:debug("register_a_lot N=~p/65536, long long time, please be patient~n", [N]);
         _ -> ok
     end,
     TopicString = io_lib:format("Topic~p", [N]),
