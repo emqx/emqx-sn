@@ -8,13 +8,24 @@ Configure Plugin
 
 File: etc/emq_sn.conf
 
-```erlang
+```
 mqtt.sn.port = 1884
 mqtt.sn.advertise_duration = 900
 mqtt.sn.gateway_id = 1
 mqtt.sn.username = mqtt_sn_user
 mqtt.sn.password = abc
 ```
+
+- mqtt.sn.port
+  * The UDP port which emq-sn is listening on.
+- mqtt.sn.advertise_duration
+  * The duration(seconds) that emq-sn broadcast ADVERTISE message through.
+- mqtt.sn.gateway_id
+  * Gateway id in ADVERTISE message.
+- mqtt.sn.username
+  * This parameter is optional. If specified, emq-sn will connect EMQTTD core with this username. It is useful if any auth plug-in is enabled.
+- mqtt.sn.password
+  * This parameter is optional. Pair with username above.
 
 ## Usage
 
