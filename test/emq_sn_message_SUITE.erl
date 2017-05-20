@@ -33,11 +33,11 @@ all() -> [advertise_test, searchgw_test, gwinfo_test, connect_test, connack_test
 
 
 init_per_suite(Config) ->
-    application:start(lager),
+    lager_common_test_backend:bounce(debug),
     Config.
 
 end_per_suite(_Config) ->
-    application:stop(lager).
+    ok.
 
 
 

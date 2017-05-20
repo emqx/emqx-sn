@@ -167,10 +167,10 @@
         #mqtt_sn_message{type     = ?SN_WILLMSGRESP,
                          variable = ReturnCode}).
 
--define(SN_NORMAL_TOPIC,    0).
+-define(SN_NORMAL_TOPIC,     0).
 -define(SN_PREDEFINED_TOPIC, 1).
--define(SN_SHORT_TOPIC, 2).
--define(SN_RESERVED_TOPIC, 2).
+-define(SN_SHORT_TOPIC,      2).
+-define(SN_RESERVED_TOPIC,   3).
 
 
 -define(SN_INVALID_TOPIC_ID, 0).
