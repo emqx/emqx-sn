@@ -17,8 +17,8 @@ data/
 *.iml
 *.d
 
-test/intergration_test/emq-relx
-test/intergration_test/paho.mqtt-sn.embedded-c
-test/intergration_test/client/*.exe
-test/intergration_test/client/*.txt
+intergration_test/emq-relx/
+intergration_test/paho.mqtt-sn.embedded-c/
+intergration_test/client/*.exe
+intergration_test/client/*.txt
 

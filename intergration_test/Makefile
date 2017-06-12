@@ -54,8 +54,22 @@ case1:
 	
 	
 $(RELX_CONF):
-	git clone https://github.com/emqttd/emq-relx.git
-	python add_emq_sn_to_project.py
+	git clone https://github.com/emqtt/emq-relx.git
+	git clone https://github.com/emqtt/emq-sn.git
+	@echo "update emq-sn with this development code"
+	mv emq-sn  emq_sn
+	-rm -rf emq_sn/etc
+	-rm -rf emq_sn/include
+	-rm -rf emq_sn/priv
+	-rm -rf emq_sn/src
+	-rm -rf emq_sn/Makefile
+	cp -rf ../etc      emq_sn/
+	cp -rf ../include  emq_sn/
+	cp -rf ../priv     emq_sn/
+	cp -rf ../src      emq_sn/
+	cp -rf ../Makefile emq_sn/Makefile
+	-mkdir emq-relx/deps
+	mv emq_sn  emq-relx/deps/
 	@echo "start building ..."
 	make -C emq-relx -f Makefile
 	
