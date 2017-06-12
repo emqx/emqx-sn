@@ -14,26 +14,32 @@
 %%% limitations under the License.
 %%%-------------------------------------------------------------------
 
--module(emq_sn_gateway_sup).
+-module(emq_sn_asleep_msg_queue).
 
 -author("Feng Lee <feng@emqtt.io>").
 
--behaviour(supervisor).
 
--export([start_link/0, start_gateway/3, init/1]).
 
-%% @doc Start MQTT-SN Gateway Supervisor.
--spec(start_link() -> {ok, pid()}).
-start_link() ->
-	supervisor:start_link({local, ?MODULE}, ?MODULE, []).
+-export([init/0, enqueue/2, dequeue/1, size/1]).
 
-%% @doc Start a MQTT-SN Gateway.
--spec(start_gateway(inet:socket(), {inet:ip_address(), inet:port()}, integer()) -> {ok, pid()}).
-start_gateway(Sock, Peer, GwId) ->
-    supervisor:start_child(?MODULE, [Sock, Peer, GwId]).
 
-init([]) ->
-    {ok, {{simple_one_for_one, 0, 1},
-            [{sn_gateway, {emq_sn_gateway, start_link, []},
-                temporary, 5000, worker, [emq_sn_gateway]}]}}.
+-record(asleep_queue,  {msg_queue   :: queue:queue()}).
+
+
+
+init() ->
+    #asleep_queue{msg_queue = queue:new()}.
+
+enqueue(Msg, Context=#asleep_queue{msg_queue = Que}) ->
+    case queue:member(Msg, Que) of
+        true  -> Context;  % EMQ core has retransmit this message, since device is sleeping
+        false -> Context#asleep_queue{msg_queue = queue:in(Msg, Que)}
+    end.
+
+dequeue(Context=#asleep_queue{msg_queue = Que}) ->
+    Msg = queue:get(Que),
+    {Msg, Context#asleep_queue{msg_queue = queue:drop(Que)}}.
+
+size(#asleep_queue{msg_queue = Que}) ->
+    queue:len(Que).
 
