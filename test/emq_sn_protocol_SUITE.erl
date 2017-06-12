@@ -19,6 +19,7 @@
 -include_lib("eunit/include/eunit.hrl").
 -include("emq_sn.hrl").
 -include_lib("emqttd/include/emqttd.hrl").
+-include_lib("emqttd/include/emqttd_protocol.hrl").
 
 
 -compile(export_all).

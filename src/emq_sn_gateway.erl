@@ -23,6 +23,8 @@
 -include("emq_sn.hrl").
 
 -include_lib("emqttd/include/emqttd.hrl").
+-include_lib("emqttd/include/emqttd_protocol.hrl").
+
 
 %% API.
 -export([start_link/3]).
@@ -76,9 +78,9 @@
 -define(PROTO_RECEIVE(A, B),            test_mqtt_broker:proto_receive(A, B)).
 -define(PROTO_SHUTDOWN(A, B),           ok).
 -else.
--define(PROTO_INIT(A, B, C),            emq_protocol:init(A, B, C)).
--define(PROTO_RECEIVE(A, B),            emq_protocol:received(A, B)).
--define(PROTO_SHUTDOWN(A, B),           emq_protocol:shutdown(A, B)).
+-define(PROTO_INIT(A, B, C),            emqttd_protocol:init(A, B, C)).
+-define(PROTO_RECEIVE(A, B),            emqttd_protocol:received(A, B)).
+-define(PROTO_SHUTDOWN(A, B),           emqttd_protocol:shutdown(A, B)).
 -endif.
 
 
@@ -127,7 +129,7 @@ idle(?SN_SEARCHGW_MSG(_Radius), StateData = #state{idle_timer = Timer, gwid = Gw
     {next_state, idle, StateData#state{idle_timer = NewTimer}};
 
 
-idle(?SN_CONNECT_MSG(Flags, _ProtoId, Duration, ClientId), StateData = #state{idle_timer = Ref, protocol = Proto}) ->
+idle(?SN_CONNECT_MSG(Flags, _ProtoId, Duration, ClientId), StateData = #state{protocol = Proto}) ->
     Username = application:get_env(?APP, username, undefined),
     Password = application:get_env(?APP, password, undefined),
     #mqtt_sn_flags{will = Will, clean_session = CleanSession} = Flags,
@@ -393,7 +395,7 @@ handle_info({keepalive, start, Interval}, StateName, StateData = #state{conn = C
                         {error, Error}              -> {error, Error}
                     end
                 end,
-    case emq_keepalive:start(StatFun, Interval, {keepalive, check}) of
+    case emqttd_keepalive:start(StatFun, Interval, {keepalive, check}) of
         {ok, KeepAlive} ->
             next_state(StateName, StateData#state{keepalive = KeepAlive});
         {error, Error} ->
@@ -415,7 +417,7 @@ handle_info({keepalive, start, _Interval}, StateName, StateData = #state{keepali
 
 
 handle_info({keepalive, check}, StateName, StateData = #state{keepalive = KeepAlive}) ->
-    case emq_keepalive:check(KeepAlive) of
+    case emqttd_keepalive:check(KeepAlive) of
         {ok, KeepAlive1} ->
             ?LOG(debug, "Keepalive check ok StateName=~p, KeepAlive=~p", [StateName, KeepAlive], StateData),
             next_state(StateName, StateData#state{keepalive = KeepAlive1});
@@ -478,7 +480,7 @@ terminate(Reason, _StateName, StateData = #state{client_id = ClientId, keepalive
         _ -> ok
     end,
     emq_sn_registry:unregister_topic(ClientId),
-    emq_keepalive:cancel(KeepAlive),
+    emqttd_keepalive:cancel(KeepAlive),
     case {Proto, Reason} of
         {undefined, _} ->
             ok;
@@ -745,7 +747,7 @@ find_suback_topicid(MsgId, [{_, _}|Rest]) ->
 publish_message_to_device(Msg, ClientId, Conn=#connection{}) ->
     #mqtt_packet{header   = #mqtt_packet_header{type = ?PUBLISH, dup = Dup, qos = Qos, retain = Retain},
         variable = #mqtt_packet_publish{topic_name = TopicName, packet_id = MsgId0},
-        payload  = Payload} = emq_message:to_packet(Msg),
+        payload  = Payload} = emqttd_message:to_packet(Msg),
     MsgId = message_id(MsgId0),
     case emq_sn_registry:lookup_topic_id(ClientId, TopicName) of
         undefined ->

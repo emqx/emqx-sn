@@ -299,7 +299,7 @@ format(?SN_REGACK_MSG(TopicId, MsgId, ReturnCode)) ->
     lists:flatten(io_lib:format("mqtt_sn_message SN_REGACK, TopicId=~w, MsgId=~w, ReturnCode=~w",
         [TopicId, MsgId, ReturnCode]));
 format(#mqtt_sn_message{type = Type, variable = Var}) ->
-    lists:flatten(io_lib:format("mqtt_sn_message type=~s, Var=~w", [emq__sn_message:message_type(Type), Var])).
+    lists:flatten(io_lib:format("mqtt_sn_message type=~s, Var=~w", [emq_sn_message:message_type(Type), Var])).
 
 
 format_flag(#mqtt_sn_flags{dup = Dup, qos = Qos, retain = Retain, will = Will, clean_session = CleanSession, topic_id_type = TopicType}) ->
