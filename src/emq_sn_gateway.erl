@@ -496,7 +496,9 @@ do_unsubscribe(_, _TopicId, MsgId, StateData) ->
     send_message(?SN_UNSUBACK_MSG(MsgId), StateData),
     next_state(connected, StateData).
 
-
+do_publish(?SN_NORMAL_TOPIC, TopicId, Data, Flags, MsgId, StateData) ->
+    %% Handle normal topic id as predefined topic id, to be compatible with paho mqtt-sn library
+    do_publish(?SN_PREDEFINED_TOPIC, TopicId, Data, Flags, MsgId, StateData);
 do_publish(?SN_PREDEFINED_TOPIC, TopicId, Data, Flags, MsgId, StateData=#state{client_id = ClientId}) ->
     #mqtt_sn_flags{qos = Qos, dup = Dup, retain = Retain} = Flags,
     case emq_sn_registry:lookup_topic(ClientId, TopicId) of

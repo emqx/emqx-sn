@@ -22,7 +22,7 @@
 all() -> [
     subscribe_test, subscribe_test1, subscribe_test2,
     subscribe_test10, subscribe_test11, subscribe_test12, subscribe_test13,
-    publish_qos0_test1, publish_qos0_test2, publish_qos0_test3,
+    publish_qos0_test1, publish_qos0_test2, publish_qos0_test3, publish_qos0_test4,
     publish_qos1_test1, publish_qos1_test2, publish_qos1_test3, publish_qos1_test4, publish_qos1_test5,
     publish_qos2_test1, publish_qos2_test2,
     will_test1, will_test2, will_test3, will_test4, will_test5,
@@ -406,6 +406,43 @@ publish_qos0_test3(_Config) ->
     gen_udp:close(Socket),
     test_mqtt_broker:stop().
 
+
+
+publish_qos0_test4(_Config) ->
+    test_mqtt_broker:start_link(),
+    Dup = 0,
+    Qos = 0,
+    Retain = 0,
+    Will = 0,
+    CleanSession = 0,
+    MsgId = 1,
+    TopicId1 = 1,
+    {ok, Socket} = gen_udp:open(0, [binary]),
+    send_connect_msg(Socket, <<"test">>),
+    ?assertEqual(<<3, ?SN_CONNACK, 0>>, receive_response(Socket)),
+
+    Topic = <<"abc">>,
+    send_subscribe_msg_normal_topic(Socket, Qos, Topic, MsgId),
+    ?assertEqual(<<8, ?SN_SUBACK, Dup:1, Qos:2, Retain:1, Will:1, CleanSession:1, ?SN_NORMAL_TOPIC:2, TopicId1:16, MsgId:16, ?SN_RC_ACCECPTED>>,
+        receive_response(Socket)),
+    ?assertEqual(Topic, test_mqtt_broker:get_subscrbied_topic()),
+
+    MsgId1 = 3,
+    RetainFalse = false,
+    Payload1 = <<20, 21, 22, 23>>,
+    send_publish_msg_normal_topic(Socket, Qos, MsgId1, TopicId1, Payload1),
+    timer:sleep(100),
+    ?assertEqual({MsgId1, Qos, RetainFalse, Topic, Payload1}, test_mqtt_broker:get_published_msg()),
+
+    test_mqtt_broker:dispatch(MsgId1, Qos, RetainFalse, Topic, Payload1),
+    Eexp = <<11, ?SN_PUBLISH, Dup:1, Qos:2, Retain:1, Will:1, CleanSession:1, ?SN_PREDEFINED_TOPIC:2, TopicId1:16, (mid(0)):16, <<20, 21, 22, 23>>/binary>>,
+    What = receive_response(Socket),
+    ?assertEqual(Eexp, What),
+
+    send_disconnect_msg(Socket),
+    ?assertEqual(<<2, ?SN_DISCONNECT>>, receive_response(Socket)),
+    gen_udp:close(Socket),
+    test_mqtt_broker:stop().
 
 
 publish_qos1_test1(_Config) ->
@@ -857,6 +894,20 @@ send_regack_msg(Socket, TopicId, MsgId) ->
     Packet = <<Length:8, MsgType:8, TopicId:16, MsgId:16, ?SN_RC_ACCECPTED>>,
     ok = gen_udp:send(Socket, ?HOST, ?PORT, Packet).
 
+
+
+send_publish_msg_normal_topic(Socket, Qos, MsgId, TopicId, Data) ->
+    Length = 7 + byte_size(Data),
+    MsgType = ?SN_PUBLISH,
+    Dup = 0,
+    Retain = 0,
+    Will = 0,
+    CleanSession = 0,
+    TopicIdType = ?SN_NORMAL_TOPIC,
+    PublishPacket = <<Length:8, MsgType:8, Dup:1, Qos:2, Retain:1, Will:1,
+        CleanSession:1, TopicIdType:2, TopicId:16, MsgId:16, Data/binary>>,
+    ?LOG("send_publish_msg_normal_topic TopicId=~p, Data=~p", [TopicId, Data]),
+    ok = gen_udp:send(Socket, ?HOST, ?PORT, PublishPacket).
 
 send_publish_msg_predefined_topic(Socket, Qos, MsgId, TopicId, Data) ->
     Length = 7 + byte_size(Data),
