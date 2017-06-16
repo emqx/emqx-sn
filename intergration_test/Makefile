@@ -77,6 +77,22 @@ $(RELX_CONF):
 $(PAHO_GIT):
 	git clone https://github.com/eclipse/paho.mqtt-sn.embedded-c/
 	
+r: rebuild_emq
+	# short for rebuild_emq
+	@echo "rebuild complete"
+	
+rebuild_emq:
+	-rm -rf emq-relx/deps/emq_sn/etc
+	-rm -rf emq-relx/deps/emq_sn/include
+	-rm -rf emq-relx/deps/emq_sn/priv
+	-rm -rf emq-relx/deps/emq_sn/src
+	-rm -rf emq-relx/deps/emq_sn/Makefile
+	cp -rf ../etc      emq-relx/deps/emq_sn/
+	cp -rf ../include  emq-relx/deps/emq_sn/
+	cp -rf ../priv     emq-relx/deps/emq_sn/
+	cp -rf ../src      emq-relx/deps/emq_sn/
+	cp -rf ../Makefile emq-relx/deps/emq_sn/Makefile
+	make -C emq-relx -f Makefile
 	
 	
 clean: clean_result

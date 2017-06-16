@@ -62,7 +62,7 @@
                 awaiting_suback = []        :: list(),
                 idle_timer = undefined      :: term(),
                 asleep_timer                :: tuple(),
-                asleep_msg                  :: term()}).
+                asleep_msg_queue            :: term()}).
 
 -define(LOG(Level, Format, Args, State),
             lager:Level("MQTT-SN(~s): " ++ Format,
@@ -116,7 +116,7 @@ init([Sock, Peer, GwId]) ->
                    conn = Conn,
                    protocol = ProtoState,
                    asleep_timer = emq_sn_asleep_timer:init(),
-                   asleep_msg = emq_sn_asleep_msg_queue:init()},
+                   asleep_msg_queue = queue:new()},
     {ok, idle, State, 3000}.
 
 
@@ -374,11 +374,11 @@ handle_info({datagram, _From, Data}, StateName, StateData) ->
             next_state(StateName, StateData)
     end;
 
-handle_info({deliver, Msg}, asleep, StateData = #state{asleep_msg = AsleepMsg}) ->
+handle_info({deliver, Msg}, asleep, StateData = #state{asleep_msg_queue = AsleepMsgQue}) ->
     % section 6.14, Support of sleeping clients
     ?LOG(debug, "enqueue downlink message in asleep state Msg=~p", [Msg], StateData),
-    NewAsleepMsg = emq_sn_asleep_msg_queue:enqueue(Msg, AsleepMsg),
-    next_state(asleep, StateData#state{asleep_msg = NewAsleepMsg});
+    NewAsleepMsgQue = queue:in(Msg, AsleepMsgQue),
+    next_state(asleep, StateData#state{asleep_msg_queue = NewAsleepMsgQue});
 handle_info({deliver, Msg}, StateName, StateData = #state{client_id = ClientId}) ->
     publish_message_to_device(Msg, ClientId, StateData#state.conn),
     next_state(StateName, StateData);
@@ -403,8 +403,8 @@ handle_info({keepalive, start, Interval}, StateName, StateData = #state{conn = C
             shutdown(Error, StateData)
     end;
 
-handle_info(do_awake_jobs, StateName, StateData=#state{conn = Conn, client_id = ClientId, asleep_msg = AsleepMsg}) ->
-    process_awake_jobs(AsleepMsg, ClientId, Conn),
+handle_info(do_awake_jobs, StateName, StateData=#state{conn = Conn, client_id = ClientId, asleep_msg_queue = AsleepMsgQue}) ->
+    process_awake_jobs(AsleepMsgQue, ClientId, Conn),
     case StateName of
         awake -> goto_asleep_state(StateData, undefined);
         Other -> next_state(Other, StateData) % device send a CONNECT immediately before this do_awake_jobs is handled
@@ -764,16 +764,16 @@ publish_message_to_device(Msg, ClientId, Conn=#connection{}) ->
 
 
 publish_asleep_messages_to_device(AsleepMsg, ClientId, Conn, Qos2Count) ->
-    case emq_sn_asleep_msg_queue:size(AsleepMsg) > 0 of
-        true ->
-            {Msg, NewAsleepMsg} = emq_sn_asleep_msg_queue:dequeue(AsleepMsg),
+    case queue:is_empty(AsleepMsg) of
+        false ->
+            Msg = queue:get(AsleepMsg),
             publish_message_to_device(Msg, ClientId, Conn),
             NewCount = case is_qos2_msg(Msg) of
                            true -> Qos2Count + 1;
                            false -> Qos2Count
                        end,
-            publish_asleep_messages_to_device(NewAsleepMsg, ClientId, Conn, NewCount);
-        false ->
+            publish_asleep_messages_to_device(queue:drop(AsleepMsg), ClientId, Conn, NewCount);
+        true ->
             Qos2Count
     end.
 
