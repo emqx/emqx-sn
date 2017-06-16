@@ -15,3 +15,10 @@ logs/
 data/
 .idea/
 *.iml
+*.d
+
+intergration_test/emq-relx/
+intergration_test/paho.mqtt-sn.embedded-c/
+intergration_test/client/*.exe
+intergration_test/client/*.txt
+
