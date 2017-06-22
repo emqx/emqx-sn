@@ -36,12 +36,13 @@
 proto_init(Peer, SendFun, PktOpts) ->
     KeepaliveDuration = 3,   % seconds
     self() ! {keepalive, start, KeepaliveDuration},
-    EnableStats = proplists:get_value(client_enable_stats, PktOpts, false),
-    case EnableStats of
+    case proplists:get_value(client_enable_stats, PktOpts, false) of
         true ->
             ets:new(test_client_stats, [set, named_table, public]),
             self() ! emit_stats,
-            ?LOG("client_enable_stats is ~p, and send emit_stats", [EnableStats])
+            ?LOG("send emit_stats", []);
+        false ->
+            ?LOG("client_enable_stats is false, stats case may fail!", [])
     end,
     put(debug_unit_test_send_func, SendFun),
     gen_server:call(?MODULE, {init, self(), Peer, PktOpts}).

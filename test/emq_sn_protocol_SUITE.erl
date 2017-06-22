@@ -54,7 +54,6 @@ all() -> [
     handle_emit_stats_test
 ].
 
-
 init_per_suite(Config) ->
     lager_common_test_backend:bounce(debug),
     Config.
@@ -65,6 +64,7 @@ end_per_suite(_Config) ->
 
 init_per_testcase(_TestCase, Config) ->
     %application:set_env(emq_sn, advertise_duration, 2),
+    application:set_env(emq_sn, enable_stats, true),
     application:set_env(emq_sn, username, <<"user1">>),
     application:set_env(emq_sn, password, <<"pw123">>),
     application:set_env(emq_sn, predefined, [{10,<<"predef_topic1">>},{11,<<"predef_topic2">>}]),
