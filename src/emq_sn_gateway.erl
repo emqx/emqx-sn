@@ -381,11 +381,10 @@ emit_stats(_ClientId, State = #state{enable_stats = false}) ->
     ?LOG(debug, "The enable_stats is false, skip emit_state~n", [], State),
     State;
 
-emit_stats(ClientId, StateData=#state{protocol=ProtoState, conn = #connection{socket = Sock}}) ->
+emit_stats(ClientId, #state{protocol=ProtoState, conn = #connection{socket = Sock}}) ->
     StatsList = lists:append([emqttd_misc:proc_stats(),
         ?PROTO_STATS(ProtoState),
         socket_stats(Sock, ?SOCK_STATS)]),
-    %?LOG(debug, "The StatsListis ~p~n", [StatsList], StateData),
     ?SET_CLIENT_STATS(ClientId, StatsList).
 
 socket_stats(Sock, Stats) when is_port(Sock), is_list(Stats)->
@@ -506,17 +505,17 @@ handle_info(emit_stats, StateName, StateData) ->
     emit_stats(StateData),
     next_state(StateName, StateData);
 
-handle_info(Info, StateName, StateData) ->
-    ?LOG(error, "UNEXPECTED INFO: ~p", [Info], StateData),
-    {next_state, StateName, StateData};
-
 handle_info(kick, _StateName, StateData = #state{client_id = ClientId}) ->
     ?LOG(warning, "clientid '~s' will be kicked off", [ClientId], StateData),
     stop({shutdown, kick}, StateData);
 
 handle_info({shutdown, conflict, {ClientId, NewPid}}, _StateName, StateData) ->
     ?LOG(warning, "clientid '~s' conflict with ~p", [ClientId, NewPid], StateData),
-    stop({shutdown, conflict}, StateData).
+    stop({shutdown, conflict}, StateData);
+
+handle_info(Info, StateName, StateData) ->
+    ?LOG(error, "UNEXPECTED INFO: ~p", [Info], StateData),
+    {next_state, StateName, StateData}.
 
 terminate(Reason, _StateName, StateData = #state{client_id = ClientId, keepalive = KeepAlive, protocol = Proto}) ->
     case Reason of
