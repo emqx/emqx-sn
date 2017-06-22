@@ -24,6 +24,8 @@
 
 -define(APP, emq_sn).
 
+-define(LOG(Level, Format, Args),
+    lager:Level("MQTT-SN(app): " ++ Format, Args)).
 %%--------------------------------------------------------------------
 %% Application Callback
 %%--------------------------------------------------------------------
@@ -32,7 +34,10 @@ start(_Type, _Args) ->
     Listener = application:get_env(?APP, listener, {1884, []}),
     Duration = application:get_env(?APP, advertise_duration, 15*60),
     GwId = application:get_env(?APP, gateway_id, 1),
-    emq_sn_sup:start_link(Listener, Duration, GwId).
+    EnableStats = application:get_env(?APP, enable_stats, false),
+    PredefTopicList = application:get_env(?APP, predefined, []),
+    ?LOG(debug, "The PredefTopicList is ~p~n", [PredefTopicList]),
+    emq_sn_sup:start_link(Listener, Duration, GwId, EnableStats, PredefTopicList).
 
 stop(_State) ->
 	ok.

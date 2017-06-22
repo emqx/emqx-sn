@@ -20,10 +20,14 @@
 
 -behaviour(gen_server).
 
--record(state, {subscriber, peer, pkt_opts, connect_pkt, last_puback, last_pubrel, rx_message, subed, unsubed}).
+-record(proto_stats, {enable_stats = false, recv_pkt = 0, recv_msg = 0,
+    send_pkt = 0, send_msg = 0}).
+
+-record(state, {subscriber, peer, pkt_opts, connect_pkt, last_puback, last_pubrel, rx_message, subed, unsubed, stats_data}).
 
 -include_lib("emqttd/include/emqttd.hrl").
 -include_lib("emqttd/include/emqttd_protocol.hrl").
+-include_lib("emqttd/include/emqttd_internal.hrl").
 
 
 -define(LOG(Format, Args),
@@ -32,6 +36,13 @@
 proto_init(Peer, SendFun, PktOpts) ->
     KeepaliveDuration = 3,   % seconds
     self() ! {keepalive, start, KeepaliveDuration},
+    EnableStats = proplists:get_value(client_enable_stats, PktOpts, false),
+    case EnableStats of
+        true ->
+            ets:new(test_client_stats, [set, named_table, public]),
+            self() ! emit_stats,
+            ?LOG("client_enable_stats is ~p, and send emit_stats", [EnableStats])
+    end,
     put(debug_unit_test_send_func, SendFun),
     gen_server:call(?MODULE, {init, self(), Peer, PktOpts}).
 
@@ -78,7 +89,6 @@ stop() ->
 init(_Param) ->
     {ok, #state{subscriber = undefined}}.
 
-
 handle_call({init, Subscriber, Peer, PktOpts}, _From, State) ->
     ?LOG("test broker init Subscriber=~p, Peer=~p, SendFun=~p, PktOpts=~p, broker_pid=~p~n", [Subscriber, Peer, PktOpts, self()]),
     {reply, ok, State#state{subscriber = Subscriber, peer = Peer, pkt_opts = PktOpts}};
@@ -96,15 +106,20 @@ handle_call({received_packet, Msg = ?PUBLISH_PACKET(Qos, PacketId)}, _From, Stat
     #mqtt_packet_header{type = ?PUBLISH, dup = _Dup, qos = Qos, retain = Retain} = Header,
     #mqtt_packet_publish{topic_name = TopicName, packet_id = MsgId} = Var,
     OutPkt = case Qos of
-                ?QOS1 -> ?PUBACK_PACKET(?PUBACK, MsgId);
-                ?QOS2 -> ?PUBACK_PACKET(?PUBREC, MsgId);
-                _ -> undefined
-            end,
+                 ?QOS1 -> ?PUBACK_PACKET(?PUBACK, MsgId);
+                 ?QOS2 -> ?PUBACK_PACKET(?PUBREC, MsgId);
+                 _ -> undefined
+             end,
     {reply, {ok, [], OutPkt}, State#state{rx_message = {MsgId, Qos, Retain, TopicName, Payload}}};
 
 handle_call({received_packet, ?PUBACK_PACKET(?PUBACK, MsgId)}, _From, State=#state{}) ->
     ?LOG("test broker get PUBACK MsgId=~p~n", [MsgId]),
     {reply, {ok, []}, State#state{last_puback = MsgId}};
+
+handle_call({received_packet, ?PUBACK_PACKET(?PUBREC, MsgId)}, _From, State=#state{}) ->
+    ?LOG("test broker get PUBREC MsgId=~p~n", [MsgId]),
+    OutPkt = ?PUBACK_PACKET(?PUBREL, MsgId),
+    {reply, {ok, [], OutPkt}, State};
 
 handle_call({received_packet, ?PUBACK_PACKET(?PUBREL, MsgId)}, _From, State=#state{}) ->
     ?LOG("test broker get PUBREL MsgId=~p~n", [MsgId]),
@@ -112,7 +127,7 @@ handle_call({received_packet, ?PUBACK_PACKET(?PUBREL, MsgId)}, _From, State=#sta
     {reply, {ok, [], OutPkt}, State#state{last_pubrel = MsgId}};
 
 handle_call({received_packet, ?SUBSCRIBE_PACKET(MsgId, [{TopicName, Qos}])}, _From, State=#state{subscriber = Pid}) ->
-    ?LOG("test broker get SUBSCRIBE MsgId=~p, TopicName=~p, Qos=~p~n", [MsgId, TopicName, Qos]),
+    ?LOG("test broker get SUBSCRIBE MsgId=~p, TopicName=~p, Qos=~p, Client Pid=~p~n", [MsgId, TopicName, Qos, Pid]),
     Pid ! {suback, MsgId, [Qos]},
     {reply, {ok, []}, State#state{subed = {TopicName, Qos}}};
 
@@ -246,3 +261,25 @@ cancel(TRef) ->
 
 timer(Sec, Msg) ->
     erlang:send_after(timer:seconds(Sec), self(), Msg).
+
+stats(_) ->
+    Stats = #proto_stats{enable_stats = true, recv_pkt = 3, recv_msg = 3,
+        send_pkt = 2, send_msg = 2},
+    tl(?record_to_proplist(proto_stats, Stats)).
+
+set_client_stats(ClientId, Statlist) ->
+    ets:insert(test_client_stats, {ClientId, [{'$ts', emqttd_time:now_secs()}|Statlist]}).
+
+print_table(client_stats) ->
+    List = ets:tab2list(test_client_stats),
+    ?LOG("The table ~p with the content is ~p~n", [ets:info(test_client_stats, name), List]).
+
+clientid(_) ->
+     cleintid_test.
+
+send(Msg, ProtoState) ->
+    Packet =#mqtt_packet{variable = #mqtt_packet_publish{topic_name = Topic}} = emqttd_message:to_packet(Msg),
+    ?LOG("The topic_name is ~p~n", [Topic]),
+    Send = get(debug_unit_test_send_func),
+    Send(Packet),
+    {ok, ProtoState}.
