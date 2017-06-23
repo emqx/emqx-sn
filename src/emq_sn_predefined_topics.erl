@@ -54,7 +54,7 @@ get_max_predef_topic_id() ->
 -spec(lookup_predef_topic(pos_integer()) -> {undefine | binary()}).
 lookup_predef_topic(TopicId) ->
     try
-        ets:lookup_element(sn_predef_topic_id, TopicId, 2)
+        ets:lookup_element(sn_predef_topic_name, TopicId, 2)
     catch
         error:badarg -> undefined
     end.
@@ -62,7 +62,7 @@ lookup_predef_topic(TopicId) ->
 -spec(lookup_predef_topic_id(binary()) -> {undefine | pos_integer()}).
 lookup_predef_topic_id(TopicName) ->
     try
-        ets:lookup_element(sn_predef_topic_name, TopicName, 2)
+        ets:lookup_element(sn_predef_topic_id, TopicName, 2)
     catch
         error:badarg -> undefined
     end.
@@ -73,23 +73,18 @@ lookup_predef_topic_id(TopicName) ->
 init([PreDefTopics]) ->
     %% TopicName -> TopicId
     ets:new(sn_predef_topic_id, [set, named_table, public]),
-    %% TopicName -> TopicId
+    %% TopicId -> TopicName
     ets:new(sn_predef_topic_name, [set, named_table, public]),
-    MaxTopicId = lists:foldl(   fun({TopicId, TopicName}, AccIn) ->
-                                    BinElement = {TopicId, TopicName},
-                                    ets:insert(sn_predef_topic_id, BinElement),
-                                    ?LOG(debug, "insert ~p in the sn_predef_topic_id table~n", [BinElement]),
-                                    case TopicId > AccIn of
-                                        true -> TopicId;
-                                        _    -> AccIn
-                                    end
-                                end, 0, PreDefTopics),
-    ?LOG(debug, "The max topic id in the sn_predef_topic_id table is ~p~n", [MaxTopicId]),
-    lists:foreach(  fun({TopicId, TopicName}) ->
-                        RevElement = {TopicName, TopicId},
-                        ets:insert(sn_predef_topic_name, RevElement),
-                        ?LOG(debug, "insert ~p in the sn_predef_topic_name table~n", [RevElement])
-                    end, PreDefTopics),
+    MaxTopicId = lists:foldl( fun(Element = {TopicId, TopicName}, AccIn) ->
+                                  ets:insert(sn_predef_topic_name, Element),
+                                  ets:insert(sn_predef_topic_id, Element1 = {TopicName, TopicId}),
+                                  ?LOG(debug, "insert ~p in the sn_predef_topic_name table, insert ~p in the sn_predef_topic_id table~n", [Element, Element1]),
+                                  case TopicId > AccIn of
+                                      true -> TopicId;
+                                      _    -> AccIn
+                                  end
+                              end, 0, PreDefTopics),
+    ?LOG(debug, "The max predefined topic id is ~p~n", [MaxTopicId]),
 	{ok, #state{max_topic_id = MaxTopicId}}.
 
 handle_call(get_max_topic_id, _From, State = #state{max_topic_id = MaxTopicId}) ->
