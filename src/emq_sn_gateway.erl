@@ -517,7 +517,7 @@ terminate(Reason, _StateName, StateData = #state{client_id = ClientId, keepalive
         {shutdown, keepalive_timeout}     -> do_publish_will(StateData);
         {shutdown, kick}                  -> do_publish_will(StateData);
         {shutdown, conflict}              -> do_publish_will(StateData);
-        _ -> ok
+        _                                 -> ok
     end,
     emq_sn_topic_manager:unregister_topic(ClientId),
     emqttd_keepalive:cancel(KeepAlive),
@@ -548,21 +548,19 @@ transform(?CONNACK_PACKET(_ReturnCode), _FuncMsgIdToTopicId) ->
     ?SN_CONNACK_MSG(?SN_RC_CONGESTION);
 
 transform(?PUBLISH_PACKET(Qos, Topic, PacketId, Payload), _FuncMsgIdToTopicId) ->
-    NewPacketId =
-    if
-        Qos =:= ?QOS_0 -> 0;
-        true -> PacketId
-    end,
+    NewPacketId =   if
+                        Qos =:= ?QOS_0 -> 0;
+                        true           -> PacketId
+                    end,
     ClientId = get(client_id),
-    {TopicIdType, TopicContent} =
-        case emq_sn_topic_manager:lookup_topic_id(ClientId, Topic) of
-            undefined ->
-                {?SN_SHORT_TOPIC, Topic};
-            {normal, TopicId} ->
-                {?SN_NORMAL_TOPIC, TopicId};
-            {predef, PredefTopicId} ->
-                {?SN_PREDEFINED_TOPIC, PredefTopicId}
-        end,
+    {TopicIdType, TopicContent} =   case emq_sn_topic_manager:lookup_topic_id(ClientId, Topic) of
+                                        undefined ->
+                                            {?SN_SHORT_TOPIC, Topic};
+                                        {normal, TopicId} ->
+                                            {?SN_NORMAL_TOPIC, TopicId};
+                                        {predef, PredefTopicId} ->
+                                            {?SN_PREDEFINED_TOPIC, PredefTopicId}
+                                    end,
     Flags = #mqtt_sn_flags{qos = Qos, topic_id_type = TopicIdType},
     ?SN_PUBLISH_MSG(Flags, TopicContent, NewPacketId, Payload);
 
@@ -658,12 +656,12 @@ do_subscribe(?SN_PREDEFINED_TOPIC, TopicId, Qos, MsgId, StateData=#state{client_
             next_state(connected, StateData);
         PredefinedTopic ->
             proto_subscribe(PredefinedTopic, Qos, MsgId, TopicId, StateData)
-        end;
+    end;
 do_subscribe(?SN_SHORT_TOPIC, TopicId, Qos, MsgId, StateData) ->
     TopicName = case is_binary(TopicId) of
-            true -> TopicId;
-            false -> <<TopicId:16>>
-        end,
+                    true  -> TopicId;
+                    false -> <<TopicId:16>>
+                end,
     proto_subscribe(TopicName, Qos, MsgId, ?SN_INVALID_TOPIC_ID, StateData);
 do_subscribe(_, _TopicId, Qos, MsgId, StateData) ->
     send_message(?SN_SUBACK_MSG(#mqtt_sn_flags{qos = Qos}, ?SN_INVALID_TOPIC_ID, MsgId, ?SN_RC_INVALID_TOPIC_ID), StateData#state.conn),
@@ -726,8 +724,8 @@ do_publish_will(#state{will = #will{will_topic = undefined}}) ->
 do_publish_will(#state{will = Will, protocol = Proto}) ->
     #will{will_qos = Qos, will_retain = Retain, will_topic = Topic, will_msg = Payload } = Will,
     Publish = #mqtt_packet{header   = #mqtt_packet_header{type = ?PUBLISH, dup = false, qos = Qos, retain = Retain},
-        variable = #mqtt_packet_publish{topic_name = Topic, packet_id = 1000},
-        payload  = Payload},
+                           variable = #mqtt_packet_publish{topic_name = Topic, packet_id = 1000},
+                           payload  = Payload},
     ?PROTO_RECEIVE(Publish, Proto),
     Qos =:= ?QOS2 andalso ?PROTO_RECEIVE(?PUBACK_PACKET(?PUBREL, 1000), Proto).
 
@@ -787,8 +785,8 @@ proto_unsubscribe(TopicName, MsgId, StateData=#state{protocol = Proto}) ->
 proto_publish(TopicName, Data, Dup, Qos, Retain, MsgId, TopicId, StateData=#state{protocol = Proto}) ->
     (Qos =/= ?QOS0) andalso enqueue_puback_msgid(TopicId, MsgId),
     Publish = #mqtt_packet{header   = #mqtt_packet_header{type = ?PUBLISH, dup = Dup, qos = Qos, retain = Retain},
-                            variable = #mqtt_packet_publish{topic_name = TopicName, packet_id = MsgId},
-                            payload  = Data},
+                           variable = #mqtt_packet_publish{topic_name = TopicName, packet_id = MsgId},
+                           payload  = Data},
     case ?PROTO_RECEIVE(Publish, Proto) of
         {ok, Proto1}           -> next_state(connected, StateData#state{protocol = Proto1});
         {error, Error}         -> shutdown(Error, StateData);
@@ -807,8 +805,8 @@ find_suback_topicid(MsgId, [{_, _}|Rest]) ->
 
 publish_message_to_device(Msg, ClientId, StateData = #state{conn = Conn, protocol = ProtoState}) ->
     #mqtt_packet{header   = #mqtt_packet_header{type = ?PUBLISH, dup = Dup, qos = Qos, retain = Retain},
-        variable = #mqtt_packet_publish{topic_name = TopicName, packet_id = MsgId0},
-        payload  = Payload} = emqttd_message:to_packet(Msg),
+                 variable = #mqtt_packet_publish{topic_name = TopicName, packet_id = MsgId0},
+                 payload  = Payload} = emqttd_message:to_packet(Msg),
     MsgId = message_id(MsgId0),
     ?LOG(debug, "the TopicName of mqtt_message=~p~n", [TopicName], StateData),
     case emq_sn_topic_manager:lookup_topic_id(ClientId, TopicName) of
@@ -820,7 +818,7 @@ publish_message_to_device(Msg, ClientId, StateData = #state{conn = Conn, protoco
                     register_and_notify_client(TopicName, Payload, Dup, Qos, Retain, MsgId, ClientId, Conn),
                     ?PROTO_SEND(Msg, ProtoState)
             end;
-        _   ->
+        _         ->
             ?PROTO_SEND(Msg, ProtoState)
     end.
 
@@ -834,7 +832,7 @@ publish_asleep_messages_to_device(AsleepMsg, ClientId, StateData, Qos2Count) ->
                            false -> Qos2Count
                        end,
             publish_asleep_messages_to_device(queue:drop(AsleepMsg), ClientId, StateData#state{protocol = NewProtoState}, NewCount);
-        true ->
+        true  ->
             {Qos2Count, StateData}
     end.
 
