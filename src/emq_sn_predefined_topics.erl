@@ -72,9 +72,9 @@ lookup_predef_topic_id(TopicName) ->
 
 init([PreDefTopics]) ->
     %% TopicName -> TopicId
-    ets:new(sn_predef_topic_id, [set, named_table, public]),
+    ets:new(sn_predef_topic_id, [set, named_table, protected]),
     %% TopicId -> TopicName
-    ets:new(sn_predef_topic_name, [set, named_table, public]),
+    ets:new(sn_predef_topic_name, [set, named_table, protected]),
     MaxTopicId = lists:foldl( fun(Element = {TopicId, TopicName}, AccIn) ->
                                   ets:insert(sn_predef_topic_name, Element),
                                   ets:insert(sn_predef_topic_id, Element1 = {TopicName, TopicId}),
