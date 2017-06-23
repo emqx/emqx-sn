@@ -21,7 +21,7 @@ PAHO_SRC  = paho.mqtt-sn.embedded-c/MQTTSNPacket/src/MQTTSNConnectClient.c      
 INCLUDE_PATH = -Ipaho.mqtt-sn.embedded-c/MQTTSNPacket/src -Ipaho.mqtt-sn.embedded-c/MQTTSNPacket/samples -Iclient
 			
 
-all:  clean_result $(RELX_CONF) $(PAHO_GIT) start_broker case1  stop_broker
+all:  clean_result $(RELX_CONF) $(PAHO_GIT) start_broker case1 case2 case3 stop_broker
 	@echo "  "
 	@echo "  test complete"
 	@echo "  "
@@ -49,6 +49,24 @@ case1:
 	client/case1_qos0sub.exe &
 	sleep 1
 	client/case1_qos0pub.exe
+
+case2:
+	-ps aux|grep case2_qos0pub|awk '{print $$2}'|xargs kill -9
+	-ps aux|grep case2_qos0sub|awk '{print $$2}'|xargs kill -9
+	gcc client/case2_qos0pub.c $(PAHO_SRC) $(INCLUDE_PATH) -o client/case2_qos0pub.exe
+	gcc client/case2_qos0sub.c $(PAHO_SRC) $(INCLUDE_PATH) -o client/case2_qos0sub.exe
+	client/case2_qos0sub.exe &
+	sleep 1
+	client/case2_qos0pub.exe
+
+case3:
+	-ps aux|grep case3_qos0pub|awk '{print $$2}'|xargs kill -9
+	-ps aux|grep case3_qos0sub|awk '{print $$2}'|xargs kill -9
+	gcc client/case3_qos0pub.c $(PAHO_SRC) $(INCLUDE_PATH) -o client/case3_qos0pub.exe
+	gcc client/case3_qos0sub.c $(PAHO_SRC) $(INCLUDE_PATH) -o client/case3_qos0sub.exe
+	client/case3_qos0sub.exe &
+	sleep 1
+	client/case3_qos0pub.exe
 	
 	
 	
