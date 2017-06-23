@@ -41,7 +41,7 @@
 
 -spec(start_link(list()) -> {ok, pid()}).
 start_link(PreDefTopics) ->
-	  gen_server:start_link({local, ?MODULE}, ?MODULE, [PreDefTopics], []).
+    gen_server:start_link({local, ?MODULE}, ?MODULE, [PreDefTopics], []).
 
 -spec(stop() -> ok).
 stop() ->
@@ -61,42 +61,42 @@ lookup_predef_topic(TopicId) ->
 
 -spec(lookup_predef_topic_id(binary()) -> {undefine | pos_integer()}).
 lookup_predef_topic_id(TopicName) ->
-  try
-    ets:lookup_element(sn_predef_topic_name, TopicName, 2)
-  catch
-    error:badarg -> undefined
-  end.
+    try
+        ets:lookup_element(sn_predef_topic_name, TopicName, 2)
+    catch
+        error:badarg -> undefined
+    end.
 %%--------------------------------------------------------------------
 %% gen_server Callbacks
 %%--------------------------------------------------------------------
 
 init([PreDefTopics]) ->
-  %% TopicName -> TopicId
-  ets:new(sn_predef_topic_id, [set, named_table, public]),
-  %% TopicName -> TopicId
-  ets:new(sn_predef_topic_name, [set, named_table, public]),
-  MaxTopicId = lists:foldl(fun({TopicId, TopicName}, AccIn) ->
-                             BinElement = {TopicId, TopicName},
-                             ets:insert(sn_predef_topic_id, BinElement),
-                             ?LOG(debug, "insert ~p in the sn_predef_topic_id table~n", [BinElement]),
-                             case TopicId > AccIn of
-                               true -> TopicId;
-                               _    -> AccIn
-                             end
-                           end, 0, PreDefTopics),
-  ?LOG(debug, "The max topic id in the sn_predef_topic_id table is ~p~n", [MaxTopicId]),
-  lists:foreach(fun({TopicId, TopicName}) ->
-                  RevElement = {TopicName, TopicId},
-                  ets:insert(sn_predef_topic_name, RevElement),
-                  ?LOG(debug, "insert ~p in the sn_predef_topic_name table~n", [RevElement])
-                end, PreDefTopics),
+    %% TopicName -> TopicId
+    ets:new(sn_predef_topic_id, [set, named_table, public]),
+    %% TopicName -> TopicId
+    ets:new(sn_predef_topic_name, [set, named_table, public]),
+    MaxTopicId = lists:foldl(   fun({TopicId, TopicName}, AccIn) ->
+                                    BinElement = {TopicId, TopicName},
+                                    ets:insert(sn_predef_topic_id, BinElement),
+                                    ?LOG(debug, "insert ~p in the sn_predef_topic_id table~n", [BinElement]),
+                                    case TopicId > AccIn of
+                                        true -> TopicId;
+                                        _    -> AccIn
+                                    end
+                                end, 0, PreDefTopics),
+    ?LOG(debug, "The max topic id in the sn_predef_topic_id table is ~p~n", [MaxTopicId]),
+    lists:foreach(  fun({TopicId, TopicName}) ->
+                        RevElement = {TopicName, TopicId},
+                        ets:insert(sn_predef_topic_name, RevElement),
+                        ?LOG(debug, "insert ~p in the sn_predef_topic_name table~n", [RevElement])
+                    end, PreDefTopics),
 	{ok, #state{max_topic_id = MaxTopicId}}.
 
 handle_call(get_max_topic_id, _From, State = #state{max_topic_id = MaxTopicId}) ->
-  {reply, MaxTopicId, State, hibernate};
+    {reply, MaxTopicId, State, hibernate};
 
 handle_call(stop, _From, State) ->
-  {stop, normal, ok, State};
+    {stop, normal, ok, State};
 
 handle_call(_Request, _From, State) ->
 	{reply, ignored, State}.
