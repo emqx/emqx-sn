@@ -32,6 +32,7 @@
 %% SUB/UNSUB Asynchronously. Called by plugins.
 -export([subscribe/2, unsubscribe/2]).
 
+-export([kick/1]).
 
 -export([idle/2,                idle/3,
          wait_for_will_topic/2, wait_for_will_topic/3,
