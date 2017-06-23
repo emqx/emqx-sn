@@ -94,19 +94,19 @@ handle_call(stop, _From, State) ->
     {stop, normal, ok, State};
 
 handle_call(_Request, _From, State) ->
-	{reply, ignored, State}.
+    {reply, ignored, State}.
 
 handle_cast(_Msg, State) ->
-	{noreply, State}.
+    {noreply, State}.
 
 handle_info(_Info, State) ->
-	{noreply, State, hibernate}.
+    {noreply, State, hibernate}.
 
 terminate(_Reason, #state{}) ->
-	ok.
+    ok.
 
 code_change(_OldVsn, State, _Extra) ->
-	{ok, State}.
+    {ok, State}.
 
 
 
