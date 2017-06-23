@@ -36,8 +36,11 @@
 
 % FLAG NOT USED
 -define(FNU, 0).
--define(MAX_PRED_TOPIC_ID, 11).
-
+-define(MAX_PRED_TOPIC_ID, 2).
+-define(PREDEF_TOPIC_ID1, 1).
+-define(PREDEF_TOPIC_ID2, 2).
+-define(PREDEF_TOPIC_NAME1, <<"/predefined/topic/name/hello">>).
+-define(PREDEF_TOPIC_NAME2, <<"/predefined/topic/name/nice">>).
 all() -> [
     subscribe_test, subscribe_test1, subscribe_test2, subscribe_test3, subscribe_test4,
     subscribe_test10, subscribe_test11, subscribe_test12, subscribe_test13,
@@ -67,7 +70,7 @@ init_per_testcase(_TestCase, Config) ->
     application:set_env(emq_sn, enable_stats, true),
     application:set_env(emq_sn, username, <<"user1">>),
     application:set_env(emq_sn, password, <<"pw123">>),
-    application:set_env(emq_sn, predefined, [{10,<<"predef_topic1">>},{11,<<"predef_topic2">>}]),
+    application:set_env(emq_sn, predefined, [{?PREDEF_TOPIC_ID1, ?PREDEF_TOPIC_NAME1},{?PREDEF_TOPIC_ID2, ?PREDEF_TOPIC_NAME2}]),
     ?assertMatch({ok, _}, application:ensure_all_started(emq_sn)),
     Config.
 
@@ -152,7 +155,7 @@ subscribe_test2(_Config) ->
     Will = 0,
     CleanSession = 0,
     MsgId = 1,
-    TopicId = 10, %this TopicId is the predefined topic id corresponding to "predef_topic1"
+    TopicId = ?PREDEF_TOPIC_ID1, %this TopicId is the predefined topic id corresponding to ?PREDEF_TOPIC_NAME1
     ReturnCode = 0,
     {ok, Socket} = gen_udp:open(0, [binary]),
 
@@ -160,7 +163,7 @@ subscribe_test2(_Config) ->
     ?assertEqual(<<3, ?SN_CONNACK, 0>>, receive_response(Socket)),
     ?assertEqual({<<"cleintid_test">>, <<"user1">>}, test_mqtt_broker:get_online_user()),
 
-    Topic1 = <<"predef_topic1">>,
+    Topic1 = ?PREDEF_TOPIC_NAME1,
     %send_register_msg(Socket, Topic1, MsgId),
     %?assertEqual(<<7, ?SN_REGACK, TopicId:16, MsgId:16, 0:8>>, receive_response(Socket)),
     send_subscribe_msg_predefined_topic(Socket, Qos, TopicId, MsgId),
@@ -222,7 +225,7 @@ subscribe_test4(_Config) ->
     Will = 0,
     CleanSession = 0,
     MsgId = 1,
-    TopicId = 10, %this TopicId is the predefined topic id corresponding to "predef_topic1"
+    TopicId = ?PREDEF_TOPIC_ID1, %this TopicId is the predefined topic id corresponding to ?PREDEF_TOPIC_NAME1
     ReturnCode = 0,
     {ok, Socket} = gen_udp:open(0, [binary]),
 
@@ -230,7 +233,7 @@ subscribe_test4(_Config) ->
     ?assertEqual(<<3, ?SN_CONNACK, 0>>, receive_response(Socket)),
     ?assertEqual({<<"cleintid_test">>, <<"user1">>}, test_mqtt_broker:get_online_user()),
 
-    Topic1 = <<"predef_topic1">>,
+    Topic1 = ?PREDEF_TOPIC_NAME1,
     send_register_msg(Socket, Topic1, MsgId),
     ?assertEqual(<<7, ?SN_REGACK, TopicId:16, MsgId:16, 0:8>>, receive_response(Socket)),
 
@@ -442,12 +445,12 @@ publish_qos0_test2(_Config) ->
     Will = 0,
     CleanSession = 0,
     MsgId = 1,
-    PredefTopicId = 10,
+    PredefTopicId = ?PREDEF_TOPIC_ID1,
     {ok, Socket} = gen_udp:open(0, [binary]),
     send_connect_msg(Socket, <<"test">>),
     ?assertEqual(<<3, ?SN_CONNACK, 0>>, receive_response(Socket)),
 
-    Topic = <<"predef_topic1">>,
+    Topic = ?PREDEF_TOPIC_NAME1,
     send_subscribe_msg_predefined_topic(Socket, Qos, PredefTopicId, MsgId),
     ?assertEqual(<<8, ?SN_SUBACK, Dup:1, Qos:2, Retain:1, Will:1, CleanSession:1, ?SN_NORMAL_TOPIC:2, PredefTopicId:16, MsgId:16, ?SN_RC_ACCECPTED>>,
         receive_response(Socket)),
@@ -662,8 +665,8 @@ publish_qos1_test2(_Config) ->
     Will = 0,
     CleanSession = 0,
     MsgId = 1,
-    PredefTopicId = 10,
-    PredefTopic = <<"predef_topic1">>,
+    PredefTopicId = ?PREDEF_TOPIC_ID1,
+    PredefTopic = ?PREDEF_TOPIC_NAME1,
     {ok, Socket} = gen_udp:open(0, [binary]),
     send_connect_msg(Socket, <<"test">>),
     ?assertEqual(<<3, ?SN_CONNACK, 0>>, receive_response(Socket)),
@@ -828,7 +831,7 @@ publish_qos2_test2(_Config) ->
     test_mqtt_broker:start_link(),
     Qos = 2,
     MsgId = 7,
-    PredefTopicId = 11,
+    PredefTopicId = ?PREDEF_TOPIC_ID2,
     {ok, Socket} = gen_udp:open(0, [binary]),
     send_connect_msg(Socket, <<"test">>),
     ?assertEqual(<<3, ?SN_CONNACK, 0>>, receive_response(Socket)),
@@ -844,10 +847,10 @@ publish_qos2_test2(_Config) ->
     send_pubrel_msg(Socket, MsgId),
     ?assertEqual(<<4, ?SN_PUBCOMP, MsgId:16>>, receive_response(Socket)),
     timer:sleep(100),
-    ?assertEqual({MsgId, Qos, RetainFalse, <<"predef_topic2">>, Payload1}, test_mqtt_broker:get_published_msg()),
+    ?assertEqual({MsgId, Qos, RetainFalse, ?PREDEF_TOPIC_NAME2, Payload1}, test_mqtt_broker:get_published_msg()),
 
     MsgId1 = 9,
-    test_mqtt_broker:dispatch(MsgId1, Qos, RetainFalse, <<"predef_topic2">>, Payload1),
+    test_mqtt_broker:dispatch(MsgId1, Qos, RetainFalse, ?PREDEF_TOPIC_NAME2, Payload1),
     check_dispatched_message(0, Qos, 0, ?SN_PREDEFINED_TOPIC, PredefTopicId, Payload1, Socket),
 
     send_disconnect_msg(Socket, undefined),
