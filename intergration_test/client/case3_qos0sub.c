@@ -32,7 +32,7 @@
 
 
 #define TLOG(fmt, ...)  tlog("qos0sub", fmt,  ## __VA_ARGS__)
-
+#define PRE_DEF_TOPIC_ID 1
 
 
 char * read_publish(char *host, int port, char * buf, int buflen, MQTTSN_topicid *recv_pubtopic)
@@ -87,8 +87,8 @@ int main(int argc, char** argv)
     unsigned char retained = 0;
     short packetid = 1;
     //char *topicname = "predef_topic1";
-    unsigned short predef_topicid1 = 10;
-    unsigned short predef_topicid2 = 11;
+    unsigned short predef_topicid1 = PRE_DEF_TOPIC_ID;
+    unsigned short predef_topicid2 = PRE_DEF_TOPIC_ID+1;
     char *host = "127.0.0.1";
     int port = 1884;
     MQTTSNPacket_connectData options = MQTTSNPacket_connectData_initializer;

@@ -31,7 +31,7 @@
 
 
 #define TLOG(fmt, ...)  tlog("qos0pub", fmt,  ## __VA_ARGS__)
-
+#define PRE_DEF_TOPIC_ID 1
 
 
 int send_pub(char *host, int port, char * buf, int buflen, int qos, int retained, short packetid, unsigned short predef_topicid, char *payload, int payloadlen)
@@ -70,7 +70,7 @@ int main(int argc, char** argv)
     short packetid = 0;
     char ascii = 0;
 //  char *topicname = "a long topic name";
-    unsigned short predef_topicid = 10;
+    unsigned short predef_topicid = PRE_DEF_TOPIC_ID;
     char *host = "127.0.0.1";
     int port = 1884;
     int i = 0;

@@ -218,22 +218,16 @@ wait_for_will_msg(Event, StateData) ->
     {next_state, wait_for_will_msg, StateData}.
 
 connected(?SN_REGISTER_MSG(_TopicId, MsgId, TopicName), StateData = #state{client_id = ClientId, conn = Conn}) ->
-    case emq_sn_predefined_topics:lookup_predef_topic_id(TopicName) of
+    case emq_sn_topic_manager:register_topic(ClientId, TopicName) of
         undefined ->
-            case emq_sn_registry:register_topic(ClientId, TopicName) of
-                undefined ->
-                    ?LOG(error, "TopicId is full! ClientId=~p, TopicName=~p", [ClientId, TopicName], StateData),
-                    send_message(?SN_REGACK_MSG(?SN_INVALID_TOPIC_ID, MsgId, ?SN_RC_NOT_SUPPORTED), Conn);
-                wildcard_topic ->
-                    ?LOG(error, "wildcard topic can not be registered! ClientId=~p, TopicName=~p", [ClientId, TopicName], StateData),
-                    send_message(?SN_REGACK_MSG(?SN_INVALID_TOPIC_ID, MsgId, ?SN_RC_NOT_SUPPORTED), Conn);
-                NewTopicId ->
-                    ?LOG(debug, "register ClientId=~p, TopicName=~p, NewTopicId=~p", [ClientId, TopicName, NewTopicId], StateData),
-                    send_message(?SN_REGACK_MSG(NewTopicId, MsgId, ?SN_RC_ACCECPTED), Conn)
-            end;
-        PredefTopicId ->
-            ?LOG(debug, "register a predefined topic name, now we just assign the corresponding predef topic id. ClientId=~p, TopicName=~p, NewTopicId=~p", [ClientId, TopicName, PredefTopicId], StateData),
-            send_message(?SN_REGACK_MSG(PredefTopicId, MsgId, ?SN_RC_ACCECPTED), Conn)
+            ?LOG(error, "TopicId is full! ClientId=~p, TopicName=~p", [ClientId, TopicName], StateData),
+            send_message(?SN_REGACK_MSG(?SN_INVALID_TOPIC_ID, MsgId, ?SN_RC_NOT_SUPPORTED), Conn);
+        wildcard_topic ->
+            ?LOG(error, "wildcard topic can not be registered! ClientId=~p, TopicName=~p", [ClientId, TopicName], StateData),
+            send_message(?SN_REGACK_MSG(?SN_INVALID_TOPIC_ID, MsgId, ?SN_RC_NOT_SUPPORTED), Conn);
+        TopicId ->
+            ?LOG(debug, "register ClientId=~p, TopicName=~p, TopicId=~p", [ClientId, TopicName, TopicId], StateData),
+            send_message(?SN_REGACK_MSG(TopicId, MsgId, ?SN_RC_ACCECPTED), Conn)
     end,
     {next_state, connected, StateData};
 
@@ -525,7 +519,7 @@ terminate(Reason, _StateName, StateData = #state{client_id = ClientId, keepalive
         {shutdown, conflict}              -> do_publish_will(StateData);
         _ -> ok
     end,
-    emq_sn_registry:unregister_topic(ClientId),
+    emq_sn_topic_manager:unregister_topic(ClientId),
     emqttd_keepalive:cancel(KeepAlive),
     case {Proto, Reason} of
         {undefined, _} ->
@@ -561,17 +555,14 @@ transform(?PUBLISH_PACKET(Qos, Topic, PacketId, Payload), _FuncMsgIdToTopicId) -
     end,
     ClientId = get(client_id),
     {TopicIdType, TopicContent} =
-    case emq_sn_registry:lookup_topic_id(ClientId, Topic) of
-        undefined ->
-            case emq_sn_predefined_topics:lookup_predef_topic_id(Topic) of
-                undefined ->
-                    {?SN_SHORT_TOPIC, Topic};
-                PredefTopicId ->
-                    {?SN_PREDEFINED_TOPIC, PredefTopicId}
-            end;
-        TopicId ->
-            {?SN_NORMAL_TOPIC, TopicId}
-    end,
+        case emq_sn_topic_manager:lookup_topic_id(ClientId, Topic) of
+            undefined ->
+                {?SN_SHORT_TOPIC, Topic};
+            {normal, TopicId} ->
+                {?SN_NORMAL_TOPIC, TopicId};
+            {predef, PredefTopicId} ->
+                {?SN_PREDEFINED_TOPIC, PredefTopicId}
+        end,
     Flags = #mqtt_sn_flags{qos = Qos, topic_id_type = TopicIdType},
     ?SN_PUBLISH_MSG(Flags, TopicContent, NewPacketId, Payload);
 
@@ -651,29 +642,17 @@ mqttsn_to_mqtt(?SN_PUBCOMP) -> ?PUBCOMP.
 
 
 do_subscribe(?SN_NORMAL_TOPIC, TopicId, Qos, MsgId, StateData=#state{client_id = ClientId}) ->
-    case emq_sn_predefined_topics:lookup_predef_topic_id(TopicId) of
+    case emq_sn_topic_manager:register_topic(ClientId, TopicId) of
         undefined ->
-            case emq_sn_registry:register_topic(ClientId, TopicId)of
-                undefined ->
-                    send_message(?SN_SUBACK_MSG(#mqtt_sn_flags{qos = Qos}, ?SN_INVALID_TOPIC_ID, MsgId, ?SN_RC_INVALID_TOPIC_ID), StateData#state.conn),
-                    next_state(connected, StateData);
-                wildcard_topic ->
-                    proto_subscribe(TopicId, Qos, MsgId, ?SN_INVALID_TOPIC_ID, StateData);
-                NewTopicId ->
-                    proto_subscribe(TopicId, Qos, MsgId, NewTopicId, StateData)
-            end;
-        PredefTopicId ->
-            proto_subscribe(TopicId, Qos, MsgId, PredefTopicId, StateData)
+            send_message(?SN_SUBACK_MSG(#mqtt_sn_flags{qos = Qos}, ?SN_INVALID_TOPIC_ID, MsgId, ?SN_RC_INVALID_TOPIC_ID), StateData#state.conn),
+            next_state(connected, StateData);
+        wildcard_topic ->
+            proto_subscribe(TopicId, Qos, MsgId, ?SN_INVALID_TOPIC_ID, StateData);
+        NewTopicId ->
+            proto_subscribe(TopicId, Qos, MsgId, NewTopicId, StateData)
     end;
 do_subscribe(?SN_PREDEFINED_TOPIC, TopicId, Qos, MsgId, StateData=#state{client_id = ClientId}) ->
-    TopicValue =
-        case emq_sn_predefined_topics:get_max_predef_topic_id() < TopicId of
-            true ->
-                emq_sn_registry:lookup_topic(ClientId, TopicId);
-            false ->
-                emq_sn_predefined_topics:lookup_predef_topic(TopicId)
-        end,
-    case TopicValue of
+    case emq_sn_topic_manager:lookup_topic(ClientId, TopicId) of
         undefined ->
             send_message(?SN_SUBACK_MSG(#mqtt_sn_flags{qos = Qos}, TopicId, MsgId, ?SN_RC_INVALID_TOPIC_ID), StateData#state.conn),
             next_state(connected, StateData);
@@ -695,14 +674,7 @@ do_subscribe(_, _TopicId, Qos, MsgId, StateData) ->
 do_unsubscribe(?SN_NORMAL_TOPIC, TopicId, MsgId, StateData) ->
     proto_unsubscribe(TopicId, MsgId, StateData);
 do_unsubscribe(?SN_PREDEFINED_TOPIC, TopicId, MsgId, StateData=#state{client_id = ClientId}) ->
-    TopicValue =
-        case emq_sn_predefined_topics:get_max_predef_topic_id() < TopicId of
-            true ->
-                emq_sn_registry:lookup_topic(ClientId, TopicId);
-            false ->
-                emq_sn_predefined_topics:lookup_predef_topic(TopicId)
-        end,
-    case TopicValue of
+    case emq_sn_topic_manager:lookup_topic(ClientId, TopicId) of
         undefined ->
             send_message(?SN_UNSUBACK_MSG(MsgId), StateData#state.conn),
             next_state(connected, StateData);
@@ -724,14 +696,7 @@ do_publish(?SN_NORMAL_TOPIC, TopicId, Data, Flags, MsgId, StateData) ->
     do_publish(?SN_PREDEFINED_TOPIC, TopicId, Data, Flags, MsgId, StateData);
 do_publish(?SN_PREDEFINED_TOPIC, TopicId, Data, Flags, MsgId, StateData=#state{client_id = ClientId}) ->
     #mqtt_sn_flags{qos = Qos, dup = Dup, retain = Retain} = Flags,
-    case
-        case emq_sn_predefined_topics:get_max_predef_topic_id() < TopicId of
-            true ->
-                emq_sn_registry:lookup_topic(ClientId, TopicId);
-            _    ->
-                emq_sn_predefined_topics:lookup_predef_topic(TopicId)
-        end
-    of
+    case emq_sn_topic_manager:lookup_topic(ClientId, TopicId) of
         undefined ->
             (Qos =/= ?QOS0) andalso send_message(?SN_PUBACK_MSG(TopicId, MsgId, ?SN_RC_INVALID_TOPIC_ID), StateData#state.conn),
             next_state(connected, StateData);
@@ -741,7 +706,7 @@ do_publish(?SN_PREDEFINED_TOPIC, TopicId, Data, Flags, MsgId, StateData=#state{c
 do_publish(?SN_SHORT_TOPIC, TopicId, Data, Flags, MsgId, StateData) ->
     #mqtt_sn_flags{qos = Qos, dup = Dup, retain = Retain} = Flags,
     TopicName = <<TopicId:16>>,
-    case emq_sn_registry:wildcard(TopicName) of
+    case emq_sn_topic_manager:wildcard(TopicName) of
         true ->
             (Qos =/= ?QOS0) andalso send_message(?SN_PUBACK_MSG(TopicId, MsgId, ?SN_RC_NOT_SUPPORTED), StateData#state.conn),
             next_state(connected, StateData);
@@ -777,9 +742,11 @@ do_puback(TopicId, MsgId, ReturnCode, StateName, StateData=#state{client_id = Cl
                 {stop, Reason, Proto1} -> stop(Reason, StateData#state{protocol = Proto1})
             end;
         ?SN_RC_INVALID_TOPIC_ID ->
-            case emq_sn_registry:lookup_topic(ClientId, TopicId) of
+            case emq_sn_topic_manager:lookup_topic(ClientId, TopicId) of
                 undefined -> ok;
                 TopicName ->
+                    %%notice that this TopicName maybe normal or predefined,
+                    %% involving the predefined topic name in register to enhance the gateway's robustness even inconsistent with MQTT-SN protocols
                     send_register(TopicName, TopicId, MsgId, StateData#state.conn),
                     next_state(StateName, StateData)
             end;
@@ -844,14 +811,13 @@ publish_message_to_device(Msg, ClientId, StateData = #state{conn = Conn, protoco
         payload  = Payload} = emqttd_message:to_packet(Msg),
     MsgId = message_id(MsgId0),
     ?LOG(debug, "the TopicName of mqtt_message=~p~n", [TopicName], StateData),
-    case emq_sn_registry:lookup_topic_id(ClientId, TopicName) of
+    case emq_sn_topic_manager:lookup_topic_id(ClientId, TopicName) of
         undefined ->
             case byte_size(TopicName) of
                 2 ->
                     ?PROTO_SEND(Msg, ProtoState);
                 _ ->
-                    (emq_sn_predefined_topics:lookup_predef_topic_id(TopicName) =:= undefined) andalso
-                        register_and_notify_client(TopicName, Payload, Dup, Qos, Retain, MsgId, ClientId, Conn),
+                    register_and_notify_client(TopicName, Payload, Dup, Qos, Retain, MsgId, ClientId, Conn),
                     ?PROTO_SEND(Msg, ProtoState)
             end;
         _   ->
@@ -873,7 +839,7 @@ publish_asleep_messages_to_device(AsleepMsg, ClientId, StateData, Qos2Count) ->
     end.
 
 register_and_notify_client(TopicName, Payload, Dup, Qos, Retain, MsgId, ClientId, Conn) ->
-    TopicId = emq_sn_registry:register_topic(ClientId, TopicName),
+    TopicId = emq_sn_topic_manager:register_topic(ClientId, TopicName),
     ?LOG2(debug, "register TopicId=~p, TopicName=~p, Payload=~p, Dup=~p, Qos=~p, Retain=~p, MsgId=~p",
         [TopicId, TopicName, Payload, Dup, Qos, Retain, MsgId], Conn#connection.peer),
     send_register(TopicName, TopicId, MsgId, Conn).
