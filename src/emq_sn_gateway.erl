@@ -473,11 +473,11 @@ handle_info({suback, MsgId, [GrantedQos]}, StateName, StateData=#state{awaiting_
     send_message(?SN_SUBACK_MSG(Flags, TopicId, MsgId, ?SN_RC_ACCECPTED), StateData#state.conn),
     next_state(StateName, StateData#state{awaiting_suback = lists:delete({MsgId, TopicId}, Awaiting)});
 
-handle_info({'$gen_cast', [{subscribe, Topics}]}, StateName, StateData) ->
+handle_info({'$gen_cast', {subscribe, [Topics]}}, StateName, StateData) ->
     ?LOG(debug, "ignore subscribe Topics=~p", [Topics], StateData),
     {next_state, StateName, StateData};
 
-handle_info({'$gen_event', [{subscribe, Topics}]}, StateName, StateData) ->
+handle_info({subscribe, [Topics]}, StateName, StateData) ->
     ?LOG(debug, "ignore subscribe Topics=~p", [Topics], StateData),
     {next_state, StateName, StateData};
 
