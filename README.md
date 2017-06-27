@@ -13,6 +13,7 @@ mqtt.sn.port = 1884
 mqtt.sn.advertise_duration = 900
 mqtt.sn.gateway_id = 1
 mqtt.sn.enable_stats = off
+mqtt.sn.enable_qos3 = off
 mqtt.sn.predefined.topic.0 = reserved
 mqtt.sn.predefined.topic.1 = /predefined/topic/name/hello
 mqtt.sn.predefined.topic.2 = /predefined/topic/name/nice
@@ -28,6 +29,8 @@ mqtt.sn.password = abc
   * Gateway id in ADVERTISE message.
 - mqtt.sn.enable_stats
   * To control whether write statistics data into ETS table for dashbord to read.
+- mqtt.sn.enable_qos3
+  * To control whether accept and process the received publish message with qos=-1.
 - mqtt.sn.predefined.topic.N
   * The pre-defined topic name corresponding to the pre-defined topic id of N. Note that the pre-defined topic id of 0 is reserved.
 - mqtt.sn.username
