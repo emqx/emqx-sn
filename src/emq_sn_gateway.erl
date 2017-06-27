@@ -711,13 +711,7 @@ do_publish(?SN_NORMAL_TOPIC, TopicId, Data, Flags, MsgId, StateData) ->
     do_publish(?SN_PREDEFINED_TOPIC, TopicId, Data, Flags, MsgId, StateData);
 do_publish(?SN_PREDEFINED_TOPIC, TopicId, Data, Flags, MsgId, StateData=#state{client_id = ClientId}) ->
     #mqtt_sn_flags{qos = Qos, dup = Dup, retain = Retain} = Flags,
-    NewQos = case Qos =:= ?QOS_NEG1 of
-                 true  ->
-                     ?LOG(debug, "Receive a publish with Qos=-1", [], StateData),
-                     ?QOS0;
-                 false ->
-                     Qos
-             end,
+    NewQos = get_corrected_qos(Qos, StateData),
     case emq_sn_topic_manager:lookup_topic(ClientId, TopicId) of
         undefined ->
             (NewQos =/= ?QOS0) andalso send_message(?SN_PUBACK_MSG(TopicId, MsgId, ?SN_RC_INVALID_TOPIC_ID), StateData#state.conn),
@@ -727,13 +721,7 @@ do_publish(?SN_PREDEFINED_TOPIC, TopicId, Data, Flags, MsgId, StateData=#state{c
     end;
 do_publish(?SN_SHORT_TOPIC, TopicId, Data, Flags, MsgId, StateData) ->
     #mqtt_sn_flags{qos = Qos, dup = Dup, retain = Retain} = Flags,
-    NewQos = case Qos =:= ?QOS_NEG1 of
-                 true  ->
-                     ?LOG(debug, "Receive a publish with Qos=-1", [], StateData),
-                     ?QOS0;
-                 false ->
-                     Qos
-             end,
+    NewQos = get_corrected_qos(Qos, StateData),
     TopicName = <<TopicId:16>>,
     case emq_sn_topic_manager:wildcard(TopicName) of
         true ->
@@ -926,5 +914,13 @@ emit_stats(ClientId, #state{protocol=ProtoState, conn = #connection{socket = Soc
         socket_stats(Sock, ?SOCK_STATS)]),
     ?SET_CLIENT_STATS(ClientId, StatsList).
 
+get_corrected_qos(Qos, StateData) ->
+    case Qos =:= ?QOS_NEG1 of
+        true  ->
+            ?LOG(debug, "Receive a publish with Qos=-1", [], StateData),
+            ?QOS0;
+        false ->
+            Qos
+    end.
 
 
