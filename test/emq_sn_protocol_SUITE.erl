@@ -39,7 +39,7 @@
 -define(PREDEF_TOPIC_ID2, 2).
 -define(PREDEF_TOPIC_NAME1, <<"/predefined/topic/name/hello">>).
 -define(PREDEF_TOPIC_NAME2, <<"/predefined/topic/name/nice">>).
--define(ENABLE_QOS3, false).
+-define(ENABLE_QOS3, true).
 % FLAG NOT USED
 -define(FNU, 0).
 
