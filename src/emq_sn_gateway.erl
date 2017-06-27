@@ -914,13 +914,10 @@ emit_stats(ClientId, #state{protocol=ProtoState, conn = #connection{socket = Soc
         socket_stats(Sock, ?SOCK_STATS)]),
     ?SET_CLIENT_STATS(ClientId, StatsList).
 
-get_corrected_qos(Qos, StateData) ->
-    case Qos =:= ?QOS_NEG1 of
-        true  ->
-            ?LOG(debug, "Receive a publish with Qos=-1", [], StateData),
-            ?QOS0;
-        false ->
-            Qos
-    end.
+get_corrected_qos(?QOS_NEG1, StateData) ->
+    ?LOG(debug, "Receive a publish with Qos=-1", [], StateData),
+    ?QOS0;
 
+get_corrected_qos(Qos, _StateData) ->
+    Qos.
 
