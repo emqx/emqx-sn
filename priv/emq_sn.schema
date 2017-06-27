@@ -27,6 +27,10 @@
   {datatype, flag}
 ]}.
 
+{mapping, "mqtt.sn.enable_qos3", "emq_sn.enable_qos3", [
+  {datatype, flag}
+]}.
+
 {mapping, "mqtt.sn.predefined.topic.$id", "emq_sn.predefined", [
   {datatype, string}
 ]}.
