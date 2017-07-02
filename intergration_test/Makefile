@@ -21,7 +21,7 @@ PAHO_SRC  = paho.mqtt-sn.embedded-c/MQTTSNPacket/src/MQTTSNConnectClient.c      
 INCLUDE_PATH = -Ipaho.mqtt-sn.embedded-c/MQTTSNPacket/src -Ipaho.mqtt-sn.embedded-c/MQTTSNPacket/samples -Iclient
 			
 
-all:  clean_result $(RELX_CONF) $(PAHO_GIT) start_broker case1  stop_broker
+all:  clean_result $(RELX_CONF) $(PAHO_GIT) start_broker case4 case5 stop_broker disable_qos3
 	@echo "  "
 	@echo "  test complete"
 	@echo "  "
@@ -39,7 +39,9 @@ start_broker:
 	
 stop_broker:
 	emq-relx/_rel/emqttd/bin/emqttd stop
-	
+
+disable_qos3:
+	python ./disable_qos3.py
 
 case1:
 	-ps aux|grep case1_qos0pub|awk '{print $$2}'|xargs kill -9
@@ -49,6 +51,42 @@ case1:
 	client/case1_qos0sub.exe &
 	sleep 1
 	client/case1_qos0pub.exe
+
+case2:
+	-ps aux|grep case2_qos0pub|awk '{print $$2}'|xargs kill -9
+	-ps aux|grep case2_qos0sub|awk '{print $$2}'|xargs kill -9
+	gcc client/case2_qos0pub.c $(PAHO_SRC) $(INCLUDE_PATH) -o client/case2_qos0pub.exe
+	gcc client/case2_qos0sub.c $(PAHO_SRC) $(INCLUDE_PATH) -o client/case2_qos0sub.exe
+	client/case2_qos0sub.exe &
+	sleep 1
+	client/case2_qos0pub.exe
+
+case3:
+	-ps aux|grep case3_qos0pub|awk '{print $$2}'|xargs kill -9
+	-ps aux|grep case3_qos0sub|awk '{print $$2}'|xargs kill -9
+	gcc client/case3_qos0pub.c $(PAHO_SRC) $(INCLUDE_PATH) -o client/case3_qos0pub.exe
+	gcc client/case3_qos0sub.c $(PAHO_SRC) $(INCLUDE_PATH) -o client/case3_qos0sub.exe
+	client/case3_qos0sub.exe &
+	sleep 1
+	client/case3_qos0pub.exe
+
+case4:
+	-ps aux|grep case4_qos3pub|awk '{print $$2}'|xargs kill -9
+	-ps aux|grep case4_qos3sub|awk '{print $$2}'|xargs kill -9
+	gcc client/case4_qos3pub.c $(PAHO_SRC) $(INCLUDE_PATH) -o client/case4_qos3pub.exe
+	gcc client/case4_qos3sub.c $(PAHO_SRC) $(INCLUDE_PATH) -o client/case4_qos3sub.exe
+	client/case4_qos3sub.exe &
+	sleep 1
+	client/case4_qos3pub.exe
+
+case5:
+	-ps aux|grep case5_qos3pub|awk '{print $$2}'|xargs kill -9
+	-ps aux|grep case5_qos3sub|awk '{print $$2}'|xargs kill -9
+	gcc client/case5_qos3pub.c $(PAHO_SRC) $(INCLUDE_PATH) -o client/case5_qos3pub.exe
+	gcc client/case5_qos3sub.c $(PAHO_SRC) $(INCLUDE_PATH) -o client/case5_qos3sub.exe
+	client/case5_qos3sub.exe &
+	sleep 1
+	client/case5_qos3pub.exe
 	
 	
 	
@@ -92,6 +130,7 @@ rebuild_emq:
 	cp -rf ../priv     emq-relx/deps/emq_sn/
 	cp -rf ../src      emq-relx/deps/emq_sn/
 	cp -rf ../Makefile emq-relx/deps/emq_sn/Makefile
+	python ./enable_qos3.py
 	make -C emq-relx -f Makefile
 	
 	

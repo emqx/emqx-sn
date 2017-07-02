@@ -16,8 +16,6 @@
 
 -module(emq_sn_message_SUITE).
 
--author("Feng Lee <feng@emqtt.io>").
-
 -include_lib("eunit/include/eunit.hrl").
 -include("emq_sn.hrl").
 
