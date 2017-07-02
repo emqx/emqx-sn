@@ -54,6 +54,8 @@
 -define(SN_RC_INVALID_TOPIC_ID, 16#02).
 -define(SN_RC_NOT_SUPPORTED,    16#03).
 
+-define(QOS_NEG1, 3).
+
 -type(mqtt_sn_return_code() :: ?SN_RC_ACCECPTED .. ?SN_RC_NOT_SUPPORTED).
 
 %%--------------------------------------------------------------------

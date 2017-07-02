@@ -20,28 +20,32 @@
 
 -behaviour(supervisor).
 
--export([start_link/3, init/1]).
+-export([start_link/5, init/1]).
 
 -define(CHILD(I), {I, {I, start_link, []}, permanent, 5000, worker, [I]}).
 
-start_link(Listener, Duration, GwId) ->
-	supervisor:start_link({local, ?MODULE}, ?MODULE, [Listener, Duration, GwId]).
+start_link(Listener, Duration, GwId, EnableStats, PredefTopicList) ->
+	supervisor:start_link({local, ?MODULE}, ?MODULE, [Listener, Duration, GwId, EnableStats, PredefTopicList]).
 
-init([{Port, Opts}, Duration, GwId]) ->
+init([{Port, Opts}, Duration, GwId, EnableStats, PredefTopicList]) ->
 
     BcSrv = {emq_sn_broadcast,
                 {emq_sn_broadcast, start_link, [[Duration, GwId]]},
                     permanent, brutal_kill, worker, [emq_sn_broadcast]},
 
     GwSup = {emq_sn_gateway_sup,
-              {emq_sn_gateway_sup, start_link, []},
-                permanent, infinity, supervisor, [emq_sn_gateway_sup]},
+                {emq_sn_gateway_sup, start_link, []},
+                    permanent, infinity, supervisor, [emq_sn_gateway_sup]},
 
-    MFA = {emq_sn_gateway_sup, start_gateway, [GwId]},
+    MFA = {emq_sn_gateway_sup, start_gateway, [GwId, EnableStats]},
 
     UdpSrv = {emq_sn_udp_server,
-               {esockd_udp, server, [mqtt_sn, Port, Opts, MFA]},
-                 permanent, 5000, worker, [esockd_udp]},
+                 {esockd_udp, server, [mqtt_sn, Port, Opts, MFA]},
+                     permanent, 5000, worker, [esockd_udp]},
 
-    {ok, { {one_for_all, 10, 3600}, [BcSrv, ?CHILD(emq_sn_registry), GwSup, UdpSrv] }}.
+    PreDefTopics = {emq_sn_predefined_topics,
+                       {emq_sn_predefined_topics, start_link, [PredefTopicList]},
+                           permanent, 5000, worker, [emq_sn_predefined_topics]},
+
+    {ok, { {one_for_all, 10, 3600}, [BcSrv, ?CHILD(emq_sn_normal_topics), GwSup, UdpSrv, PreDefTopics] }}.
 
