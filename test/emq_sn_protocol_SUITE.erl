@@ -34,19 +34,22 @@
 -define(LOG(Format, Args),
     lager:debug("TEST SUITE: " ++ Format, Args)).
 
-% FLAG NOT USED
--define(FNU, 0).
 -define(MAX_PRED_TOPIC_ID, 2).
 -define(PREDEF_TOPIC_ID1, 1).
 -define(PREDEF_TOPIC_ID2, 2).
 -define(PREDEF_TOPIC_NAME1, <<"/predefined/topic/name/hello">>).
 -define(PREDEF_TOPIC_NAME2, <<"/predefined/topic/name/nice">>).
+-define(ENABLE_QOS3, true).
+% FLAG NOT USED
+-define(FNU, 0).
+
 all() -> [
     subscribe_test, subscribe_test1, subscribe_test2, subscribe_test3, subscribe_test4,
     subscribe_test10, subscribe_test11, subscribe_test12, subscribe_test13,
     publish_qos0_test1, publish_qos0_test2, publish_qos0_test3, publish_qos0_test4, publish_qos0_test5, publish_qos0_test6,
     publish_qos1_test1, publish_qos1_test2, publish_qos1_test3, publish_qos1_test4, publish_qos1_test5, publish_qos1_test6,
     publish_qos2_test1, publish_qos2_test2, publish_qos2_test3,
+    publish_negqos_test1,
     will_test1, will_test2, will_test3, will_test4, will_test5,
     broadcast_test1,
     asleep_test01_timeout, asleep_test02_to_awake_and_back,
@@ -67,6 +70,7 @@ end_per_suite(_Config) ->
 
 init_per_testcase(_TestCase, Config) ->
     %application:set_env(emq_sn, advertise_duration, 2),
+    application:set_env(emq_sn, enable_qos3, ?ENABLE_QOS3),
     application:set_env(emq_sn, enable_stats, true),
     application:set_env(emq_sn, username, <<"user1">>),
     application:set_env(emq_sn, password, <<"pw123">>),
@@ -394,6 +398,48 @@ subscribe_test13(_Config) ->
     ?assertEqual(<<8, ?SN_SUBACK, Dup:1, Qos:2, Retain:1, Will:1, CleanSession:1, ?SN_NORMAL_TOPIC:2, ?SN_INVALID_TOPIC_ID:16, MsgId:16, ?SN_RC_INVALID_TOPIC_ID>>,
         receive_response(Socket)),
     ?assertEqual(undefined, test_mqtt_broker:get_subscrbied_topic()),
+
+    send_disconnect_msg(Socket, undefined),
+    ?assertEqual(<<2, ?SN_DISCONNECT>>, receive_response(Socket)),
+    gen_udp:close(Socket),
+    test_mqtt_broker:stop().
+
+
+publish_negqos_test1(_Config) ->
+    test_mqtt_broker:start_link(),
+    Dup = 0,
+    Qos = 0,
+    NegQos = 3,
+    Retain = 0,
+    Will = 0,
+    CleanSession = 0,
+    MsgId = 1,
+    TopicId1 = ?MAX_PRED_TOPIC_ID + 1,
+    {ok, Socket} = gen_udp:open(0, [binary]),
+    send_connect_msg(Socket, <<"test">>),
+    ?assertEqual(<<3, ?SN_CONNACK, 0>>, receive_response(Socket)),
+
+    Topic = <<"abc">>,
+    send_subscribe_msg_normal_topic(Socket, Qos, Topic, MsgId),
+    ?assertEqual(<<8, ?SN_SUBACK, Dup:1, Qos:2, Retain:1, Will:1, CleanSession:1, ?SN_NORMAL_TOPIC:2, TopicId1:16, MsgId:16, ?SN_RC_ACCECPTED>>,
+        receive_response(Socket)),
+    ?assertEqual(Topic, test_mqtt_broker:get_subscrbied_topic()),
+
+    MsgId1 = 3,
+    RetainFalse = false,
+    Payload1 = <<20, 21, 22, 23>>,
+    send_publish_msg_normal_topic(Socket, NegQos, MsgId1, TopicId1, Payload1),
+    timer:sleep(100),
+    case ?ENABLE_QOS3 of
+        true  ->
+            ?assertEqual({MsgId1, Qos, RetainFalse, Topic, Payload1}, test_mqtt_broker:get_published_msg()),
+            test_mqtt_broker:dispatch(MsgId1, Qos, RetainFalse, Topic, Payload1),
+            Eexp = <<11, ?SN_PUBLISH, Dup:1, Qos:2, Retain:1, Will:1, CleanSession:1, ?SN_NORMAL_TOPIC:2, TopicId1:16, (mid(0)):16, <<20, 21, 22, 23>>/binary>>,
+            What = receive_response(Socket),
+            ?assertEqual(Eexp, What);
+        false ->
+            ?assertEqual({undefined, undefined, undefined, undefined, undefined}, test_mqtt_broker:get_published_msg())
+    end,
 
     send_disconnect_msg(Socket, undefined),
     ?assertEqual(<<2, ?SN_DISCONNECT>>, receive_response(Socket)),

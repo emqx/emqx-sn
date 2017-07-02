@@ -64,7 +64,8 @@
                 idle_timer = undefined      :: term(),
                 asleep_timer                :: tuple(),
                 asleep_msg_queue            :: term(),
-                enable_stats                :: boolean()}).
+                enable_stats                :: boolean(),
+                enable_qos3 = false         :: boolean()}).
 
 -define(LOG(Level, Format, Args, State),
             lager:Level("MQTT-SN(~s): " ++ Format,
@@ -94,6 +95,7 @@
 -endif.
 
 -define(SOCK_STATS, [recv_oct, recv_cnt, send_oct, send_cnt, send_pend]).
+-define(NEG_QOS_CLIENT_ID, <<"NegQos-Client">>).
 %%--------------------------------------------------------------------
 %% Exported APIs
 %%--------------------------------------------------------------------
@@ -128,7 +130,8 @@ init([Sock, Peer, GwId, EnableStats]) ->
                    protocol = ProtoState,
                    asleep_timer = emq_sn_asleep_timer:init(),
                    asleep_msg_queue = queue:new(),
-                   enable_stats = EnableStats},
+                   enable_stats = EnableStats,
+                   enable_qos3 = application:get_env(?APP, enable_qos3, false)},
     {ok, idle, State, 3000}.
 
 
@@ -170,6 +173,21 @@ idle(?SN_ADVERTISE_MSG(_GwId, _Radius), StateData) ->
 
 idle(?SN_DISCONNECT_MSG(_Duration), StateData) ->
     % ignore
+    {next_state, idle, StateData};
+
+idle(?SN_PUBLISH_MSG(_Flag, _TopicId, _MsgId, _Data), StateData = #state{enable_qos3 = false}) ->
+    ?LOG(debug, "The enable_qos3 is false, ignore the received publish with Qos=-1 in idle mode!", [], StateData),
+    {next_state, idle, StateData};
+
+idle(?SN_PUBLISH_MSG(#mqtt_sn_flags{qos = ?QOS_NEG1, topic_id_type = TopicIdType}, TopicId, _MsgId, Data), StateData = #state{client_id = ClientId}) ->
+    TopicName = case (TopicIdType =:= ?SN_SHORT_TOPIC) of
+                    false ->
+                        emq_sn_topic_manager:lookup_topic(ClientId, TopicId);
+                    true  ->
+                        <<TopicId:16>>
+                end,
+    (TopicName =/= undefined) andalso emqttd_server:publish(emqttd_message:make({?NEG_QOS_CLIENT_ID, application:get_env(?APP, username, undefined)}, ?QOS_0, TopicName, Data)),
+    ?LOG(debug, "Client id=~p receives a publish with Qos=-1 in idle mode!", [ClientId], StateData),
     {next_state, idle, StateData};
 
 idle(Event, StateData) ->
@@ -232,9 +250,16 @@ connected(?SN_REGISTER_MSG(_TopicId, MsgId, TopicName), StateData = #state{clien
     end,
     {next_state, connected, StateData};
 
-connected(?SN_PUBLISH_MSG(Flags, TopicId, MsgId, Data), StateData) ->
-    #mqtt_sn_flags{topic_id_type = TopicIdType} = Flags,
-    do_publish(TopicIdType, TopicId, Data, Flags, MsgId, StateData);
+connected(?SN_PUBLISH_MSG(Flags, TopicId, MsgId, Data), StateData = #state{enable_qos3 = EnableQos3}) ->
+    #mqtt_sn_flags{topic_id_type = TopicIdType, qos = Qos} = Flags,
+    Skip = (EnableQos3 =:= false) andalso (Qos =:= ?QOS_NEG1),
+    case Skip of
+        true  ->
+            ?LOG(debug, "The enable_qos3 is false, ignore the received publish with Qos=-1 in connected mode!", [], StateData),
+            next_state(connected, StateData);
+        false ->
+            do_publish(TopicIdType, TopicId, Data, Flags, MsgId, StateData)
+    end;
 
 connected(?SN_PUBACK_MSG(TopicId, MsgId, ReturnCode), StateData) ->
     do_puback(TopicId, MsgId, ReturnCode, connected, StateData);
@@ -369,19 +394,6 @@ awake(Event, _From, StateData) ->
     ?LOG(error, "UNEXPECTED Event: ~p", [Event], StateData),
     {reply, ignored, awake, StateData}.
 
-emit_stats(StateData=#state{protocol=ProtoState}) ->
-    emit_stats(?PROTO_GET_CLIENT_ID(ProtoState), StateData).
-
-emit_stats(_ClientId, State = #state{enable_stats = false}) ->
-    ?LOG(debug, "The enable_stats is false, skip emit_state~n", [], State),
-    State;
-
-emit_stats(ClientId, #state{protocol=ProtoState, conn = #connection{socket = Sock}}) ->
-    StatsList = lists:append([emqttd_misc:proc_stats(),
-        ?PROTO_STATS(ProtoState),
-        socket_stats(Sock, ?SOCK_STATS)]),
-    ?SET_CLIENT_STATS(ClientId, StatsList).
-
 socket_stats(Sock, Stats) when is_port(Sock), is_list(Stats)->
     inet:getstat(Sock, Stats).
 
@@ -473,7 +485,11 @@ handle_info({suback, MsgId, [GrantedQos]}, StateName, StateData=#state{awaiting_
     send_message(?SN_SUBACK_MSG(Flags, TopicId, MsgId, ?SN_RC_ACCECPTED), StateData#state.conn),
     next_state(StateName, StateData#state{awaiting_suback = lists:delete({MsgId, TopicId}, Awaiting)});
 
-handle_info({'$gen_cast', {subscribe, Topics}}, StateName, StateData) ->
+handle_info({'$gen_cast', {subscribe, [Topics]}}, StateName, StateData) ->
+    ?LOG(debug, "ignore subscribe Topics=~p", [Topics], StateData),
+    {next_state, StateName, StateData};
+
+handle_info({subscribe, [Topics]}, StateName, StateData) ->
     ?LOG(debug, "ignore subscribe Topics=~p", [Topics], StateData),
     {next_state, StateName, StateData};
 
@@ -695,22 +711,24 @@ do_publish(?SN_NORMAL_TOPIC, TopicId, Data, Flags, MsgId, StateData) ->
     do_publish(?SN_PREDEFINED_TOPIC, TopicId, Data, Flags, MsgId, StateData);
 do_publish(?SN_PREDEFINED_TOPIC, TopicId, Data, Flags, MsgId, StateData=#state{client_id = ClientId}) ->
     #mqtt_sn_flags{qos = Qos, dup = Dup, retain = Retain} = Flags,
+    NewQos = get_corrected_qos(Qos, StateData),
     case emq_sn_topic_manager:lookup_topic(ClientId, TopicId) of
         undefined ->
-            (Qos =/= ?QOS0) andalso send_message(?SN_PUBACK_MSG(TopicId, MsgId, ?SN_RC_INVALID_TOPIC_ID), StateData#state.conn),
+            (NewQos =/= ?QOS0) andalso send_message(?SN_PUBACK_MSG(TopicId, MsgId, ?SN_RC_INVALID_TOPIC_ID), StateData#state.conn),
             next_state(connected, StateData);
         TopicName ->
-            proto_publish(TopicName, Data, Dup, Qos, Retain, MsgId, TopicId, StateData)
+            proto_publish(TopicName, Data, Dup, NewQos, Retain, MsgId, TopicId, StateData)
     end;
 do_publish(?SN_SHORT_TOPIC, TopicId, Data, Flags, MsgId, StateData) ->
     #mqtt_sn_flags{qos = Qos, dup = Dup, retain = Retain} = Flags,
+    NewQos = get_corrected_qos(Qos, StateData),
     TopicName = <<TopicId:16>>,
     case emq_sn_topic_manager:wildcard(TopicName) of
         true ->
-            (Qos =/= ?QOS0) andalso send_message(?SN_PUBACK_MSG(TopicId, MsgId, ?SN_RC_NOT_SUPPORTED), StateData#state.conn),
+            (NewQos =/= ?QOS0) andalso send_message(?SN_PUBACK_MSG(TopicId, MsgId, ?SN_RC_NOT_SUPPORTED), StateData#state.conn),
             next_state(connected, StateData);
         false ->
-            proto_publish(TopicName, Data, Dup, Qos, Retain, MsgId, TopicId, StateData)
+            proto_publish(TopicName, Data, Dup, NewQos, Retain, MsgId, TopicId, StateData)
     end;
 do_publish(_, TopicId, _Data, #mqtt_sn_flags{qos = Qos}, MsgId, StateData) ->
     (Qos =/= ?QOS0) andalso send_message(?SN_PUBACK_MSG(TopicId, MsgId, ?SN_RC_NOT_SUPPORTED), StateData#state.conn),
@@ -883,4 +901,23 @@ is_qos2_msg(#mqtt_message{qos = 2})->
 is_qos2_msg(#mqtt_message{})->
     false.
 
+emit_stats(StateData=#state{protocol=ProtoState}) ->
+    emit_stats(?PROTO_GET_CLIENT_ID(ProtoState), StateData).
+
+emit_stats(_ClientId, State = #state{enable_stats = false}) ->
+    ?LOG(debug, "The enable_stats is false, skip emit_state~n", [], State),
+    State;
+
+emit_stats(ClientId, #state{protocol=ProtoState, conn = #connection{socket = Sock}}) ->
+    StatsList = lists:append([emqttd_misc:proc_stats(),
+        ?PROTO_STATS(ProtoState),
+        socket_stats(Sock, ?SOCK_STATS)]),
+    ?SET_CLIENT_STATS(ClientId, StatsList).
+
+get_corrected_qos(?QOS_NEG1, StateData) ->
+    ?LOG(debug, "Receive a publish with Qos=-1", [], StateData),
+    ?QOS0;
+
+get_corrected_qos(Qos, _StateData) ->
+    Qos.
 
