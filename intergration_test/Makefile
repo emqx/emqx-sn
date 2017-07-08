@@ -21,7 +21,7 @@ PAHO_SRC  = paho.mqtt-sn.embedded-c/MQTTSNPacket/src/MQTTSNConnectClient.c      
 INCLUDE_PATH = -Ipaho.mqtt-sn.embedded-c/MQTTSNPacket/src -Ipaho.mqtt-sn.embedded-c/MQTTSNPacket/samples -Iclient
 			
 
-all:  clean_result $(RELX_CONF) $(PAHO_GIT) start_broker case4 case5 stop_broker disable_qos3
+all:  clean_result $(RELX_CONF) $(PAHO_GIT) start_broker case1 case2 case3 case4 case5 stop_broker disable_qos3
 	@echo "  "
 	@echo "  test complete"
 	@echo "  "
@@ -108,6 +108,7 @@ $(RELX_CONF):
 	cp -rf ../Makefile emq_sn/Makefile
 	-mkdir emq-relx/deps
 	mv emq_sn  emq-relx/deps/
+	python ./enable_qos3.py
 	@echo "start building ..."
 	make -C emq-relx -f Makefile
 	
