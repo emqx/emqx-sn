@@ -1,18 +1,18 @@
-%%--------------------------------------------------------------------
-%% Copyright (c) 2016-2017 Feng Lee <feng@emqtt.io>. All Rights Reserved.
-%%
-%% Licensed under the Apache License, Version 2.0 (the "License");
-%% you may not use this file except in compliance with the License.
-%% You may obtain a copy of the License at
-%%
-%%     http://www.apache.org/licenses/LICENSE-2.0
-%%
-%% Unless required by applicable law or agreed to in writing, software
-%% distributed under the License is distributed on an "AS IS" BASIS,
-%% WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-%% See the License for the specific language governing permissions and
-%% limitations under the License.
-%%--------------------------------------------------------------------
+%%%-------------------------------------------------------------------
+%%% Copyright (c) 2013-2017 EMQ Enterprise, Inc. (http://emqtt.io)
+%%%
+%%% Licensed under the Apache License, Version 2.0 (the "License");
+%%% you may not use this file except in compliance with the License.
+%%% You may obtain a copy of the License at
+%%%
+%%%     http://www.apache.org/licenses/LICENSE-2.0
+%%%
+%%% Unless required by applicable law or agreed to in writing, software
+%%% distributed under the License is distributed on an "AS IS" BASIS,
+%%% WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+%%% See the License for the specific language governing permissions and
+%%% limitations under the License.
+%%%-------------------------------------------------------------------
 
 -module(emq_sn_message).
 
@@ -20,7 +20,7 @@
 
 -include("emq_sn.hrl").
 
--export([parse/1, serialize/1, message_type/1]).
+-export([parse/1, serialize/1, message_type/1, format/1]).
 
 -define(flag,  1/binary).
 -define(byte,  8/big-integer).
@@ -156,8 +156,14 @@ serialize(?SN_REGISTER, {TopicId, MsgId, TopicName}) ->
     <<TopicId:?short, MsgId:?short, TopicName/binary>>;
 serialize(?SN_REGACK, {TopicId, MsgId, ReturnCode}) ->
     <<TopicId:?short, MsgId:?short, ReturnCode>>;
-serialize(?SN_PUBLISH, {Flags, TopicId, MsgId, Data}) ->
+%serialize(?SN_PUBLISH, {Flags, TopicId, MsgId, Data}) ->
+%    <<(serialize_flags(Flags))/binary, TopicId/binary, MsgId:?short, Data/binary>>;
+serialize(?SN_PUBLISH, {Flags=#mqtt_sn_flags{topic_id_type = ?SN_NORMAL_TOPIC}, TopicId, MsgId, Data}) ->
     <<(serialize_flags(Flags))/binary, TopicId:?short, MsgId:?short, Data/binary>>;
+serialize(?SN_PUBLISH, {Flags=#mqtt_sn_flags{topic_id_type = ?SN_PREDEFINED_TOPIC}, TopicId, MsgId, Data}) ->
+    <<(serialize_flags(Flags))/binary, TopicId:?short, MsgId:?short, Data/binary>>;
+serialize(?SN_PUBLISH, {Flags=#mqtt_sn_flags{topic_id_type = ?SN_SHORT_TOPIC}, TopicId, MsgId, Data}) ->
+    <<(serialize_flags(Flags))/binary, TopicId:2/binary, MsgId:?short, Data/binary>>;
 serialize(?SN_PUBACK, {TopicId, MsgId, ReturnCode}) ->
     <<TopicId:?short, MsgId:?short, ReturnCode>>;
 serialize(PubRec, MsgId) when PubRec == ?SN_PUBREC; PubRec == ?SN_PUBREL; PubRec == ?SN_PUBCOMP ->
@@ -263,3 +269,48 @@ message_type(16#1d) ->
     "SN_WILLMSGRESP";
 message_type(Type) ->
     io_lib:format("Unknown Type ~p", [Type]).
+
+
+
+
+
+
+format(?SN_PUBLISH_MSG(Flags, TopicId, MsgId, Data)) ->
+    lists:flatten(io_lib:format("mqtt_sn_message SN_PUBLISH, ~p, TopicId=~w, MsgId=~w, Payload=~w",
+        [format_flag(Flags), TopicId, MsgId, Data]));
+format(?SN_PUBACK_MSG(Flags, MsgId, ReturnCode)) ->
+    lists:flatten(io_lib:format("mqtt_sn_message SN_PUBACK, ~p, MsgId=~w, ReturnCode=~w",
+        [format_flag(Flags), MsgId, ReturnCode]));
+format(?SN_PUBREC_MSG(?SN_PUBCOMP, MsgId)) ->
+    lists:flatten(io_lib:format("mqtt_sn_message SN_PUBCOMP, MsgId=~w", [MsgId]));
+format(?SN_PUBREC_MSG(?SN_PUBREC, MsgId)) ->
+    lists:flatten(io_lib:format("mqtt_sn_message SN_PUBREC, MsgId=~w", [MsgId]));
+format(?SN_PUBREC_MSG(?SN_PUBREL, MsgId)) ->
+    lists:flatten(io_lib:format("mqtt_sn_message SN_PUBREL, MsgId=~w", [MsgId]));
+format(?SN_SUBSCRIBE_MSG(Flags, Msgid, Topic)) ->
+    lists:flatten(io_lib:format("mqtt_sn_message SN_SUBSCRIBE, ~p, MsgId=~w, TopicId=~w",
+        [format_flag(Flags), Msgid, Topic]));
+format(?SN_SUBACK_MSG(Flags, TopicId, MsgId, ReturnCode)) ->
+    lists:flatten(io_lib:format("mqtt_sn_message SN_SUBACK, ~p, MsgId=~w, TopicId=~w, ReturnCode=~w",
+        [format_flag(Flags), MsgId, TopicId, ReturnCode]));
+format(?SN_UNSUBSCRIBE_MSG(Flags, Msgid, Topic)) ->
+    lists:flatten(io_lib:format("mqtt_sn_message SN_UNSUBSCRIBE, ~p, MsgId=~w, TopicId=~w",
+        [format_flag(Flags), Msgid, Topic]));
+format(?SN_UNSUBACK_MSG(MsgId)) ->
+    lists:flatten(io_lib:format("mqtt_sn_message SN_UNSUBACK, MsgId=~w", [MsgId]));
+format(?SN_REGISTER_MSG(TopicId, MsgId, TopicName)) ->
+    lists:flatten(io_lib:format("mqtt_sn_message SN_REGISTER, TopicId=~w, MsgId=~w, TopicName=~w",
+        [TopicId, MsgId, TopicName]));
+format(?SN_REGACK_MSG(TopicId, MsgId, ReturnCode)) ->
+    lists:flatten(io_lib:format("mqtt_sn_message SN_REGACK, TopicId=~w, MsgId=~w, ReturnCode=~w",
+        [TopicId, MsgId, ReturnCode]));
+format(#mqtt_sn_message{type = Type, variable = Var}) ->
+    lists:flatten(io_lib:format("mqtt_sn_message type=~s, Var=~w", [emq_sn_message:message_type(Type), Var])).
+
+
+format_flag(#mqtt_sn_flags{dup = Dup, qos = Qos, retain = Retain, will = Will, clean_session = CleanSession, topic_id_type = TopicType}) ->
+    lists:flatten(io_lib:format("mqtt_sn_flags{dup=~p, qos=~p, retain=~p, will=~p, clean_session=~p, topic_id_type=~p}", [Dup, Qos, Retain, Will, CleanSession, TopicType]));
+format_flag(_Flag) ->
+    "invalid flag".
+
+

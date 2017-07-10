@@ -23,6 +23,17 @@
   {datatype, string}
 ]}.
 
+{mapping, "mqtt.sn.enable_stats", "emq_sn.enable_stats", [
+  {datatype, flag}
+]}.
+
+{mapping, "mqtt.sn.enable_qos3", "emq_sn.enable_qos3", [
+  {datatype, flag}
+]}.
+
+{mapping, "mqtt.sn.predefined.topic.$id", "emq_sn.predefined", [
+  {datatype, string}
+]}.
 
 {translation, "emq_sn.listener", fun(Conf) ->
   Port = cuttlefish:conf_get("mqtt.sn.port", Conf),
@@ -38,5 +49,10 @@ end}.
 {translation, "emq_sn.password", fun(Conf) ->
   Password = cuttlefish:conf_get("mqtt.sn.password", Conf),
   list_to_binary(Password)
+end}.
+
+{translation, "emq_sn.predefined", fun(Conf) ->
+    List = cuttlefish_variable:filter_by_prefix("mqtt.sn.predefined.topic", Conf),
+    TopicIdList = lists:sort([{list_to_integer(I), iolist_to_binary(TopicName)} || {["mqtt", "sn", "predefined", "topic", I], TopicName} <- List, I =/= "0"])
 end}.
 

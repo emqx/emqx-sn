@@ -1,18 +1,19 @@
-%%--------------------------------------------------------------------
-%% Copyright (c) 2012-2016 Feng Lee <feng@emqtt.io>.
-%%
-%% Licensed under the Apache License, Version 2.0 (the "License");
-%% you may not use this file except in compliance with the License.
-%% You may obtain a copy of the License at
-%%
-%%     http://www.apache.org/licenses/LICENSE-2.0
-%%
-%% Unless required by applicable law or agreed to in writing, software
-%% distributed under the License is distributed on an "AS IS" BASIS,
-%% WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-%% See the License for the specific language governing permissions and
-%% limitations under the License.
-%%--------------------------------------------------------------------
+%%%-------------------------------------------------------------------
+%%% Copyright (c) 2013-2017 EMQ Enterprise, Inc. (http://emqtt.io)
+%%%
+%%% Licensed under the Apache License, Version 2.0 (the "License");
+%%% you may not use this file except in compliance with the License.
+%%% You may obtain a copy of the License at
+%%%
+%%%     http://www.apache.org/licenses/LICENSE-2.0
+%%%
+%%% Unless required by applicable law or agreed to in writing, software
+%%% distributed under the License is distributed on an "AS IS" BASIS,
+%%% WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+%%% See the License for the specific language governing permissions and
+%%% limitations under the License.
+%%%-------------------------------------------------------------------
+
 
 %%--------------------------------------------------------------------
 %% MQTT-SN MsgTypes
@@ -52,6 +53,8 @@
 -define(SN_RC_CONGESTION,       16#01).
 -define(SN_RC_INVALID_TOPIC_ID, 16#02).
 -define(SN_RC_NOT_SUPPORTED,    16#03).
+
+-define(QOS_NEG1, 3).
 
 -type(mqtt_sn_return_code() :: ?SN_RC_ACCECPTED .. ?SN_RC_NOT_SUPPORTED).
 
