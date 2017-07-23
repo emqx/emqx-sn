@@ -444,8 +444,8 @@ handle_info({keepalive, start, Interval}, StateName, StateData = #state{conn = C
             shutdown(Error, StateData)
     end;
 
-handle_info(do_awake_jobs, StateName, StateData=#state{client_id = ClientId, asleep_msg_queue = AsleepMsgQue}) ->
-    NewStateData = process_awake_jobs(AsleepMsgQue, ClientId, StateData),
+handle_info(do_awake_jobs, StateName, StateData=#state{client_id = ClientId}) ->
+    NewStateData = process_awake_jobs(ClientId, StateData),
     case StateName of
         awake -> goto_asleep_state(NewStateData, undefined);
         Other -> next_state(Other, NewStateData) % device send a CONNECT immediately before this do_awake_jobs is handled
@@ -841,16 +841,16 @@ publish_message_to_device(Msg, ClientId, StateData = #state{conn = Conn, protoco
             ?PROTO_SEND(Msg, ProtoState)
     end.
 
-publish_asleep_messages_to_device(AsleepMsg, ClientId, StateData, Qos2Count) ->
-    case queue:is_empty(AsleepMsg) of
+publish_asleep_messages_to_device(ClientId, StateData=#state{asleep_msg_queue = AsleepMsgQueue}, Qos2Count) ->
+    case queue:is_empty(AsleepMsgQueue) of
         false ->
-            Msg = queue:get(AsleepMsg),
+            Msg = queue:get(AsleepMsgQueue),
             {ok, NewProtoState} = publish_message_to_device(Msg, ClientId, StateData),
             NewCount = case is_qos2_msg(Msg) of
                            true -> Qos2Count + 1;
                            false -> Qos2Count
                        end,
-            publish_asleep_messages_to_device(queue:drop(AsleepMsg), ClientId, StateData#state{protocol = NewProtoState}, NewCount);
+            publish_asleep_messages_to_device(ClientId, StateData#state{protocol = NewProtoState, asleep_msg_queue = queue:drop(AsleepMsgQueue)}, NewCount);
         true  ->
             {Qos2Count, StateData}
     end.
@@ -881,8 +881,8 @@ start_idle_timer() ->
     erlang:send_after(timer:seconds(10), self(), idle_timeout).
 
 
-process_awake_jobs(AsleepMsg, ClientId, StateData=#state{conn = Conn}) ->
-    {_, NewStateData} = publish_asleep_messages_to_device(AsleepMsg, ClientId, StateData, 0),
+process_awake_jobs(ClientId, StateData=#state{conn = Conn}) ->
+    {_, NewStateData} = publish_asleep_messages_to_device(ClientId, StateData, 0),
     %% TODO: what about publishing qos2 messages? wait more time for pubrec & pubcomp from device?
     %%       or ask device to go connected state?
     send_pingresp(Conn),

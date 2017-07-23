@@ -55,7 +55,7 @@ all() -> [
     asleep_test01_timeout, asleep_test02_to_awake_and_back,
     asleep_test03_to_awake_qos1_dl_msg, asleep_test04_to_awake_qos1_dl_msg, asleep_test05_to_awake_qos1_dl_msg,
     asleep_test06_to_awake_qos2_dl_msg,
-    asleep_test07_to_connected, asleep_test08_to_disconnected,
+    asleep_test07_to_connected, asleep_test08_to_disconnected, asleep_test09_to_awake_again_qos1_dl_msg,
     awake_test01_to_connected, awake_test02_to_disconnected,
     handle_emit_stats_test
 ].
@@ -1560,7 +1560,93 @@ asleep_test08_to_disconnected(_Config) ->
     gen_udp:close(Socket),
     test_mqtt_broker:stop().
 
+asleep_test09_to_awake_again_qos1_dl_msg(_Config) ->
+    test_mqtt_broker:start_link(),
+    Qos = 1,
+    Duration = 1,
+    WillTopic = <<"dead">>,
+    WillPayload = <<10, 11, 12, 13, 14>>,
+    WillRetain = false,
+    {ok, Socket} = gen_udp:open(0, [binary]),
+    ClientId = <<"test">>,
+    send_connect_msg_with_will(Socket, Duration, ClientId),
+    ?assertEqual(<<2, ?SN_WILLTOPICREQ>>, receive_response(Socket)),
+    send_willtopic_msg(Socket, WillTopic, Qos),
+    ?assertEqual(<<2, ?SN_WILLMSGREQ>>, receive_response(Socket)),
+    send_willmsg_msg(Socket, WillPayload),
+    ?assertEqual(<<3, ?SN_CONNACK, 0>>, receive_response(Socket)),
 
+    % subscribe
+    TopicName1 = <<"a/+/c">>,
+    MsgId1 = 25,
+    TopicId0 = 0,
+    TopicId1 = 1,
+    WillBit = 0,
+    Dup = 0,
+    Retain = 0,
+    CleanSession = 0,
+    ReturnCode = 0,
+    send_subscribe_msg_normal_topic(Socket, Qos, TopicName1, MsgId1),
+    ?assertEqual(<<8, ?SN_SUBACK, Dup:1, Qos:2, Retain:1, WillBit:1, CleanSession:1, ?SN_NORMAL_TOPIC:2, TopicId0:16, MsgId1:16, ReturnCode>>,
+        receive_response(Socket)),
+    ?assertEqual(TopicName1, test_mqtt_broker:get_subscrbied_topic()),
+
+    % goto asleep state
+    SleepDuration = 30,
+    send_disconnect_msg(Socket, SleepDuration),
+    ?assertEqual(<<2, ?SN_DISCONNECT>>, receive_response(Socket)),
+
+    timer:sleep(300),
+
+    %% send downlink data in asleep state. This message should be send to device once it wake up
+    RetainFalse = false,
+    Payload2 = <<55, 66, 77, 88, 99>>,
+    Payload3 = <<61, 71, 81>>,
+    Payload4 = <<100, 101, 102, 103, 104, 105, 106, 107>>,
+    MsgId2 = 87, MsgId3 = 88, MsgId4 = 89,
+    TopicName_test9 = <<"u/v/w">>,
+    test_mqtt_broker:dispatch(MsgId2, Qos, RetainFalse, TopicName_test9, Payload2), %% this topic has not registered
+    test_mqtt_broker:dispatch(MsgId3, Qos, RetainFalse, TopicName_test9, Payload3),
+    test_mqtt_broker:dispatch(MsgId4, Qos, RetainFalse, TopicName_test9, Payload4),
+
+    timer:sleep(300),
+
+    % goto awake state, receive downlink messages, and go back to asleep
+    send_pingreq_msg(Socket, <<"test">>),
+
+
+    UdpData_reg = receive_response(Socket),
+    {TopicIdNew, MsgId_reg} = check_register_msg_on_udp(TopicName_test9, UdpData_reg),
+    send_regack_msg(Socket, TopicIdNew, MsgId_reg),
+
+    UdpData2 = receive_response(Socket),
+    MsgId2 = check_publish_msg_on_udp({Dup, Qos, Retain, WillBit, CleanSession, ?SN_NORMAL_TOPIC, TopicIdNew, Payload2}, UdpData2),
+    send_puback_msg(Socket, TopicIdNew, MsgId2),
+    timer:sleep(100),
+    ?assertEqual(MsgId2, test_mqtt_broker:get_puback()),
+
+    UdpData3 = receive_response(Socket),
+    MsgId3 = check_publish_msg_on_udp({Dup, Qos, Retain, WillBit, CleanSession, ?SN_NORMAL_TOPIC, TopicIdNew, Payload3}, UdpData3),
+    send_puback_msg(Socket, TopicIdNew, MsgId3),
+    timer:sleep(100),
+    ?assertEqual(MsgId3, test_mqtt_broker:get_puback()),
+
+    UdpData4 = receive_response(Socket),
+    MsgId4 = check_publish_msg_on_udp({Dup, Qos, Retain, WillBit, CleanSession, ?SN_NORMAL_TOPIC, TopicIdNew, Payload4}, UdpData4),
+    send_puback_msg(Socket, TopicIdNew, MsgId4),
+    timer:sleep(100),
+    ?assertEqual(MsgId4, test_mqtt_broker:get_puback()),
+
+    ?assertEqual(<<2, ?SN_PINGRESP>>, receive_response(Socket)),
+    ?assertEqual({undefined, undefined, undefined, undefined, undefined}, test_mqtt_broker:get_published_msg()),
+
+    %% send PINGREQ again to enter awake state
+    send_pingreq_msg(Socket, <<"test">>),
+    %% will not receive any buffered PUBLISH messages buffered before last awake, only receive PINGRESP here
+    ?assertEqual(<<2, ?SN_PINGRESP>>, receive_response(Socket)),
+
+    gen_udp:close(Socket),
+    test_mqtt_broker:stop().
 
 awake_test01_to_connected(_Config) ->
     test_mqtt_broker:start_link(),
@@ -1658,7 +1744,13 @@ broadcast_test1(_Config) ->
     gen_udp:close(Socket),
     test_mqtt_broker:stop().
 
-
+handle_emit_stats_test(_Config) ->
+    test_mqtt_broker:start_link(),
+    {ok, Socket} = gen_udp:open(0, [binary]),
+    send_connect_msg(Socket, <<"cleintid_test">>),
+    ?assertEqual(<<3, ?SN_CONNACK, 0>>, receive_response(Socket)),
+    ?assertEqual({<<"cleintid_test">>, <<"user1">>}, test_mqtt_broker:get_online_user()),
+    test_mqtt_broker:print_table(client_stats).
 
 send_searchgw_msg(Socket) ->
     Length = 3,
@@ -2003,13 +2095,3 @@ check_register_msg_on_udp(TopicName, UdpData) ->
 check_regack_msg_on_udp(MsgId, UdpData) ->
     <<7, ?SN_REGACK, TopicId:16, MsgId:16, 0:8>> = UdpData,
     TopicId.
-
-handle_emit_stats_test(_Config) ->
-    test_mqtt_broker:start_link(),
-    {ok, Socket} = gen_udp:open(0, [binary]),
-    send_connect_msg(Socket, <<"cleintid_test">>),
-    ?assertEqual(<<3, ?SN_CONNACK, 0>>, receive_response(Socket)),
-    ?assertEqual({<<"cleintid_test">>, <<"user1">>}, test_mqtt_broker:get_online_user()),
-    test_mqtt_broker:print_table(client_stats).
-    
-
