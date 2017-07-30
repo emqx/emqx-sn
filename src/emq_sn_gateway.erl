@@ -338,6 +338,12 @@ asleep(?SN_PUBACK_MSG(TopicId, MsgId, ReturnCode), StateData) ->
 asleep(?SN_PUBREC_MSG(PubRec, MsgId), StateData) when PubRec == ?SN_PUBREC; PubRec == ?SN_PUBREL; PubRec == ?SN_PUBCOMP ->
     do_pubrec(PubRec, MsgId, StateData);
 
+% NOTE: what about following scenario:
+%    1) client go to sleep
+%    2) client reboot for manual reset or other reasons
+%    3) client send a CONNECT
+%    4) emq-sn regard this CONNECT as a signal to connected state, not a bootup CONNECT. For this reason, will procedure is lost
+% this should be a bug in mqtt-sn protocol.
 asleep(?SN_CONNECT_MSG(_Flags, _ProtoId, _Duration, _ClientId), StateData = #state{keepalive_duration = Interval, conn = Conn}) ->
     % device wakeup and goto connected state
     % keepalive timer may timeout in asleep state and delete itself, need to restart keepalive
