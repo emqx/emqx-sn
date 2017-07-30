@@ -667,8 +667,9 @@ do_connect(ClientId, CleanSession, Will, Duration, StateData=#state{protocol = P
             end
     end.
 
-do_2nd_connect(Flags, Duration, ClientId, StateData = #state{protocol = Proto, conn = Conn, enable_stats = EnableStats}) ->
+do_2nd_connect(Flags, Duration, ClientId, StateData = #state{client_id = OldClientId, protocol = Proto, conn = Conn, enable_stats = EnableStats}) ->
     ?PROTO_SHUTDOWN(normal, Proto),
+    emq_sn_topic_manager:unregister_topic(OldClientId),
     NewProto = proto_init(Conn, EnableStats),
     #mqtt_sn_flags{will = Will, clean_session = CleanSession} = Flags,
     do_connect(ClientId, CleanSession, Will, Duration, StateData#state{protocol = NewProto}).
