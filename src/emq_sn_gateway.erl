@@ -75,6 +75,7 @@
                         [esockd_net:format(Peer) | Args])).
 -define(APP, emq_sn).
 
+-define(APP_SOCK_OPTION, [{max_clientid_len, 24}, {max_packet_size, 256}]).
 
 -ifdef(TEST).
 -define(PROTO_INIT(A, B, C),            test_mqtt_broker:proto_init(A, B, C)).
@@ -122,16 +123,13 @@ kick(CPid) ->
 
 init([Sock, Peer, GwId, EnableStats]) ->
     Conn = #connection{socket = Sock, peer = Peer},
-    SendFun = fun(Packet) -> send_message(transform(Packet, fun(MsgId) -> dequeue_puback_msgid(MsgId) end ), Conn) end,
-    PktOpts = [{max_clientid_len, 24}, {max_packet_size, 256}, {client_enable_stats, EnableStats}],
-    ProtoState = ?PROTO_INIT(Peer, SendFun, PktOpts),
-    State = #state{gwid = GwId,
-                   conn = Conn,
-                   protocol = ProtoState,
-                   asleep_timer = emq_sn_asleep_timer:init(),
+    State = #state{gwid             = GwId,
+                   conn             = Conn,
+                   protocol         = proto_init(Conn, EnableStats),
+                   asleep_timer     = emq_sn_asleep_timer:init(),
                    asleep_msg_queue = queue:new(),
-                   enable_stats = EnableStats,
-                   enable_qos3 = application:get_env(?APP, enable_qos3, false)},
+                   enable_stats     = EnableStats,
+                   enable_qos3      = application:get_env(?APP, enable_qos3, false)},
     {ok, idle, State, 3000}.
 
 
@@ -144,28 +142,9 @@ idle(?SN_SEARCHGW_MSG(_Radius), StateData = #state{idle_timer = Timer, gwid = Gw
     {next_state, idle, StateData#state{idle_timer = NewTimer}};
 
 
-idle(?SN_CONNECT_MSG(Flags, _ProtoId, Duration, ClientId), StateData = #state{protocol = Proto}) ->
-    Username = application:get_env(?APP, username, undefined),
-    Password = application:get_env(?APP, password, undefined),
+idle(?SN_CONNECT_MSG(Flags, _ProtoId, Duration, ClientId), StateData) ->
     #mqtt_sn_flags{will = Will, clean_session = CleanSession} = Flags,
-    ConnPkt = #mqtt_packet_connect{client_id  = ClientId,
-                                   clean_sess = CleanSession,
-                                   username = Username,
-                                   password = Password,
-                                   keep_alive = Duration},
-    put(client_id, ClientId),
-    case Will of
-        true  ->
-            send_message(?SN_WILLTOPICREQ_MSG(), StateData#state.conn),
-            {next_state, wait_for_will_topic, StateData#state{connpkt = ConnPkt, client_id = ClientId, keepalive_duration = Duration}};
-        false ->
-            case ?PROTO_RECEIVE(?CONNECT_PACKET(ConnPkt), Proto) of
-                {ok, Proto1}           -> next_state(connected, StateData#state{client_id = ClientId, protocol = Proto1, keepalive_duration = Duration});
-                {error, Error}         -> shutdown(Error, StateData);
-                {error, Error, Proto1} -> shutdown(Error, StateData#state{protocol = Proto1});
-                {stop, Reason, Proto1} -> stop(Reason, StateData#state{protocol = Proto1})
-            end
-    end;
+    do_connect(ClientId, CleanSession, Will, Duration, StateData);
 
 idle(?SN_ADVERTISE_MSG(_GwId, _Radius), StateData) ->
     % ignore
@@ -215,6 +194,9 @@ wait_for_will_topic(?SN_ADVERTISE_MSG(_GwId, _Radius), StateData) ->
     % ignore
     {next_state, wait_for_will_topic, StateData};
 
+wait_for_will_topic(?SN_CONNECT_MSG(Flags, _ProtoId, Duration, ClientId), StateData) ->
+    do_2nd_connect(Flags, Duration, ClientId, StateData);
+
 wait_for_will_topic(Event, StateData) ->
     ?LOG(error, "wait_for_will_topic UNEXPECTED Event: ~p", [Event], StateData),
     {next_state, wait_for_will_topic, StateData}.
@@ -231,6 +213,9 @@ wait_for_will_msg(?SN_WILLMSG_MSG(Msg), StateData = #state{protocol = Proto, wil
 wait_for_will_msg(?SN_ADVERTISE_MSG(_GwId, _Radius), StateData) ->
     % ignore
     {next_state, wait_for_will_msg, StateData};
+
+wait_for_will_msg(?SN_CONNECT_MSG(Flags, _ProtoId, Duration, ClientId), StateData) ->
+    do_2nd_connect(Flags, Duration, ClientId, StateData);
 
 wait_for_will_msg(Event, StateData) ->
     ?LOG(error, "UNEXPECTED Event: ~p", [Event], StateData),
@@ -313,6 +298,10 @@ connected(?SN_ADVERTISE_MSG(_GwId, _Radius), StateData) ->
     % ignore
     {next_state, connected, StateData};
 
+connected(?SN_CONNECT_MSG(Flags, _ProtoId, Duration, ClientId), StateData) ->
+    do_2nd_connect(Flags, Duration, ClientId, StateData);
+
+
 connected(Event, StateData) ->
     ?LOG(error, "connected UNEXPECTED Event: ~p", [Event], StateData),
     {next_state, connected, StateData}.
@@ -349,6 +338,12 @@ asleep(?SN_PUBACK_MSG(TopicId, MsgId, ReturnCode), StateData) ->
 asleep(?SN_PUBREC_MSG(PubRec, MsgId), StateData) when PubRec == ?SN_PUBREC; PubRec == ?SN_PUBREL; PubRec == ?SN_PUBCOMP ->
     do_pubrec(PubRec, MsgId, StateData);
 
+% NOTE: what about following scenario:
+%    1) client go to sleep
+%    2) client reboot for manual reset or other reasons
+%    3) client send a CONNECT
+%    4) emq-sn regard this CONNECT as a signal to connected state, not a bootup CONNECT. For this reason, will procedure is lost
+% this should be a bug in mqtt-sn protocol.
 asleep(?SN_CONNECT_MSG(_Flags, _ProtoId, _Duration, _ClientId), StateData = #state{keepalive_duration = Interval, conn = Conn}) ->
     % device wakeup and goto connected state
     % keepalive timer may timeout in asleep state and delete itself, need to restart keepalive
@@ -444,8 +439,8 @@ handle_info({keepalive, start, Interval}, StateName, StateData = #state{conn = C
             shutdown(Error, StateData)
     end;
 
-handle_info(do_awake_jobs, StateName, StateData=#state{client_id = ClientId, asleep_msg_queue = AsleepMsgQue}) ->
-    NewStateData = process_awake_jobs(AsleepMsgQue, ClientId, StateData),
+handle_info(do_awake_jobs, StateName, StateData=#state{client_id = ClientId}) ->
+    NewStateData = process_awake_jobs(ClientId, StateData),
     case StateName of
         awake -> goto_asleep_state(NewStateData, undefined);
         Other -> next_state(Other, NewStateData) % device send a CONNECT immediately before this do_awake_jobs is handled
@@ -656,6 +651,35 @@ mqttsn_to_mqtt(?SN_PUBCOMP) -> ?PUBCOMP.
 
 
 
+do_connect(ClientId, CleanSession, Will, Duration, StateData=#state{protocol = Proto}) ->
+    Username = application:get_env(?APP, username, undefined),
+    Password = application:get_env(?APP, password, undefined),
+    ConnPkt = #mqtt_packet_connect{ client_id  = ClientId,
+                                    clean_sess = CleanSession,
+                                    username   = Username,
+                                    password   = Password,
+                                    keep_alive = Duration},
+    put(client_id, ClientId),
+    case Will of
+        true  ->
+            send_message(?SN_WILLTOPICREQ_MSG(), StateData#state.conn),
+            {next_state, wait_for_will_topic, StateData#state{connpkt = ConnPkt, client_id = ClientId, keepalive_duration = Duration}};
+        false ->
+            case ?PROTO_RECEIVE(?CONNECT_PACKET(ConnPkt), Proto) of
+                {ok, Proto1}           -> next_state(connected, StateData#state{client_id = ClientId, protocol = Proto1, keepalive_duration = Duration});
+                {error, Error}         -> shutdown(Error, StateData);
+                {error, Error, Proto1} -> shutdown(Error, StateData#state{protocol = Proto1});
+                {stop, Reason, Proto1} -> stop(Reason, StateData#state{protocol = Proto1})
+            end
+    end.
+
+do_2nd_connect(Flags, Duration, ClientId, StateData = #state{client_id = OldClientId, protocol = Proto, conn = Conn, enable_stats = EnableStats}) ->
+    ?PROTO_SHUTDOWN(normal, Proto),
+    emq_sn_topic_manager:unregister_topic(OldClientId),
+    NewProto = proto_init(Conn, EnableStats),
+    #mqtt_sn_flags{will = Will, clean_session = CleanSession} = Flags,
+    do_connect(ClientId, CleanSession, Will, Duration, StateData#state{protocol = NewProto}).
+
 do_subscribe(?SN_NORMAL_TOPIC, TopicId, Qos, MsgId, StateData=#state{client_id = ClientId}) ->
     case emq_sn_topic_manager:register_topic(ClientId, TopicId) of
         undefined ->
@@ -781,6 +805,11 @@ do_pubrec(PubRec, MsgId, StateData=#state{protocol = Proto}) ->
         {stop, Reason, Proto1} -> stop(Reason, StateData#state{protocol = Proto1})
     end.
 
+proto_init(Conn=#connection{peer = Peer}, EnableStats) ->
+    SendFun = fun(Packet) -> send_message(transform(Packet, fun(MsgId) -> dequeue_puback_msgid(MsgId) end ), Conn) end,
+    PktOpts = [{client_enable_stats, EnableStats}|?APP_SOCK_OPTION],
+    ?PROTO_INIT(Peer, SendFun, PktOpts).
+
 proto_subscribe(TopicName, Qos, MsgId, TopicId, StateData=#state{protocol = Proto, awaiting_suback = Awaiting}) ->
     ?LOG(debug, "subscribe Topic=~p, MsgId=~p, TopicId=~p", [TopicName, MsgId, TopicId], StateData),
     NewAwaiting = lists:append(Awaiting, [{MsgId, TopicId}]),
@@ -841,16 +870,16 @@ publish_message_to_device(Msg, ClientId, StateData = #state{conn = Conn, protoco
             ?PROTO_SEND(Msg, ProtoState)
     end.
 
-publish_asleep_messages_to_device(AsleepMsg, ClientId, StateData, Qos2Count) ->
-    case queue:is_empty(AsleepMsg) of
+publish_asleep_messages_to_device(ClientId, StateData=#state{asleep_msg_queue = AsleepMsgQueue}, Qos2Count) ->
+    case queue:is_empty(AsleepMsgQueue) of
         false ->
-            Msg = queue:get(AsleepMsg),
+            Msg = queue:get(AsleepMsgQueue),
             {ok, NewProtoState} = publish_message_to_device(Msg, ClientId, StateData),
             NewCount = case is_qos2_msg(Msg) of
                            true -> Qos2Count + 1;
                            false -> Qos2Count
                        end,
-            publish_asleep_messages_to_device(queue:drop(AsleepMsg), ClientId, StateData#state{protocol = NewProtoState}, NewCount);
+            publish_asleep_messages_to_device(ClientId, StateData#state{protocol = NewProtoState, asleep_msg_queue = queue:drop(AsleepMsgQueue)}, NewCount);
         true  ->
             {Qos2Count, StateData}
     end.
@@ -881,8 +910,8 @@ start_idle_timer() ->
     erlang:send_after(timer:seconds(10), self(), idle_timeout).
 
 
-process_awake_jobs(AsleepMsg, ClientId, StateData=#state{conn = Conn}) ->
-    {_, NewStateData} = publish_asleep_messages_to_device(AsleepMsg, ClientId, StateData, 0),
+process_awake_jobs(ClientId, StateData=#state{conn = Conn}) ->
+    {_, NewStateData} = publish_asleep_messages_to_device(ClientId, StateData, 0),
     %% TODO: what about publishing qos2 messages? wait more time for pubrec & pubcomp from device?
     %%       or ask device to go connected state?
     send_pingresp(Conn),
