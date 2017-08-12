@@ -36,14 +36,6 @@
 proto_init(Peer, SendFun, PktOpts) ->
     KeepaliveDuration = 3,   % seconds
     self() ! {keepalive, start, KeepaliveDuration},
-    case proplists:get_value(client_enable_stats, PktOpts, false) of
-        true ->
-            ets:new(test_client_stats, [set, named_table, public]),
-            self() ! emit_stats,
-            ?LOG("send emit_stats", []);
-        false ->
-            ?LOG("client_enable_stats is false, stats case may fail!", [])
-    end,
     put(debug_unit_test_send_func, SendFun),
     gen_server:call(?MODULE, {init, self(), Peer, PktOpts}).
 
@@ -88,10 +80,18 @@ stop() ->
     gen_server:stop(?MODULE).
 
 init(_Param) ->
+    ets:new(test_client_stats, [set, named_table, public]),
     {ok, #state{subscriber = undefined}}.
 
 handle_call({init, Subscriber, Peer, PktOpts}, _From, State) ->
-    ?LOG("test broker init Subscriber=~p, Peer=~p, SendFun=~p, PktOpts=~p, broker_pid=~p~n", [Subscriber, Peer, PktOpts, self()]),
+    case proplists:get_value(client_enable_stats, PktOpts, false) of
+        true ->
+            Subscriber ! emit_stats,
+            ?LOG("send emit_stats", []);
+        false ->
+            ?LOG("client_enable_stats is false, stats case may fail!", [])
+    end,
+    ?LOG("test broker init Subscriber=~p, Peer=~p, PktOpts=~p, broker_pid=~p~n", [Subscriber, Peer, PktOpts, self()]),
     {reply, ok, State#state{subscriber = Subscriber, peer = Peer, pkt_opts = PktOpts}};
 
 handle_call({received_packet, ?CONNECT_PACKET(ConnPkt)}, _From, State=#state{}) ->
