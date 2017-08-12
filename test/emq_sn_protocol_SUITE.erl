@@ -44,6 +44,7 @@
 -define(FNU, 0).
 
 all() -> [
+    connect_test01, connect_test02, connect_test03,
     subscribe_test, subscribe_test1, subscribe_test2, subscribe_test3, subscribe_test4,
     subscribe_test10, subscribe_test11, subscribe_test12, subscribe_test13,
     publish_qos0_test1, publish_qos0_test2, publish_qos0_test3, publish_qos0_test4, publish_qos0_test5, publish_qos0_test6,
@@ -82,6 +83,53 @@ end_per_testcase(_TestCase, _Config) ->
     ok = application:stop(emq_sn),
     ok = application:stop(esockd),
     ok.
+
+
+connect_test01(_Config) ->
+    test_mqtt_broker:start_link(),
+
+    {ok, Socket} = gen_udp:open(0, [binary]),
+    send_connect_msg(Socket, <<"cleintid_test">>),
+    ?assertEqual(<<3, ?SN_CONNACK, 0>>, receive_response(Socket)),
+    ?assertEqual({<<"cleintid_test">>, <<"user1">>}, test_mqtt_broker:get_online_user()),
+
+    gen_udp:close(Socket),
+    test_mqtt_broker:stop().
+
+connect_test02(_Config) ->
+    test_mqtt_broker:start_link(),
+
+    {ok, Socket} = gen_udp:open(0, [binary]),
+    send_connect_msg(Socket, <<"cleintid_test">>),
+    ?assertEqual(<<3, ?SN_CONNACK, 0>>, receive_response(Socket)),
+    ?assertEqual({<<"cleintid_test">>, <<"user1">>}, test_mqtt_broker:get_online_user()),
+
+    timer:sleep(300),
+
+    send_connect_msg(Socket, <<"cleintid_test">>),
+    ?assertEqual(<<3, ?SN_CONNACK, 0>>, receive_response(Socket)),
+    ?assertEqual({<<"cleintid_test">>, <<"user1">>}, test_mqtt_broker:get_online_user()),
+
+    gen_udp:close(Socket),
+    test_mqtt_broker:stop().
+
+connect_test03(_Config) ->
+    test_mqtt_broker:start_link(),
+
+    {ok, Socket} = gen_udp:open(0, [binary]),
+    send_connect_msg(Socket, <<"cleintid_test">>),
+    ?assertEqual(<<3, ?SN_CONNACK, 0>>, receive_response(Socket)),
+    ?assertEqual({<<"cleintid_test">>, <<"user1">>}, test_mqtt_broker:get_online_user()),
+
+    timer:sleep(300),
+
+    send_connect_msg(Socket, <<"cleintid_other">>),
+    ?assertEqual(<<3, ?SN_CONNACK, 0>>, receive_response(Socket)),
+    ?assertEqual({<<"cleintid_other">>, <<"user1">>}, test_mqtt_broker:get_online_user()),
+
+    gen_udp:close(Socket),
+    test_mqtt_broker:stop().
+
 
 subscribe_test(_Config) ->
     test_mqtt_broker:start_link(),
