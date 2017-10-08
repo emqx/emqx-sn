@@ -14,12 +14,12 @@
 %%% limitations under the License.
 %%%-------------------------------------------------------------------
 
--module (emq_sn_protocol_SUITE).
+-module (emqx_sn_protocol_SUITE).
 
 -include_lib("eunit/include/eunit.hrl").
--include("emq_sn.hrl").
--include_lib("emqttd/include/emqttd.hrl").
--include_lib("emqttd/include/emqttd_protocol.hrl").
+-include("emqx_sn.hrl").
+-include_lib("emqx/include/emqx.hrl").
+-include_lib("emqx/include/emqx_mqtt.hrl").
 
 
 -compile(export_all).
@@ -66,21 +66,21 @@ init_per_suite(Config) ->
     Config.
 
 end_per_suite(_Config) ->
-    application:stop(emq_sn).
+    application:stop(emqx_sn).
 
 
 init_per_testcase(_TestCase, Config) ->
-    %application:set_env(emq_sn, advertise_duration, 2),
-    application:set_env(emq_sn, enable_qos3, ?ENABLE_QOS3),
-    application:set_env(emq_sn, enable_stats, true),
-    application:set_env(emq_sn, username, <<"user1">>),
-    application:set_env(emq_sn, password, <<"pw123">>),
-    application:set_env(emq_sn, predefined, [{?PREDEF_TOPIC_ID1, ?PREDEF_TOPIC_NAME1},{?PREDEF_TOPIC_ID2, ?PREDEF_TOPIC_NAME2}]),
-    ?assertMatch({ok, _}, application:ensure_all_started(emq_sn)),
+    %application:set_env(emqx_sn, advertise_duration, 2),
+    application:set_env(emqx_sn, enable_qos3, ?ENABLE_QOS3),
+    application:set_env(emqx_sn, enable_stats, true),
+    application:set_env(emqx_sn, username, <<"user1">>),
+    application:set_env(emqx_sn, password, <<"pw123">>),
+    application:set_env(emqx_sn, predefined, [{?PREDEF_TOPIC_ID1, ?PREDEF_TOPIC_NAME1},{?PREDEF_TOPIC_ID2, ?PREDEF_TOPIC_NAME2}]),
+    ?assertMatch({ok, _}, application:ensure_all_started(emqx_sn)),
     Config.
 
 end_per_testcase(_TestCase, _Config) ->
-    ok = application:stop(emq_sn),
+    ok = application:stop(emqx_sn),
     ok = application:stop(esockd),
     ok.
 
@@ -268,7 +268,7 @@ subscribe_test3(_Config) ->
     test_mqtt_broker:stop().
 
 %%In this case We use predefined topic name to register and subcribe, and expect to receive the corresponding predefined topic id but not a new generated topic id from broker. We design this case to illustrate
-%% emq_sn_gateway's compatibility of dealing with predefined and normal topics. Once we give more restrictions to different topic id type, this case would be deleted or modified.
+%% emqx_sn_gateway's compatibility of dealing with predefined and normal topics. Once we give more restrictions to different topic id type, this case would be deleted or modified.
 subscribe_test4(_Config) ->
     test_mqtt_broker:start_link(),
     Dup = 0,

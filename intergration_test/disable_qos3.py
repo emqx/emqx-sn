@@ -1,9 +1,9 @@
 
-input = open("emq-relx/deps/emq_sn/etc/emq_sn.conf")
+input = open("emqx-rel/deps/emqx_sn/etc/emqx_sn.conf")
 lines = input.readlines()
 input.close()
 
-output  = open("emq-relx/deps/emq_sn/etc/emq_sn.conf",'w');
+output  = open("emqx-relx/deps/emqx_sn/etc/emqx_sn.conf",'w');
 for line in lines:
     if not line:
         break

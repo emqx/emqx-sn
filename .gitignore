@@ -9,7 +9,7 @@ rel/example_project
 .concrete/DEV_MODE
 .rebar
 _rel/
-emq_sn.d
+emqx_sn.d
 logs/
 .erlang.mk/
 data/
@@ -17,8 +17,8 @@ data/
 *.iml
 *.d
 
-intergration_test/emq-relx/
+intergration_test/emqx-rel/
 intergration_test/paho.mqtt-sn.embedded-c/
 intergration_test/client/*.exe
 intergration_test/client/*.txt
-
+.DS_Store

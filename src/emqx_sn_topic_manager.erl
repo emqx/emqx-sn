@@ -14,7 +14,7 @@
 %%% limitations under the License.
 %%%-------------------------------------------------------------------
 
--module(emq_sn_topic_manager).
+-module(emqx_sn_topic_manager).
 
 -author("Feng Lee <feng@emqtt.io>").
 
@@ -29,9 +29,9 @@
 %%--------------------------------------------------------------------
 -spec(register_topic(binary(), binary()) -> integer()).
 register_topic(ClientId, TopicName) ->
-    case emq_sn_predefined_topics:lookup_predef_topic_id(TopicName) of
+    case emqx_sn_predefined_topics:lookup_predef_topic_id(TopicName) of
         undefined ->
-            emq_sn_normal_topics:register_topic(ClientId, TopicName);
+            emqx_sn_normal_topics:register_topic(ClientId, TopicName);
         PredefTopicId ->
             ?LOG(debug, "register a predefined topic name, now we just assign the corresponding predefined topic id. ClientId=~p, TopicName=~p, PredefTopicId=~p", [ClientId, TopicName, PredefTopicId]),
             PredefTopicId
@@ -39,18 +39,18 @@ register_topic(ClientId, TopicName) ->
 
 -spec(lookup_topic(binary(), pos_integer()) -> undefined | binary()).
 lookup_topic(ClientId, TopicId) ->
-    case emq_sn_predefined_topics:get_max_predef_topic_id() < TopicId of
+    case emqx_sn_predefined_topics:get_max_predef_topic_id() < TopicId of
         true ->
-            emq_sn_normal_topics:lookup_topic(ClientId, TopicId);
+            emqx_sn_normal_topics:lookup_topic(ClientId, TopicId);
         false ->
-            emq_sn_predefined_topics:lookup_predef_topic(TopicId)
+            emqx_sn_predefined_topics:lookup_predef_topic(TopicId)
     end.
 
 -spec(lookup_topic_id(binary(), binary) -> undefined | tuple()).
 lookup_topic_id(ClientId, TopicName) ->
-    case emq_sn_normal_topics:lookup_topic_id(ClientId, TopicName) of
+    case emqx_sn_normal_topics:lookup_topic_id(ClientId, TopicName) of
         undefined ->
-            case emq_sn_predefined_topics:lookup_predef_topic_id(TopicName) of
+            case emqx_sn_predefined_topics:lookup_predef_topic_id(TopicName) of
                 undefined ->
                     undefined;
                 PredefTopicId ->
@@ -62,7 +62,7 @@ lookup_topic_id(ClientId, TopicName) ->
 
 -spec(unregister_topic(binary()) -> ok).
 unregister_topic(ClientId) ->
-    emq_sn_normal_topics:unregister_topic(ClientId).
+    emqx_sn_normal_topics:unregister_topic(ClientId).
 
 
 %%--------------------------------------------------------------------

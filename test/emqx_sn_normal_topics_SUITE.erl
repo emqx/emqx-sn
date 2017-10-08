@@ -14,12 +14,12 @@
 %%% limitations under the License.
 %%%-------------------------------------------------------------------
 
--module(emq_sn_normal_topics_SUITE).
+-module(emqx_sn_normal_topics_SUITE).
 
 -include_lib("eunit/include/eunit.hrl").
--include("emq_sn.hrl").
+-include("emqx_sn.hrl").
 
--import(emq_sn_normal_topics, [start_link/0, register_topic/2, unregister_topic/1, stop/0, lookup_topic/2, lookup_topic_id/2]).
+-import(emqx_sn_normal_topics, [start_link/0, register_topic/2, unregister_topic/1, stop/0, lookup_topic/2, lookup_topic_id/2]).
 
 -compile(export_all).
 -define(MAX_PRED_TOPIC_ID, 2).
@@ -38,7 +38,7 @@ end_per_suite(_Config) ->
 
 
 register_topic_test(_Config) ->
-    emq_sn_predefined_topics:start_link(?PREDEF_TOPIC_LIST),
+    emqx_sn_predefined_topics:start_link(?PREDEF_TOPIC_LIST),
     start_link(),
     ?assertEqual(?MAX_PRED_TOPIC_ID+1, register_topic(<<"ClientId">>, <<"Topic1">>)),
     ?assertEqual(?MAX_PRED_TOPIC_ID+2, register_topic(<<"ClientId">>, <<"Topic2">>)),
@@ -55,7 +55,7 @@ register_topic_test(_Config) ->
 
 
 register_topic_test2(_Config) ->
-    emq_sn_predefined_topics:start_link(?PREDEF_TOPIC_LIST),
+    emqx_sn_predefined_topics:start_link(?PREDEF_TOPIC_LIST),
     start_link(),
     ?assertEqual(?MAX_PRED_TOPIC_ID+1, register_topic(<<"ClientId">>, <<"Topic1">>)),
     ?assertEqual(?MAX_PRED_TOPIC_ID+2, register_topic(<<"ClientId">>, <<"Topic2">>)),
@@ -75,7 +75,7 @@ register_topic_test2(_Config) ->
 
 register_topic_test3(_Config) ->
     lager:debug("register_topic_test3 will take long long time ...~n"),
-    emq_sn_predefined_topics:start_link(?PREDEF_TOPIC_LIST),
+    emqx_sn_predefined_topics:start_link(?PREDEF_TOPIC_LIST),
     start_link(),
     register_a_lot(?MAX_PRED_TOPIC_ID+1, 16#fffe),
     lager:debug("start overflow test~n"),
@@ -94,7 +94,7 @@ register_topic_test3(_Config) ->
 
 
 register_topic_test4(_Config) ->
-    emq_sn_predefined_topics:start_link(?PREDEF_TOPIC_LIST),
+    emqx_sn_predefined_topics:start_link(?PREDEF_TOPIC_LIST),
     start_link(),
     ?assertEqual(?MAX_PRED_TOPIC_ID+1, register_topic(<<"ClientId">>, <<"TopicA">>)),
     ?assertEqual(?MAX_PRED_TOPIC_ID+2, register_topic(<<"ClientId">>, <<"TopicB">>)),
@@ -105,7 +105,7 @@ register_topic_test4(_Config) ->
 
 
 register_topic_test5(_Config) ->
-    emq_sn_predefined_topics:start_link(?PREDEF_TOPIC_LIST),
+    emqx_sn_predefined_topics:start_link(?PREDEF_TOPIC_LIST),
     start_link(),
     ?assertEqual(wildcard_topic, register_topic(<<"ClientId">>, <<"/TopicA/#">>)),
     ?assertEqual(wildcard_topic, register_topic(<<"ClientId">>, <<"/+/TopicB">>)),

@@ -14,7 +14,7 @@
 %%% limitations under the License.
 %%%-------------------------------------------------------------------
 
--module(emq_sn_gateway_sup).
+-module(emqx_sn_gateway_sup).
 
 -author("Feng Lee <feng@emqtt.io>").
 
@@ -34,6 +34,6 @@ start_gateway(Sock, Peer, GwId, EnableStats) ->
 
 init([]) ->
     {ok, {{simple_one_for_one, 0, 1},
-            [{sn_gateway, {emq_sn_gateway, start_link, []},
-                temporary, 5000, worker, [emq_sn_gateway]}]}}.
+            [{sn_gateway, {emqx_sn_gateway, start_link, []},
+                temporary, 5000, worker, [emqx_sn_gateway]}]}}.
 

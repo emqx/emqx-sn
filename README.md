@@ -1,12 +1,12 @@
-emq_sn
-======
+emqx_sn
+=======
 
 MQTT-SN Gateway for The EMQ Broker
 
 Configure Plugin
 ----------------
 
-File: etc/emq_sn.conf
+File: etc/emqx_sn.conf
 
 ```
 mqtt.sn.port = 1884
@@ -22,9 +22,9 @@ mqtt.sn.password = abc
 ```
 
 - mqtt.sn.port
-  * The UDP port which emq-sn is listening on.
+  * The UDP port which emqx-sn is listening on.
 - mqtt.sn.advertise_duration
-  * The duration(seconds) that emq-sn broadcast ADVERTISE message through.
+  * The duration(seconds) that emqx-sn broadcast ADVERTISE message through.
 - mqtt.sn.gateway_id
   * Gateway id in ADVERTISE message.
 - mqtt.sn.enable_stats
@@ -34,7 +34,7 @@ mqtt.sn.password = abc
 - mqtt.sn.predefined.topic.N
   * The pre-defined topic name corresponding to the pre-defined topic id of N. Note that the pre-defined topic id of 0 is reserved.
 - mqtt.sn.username
-  * This parameter is optional. If specified, emq-sn will connect EMQ core with this username. It is useful if any auth plug-in is enabled.
+  * This parameter is optional. If specified, emqx-sn will connect EMQX core with this username. It is useful if any auth plug-in is enabled.
 - mqtt.sn.password
   * This parameter is optional. Pair with username above.
 
@@ -43,7 +43,7 @@ Load Plugin
 -----------
 
 ```
-./bin/emq_ctl plugins load emq_sn
+./bin/emqx_ctl plugins load emqx_sn
 ```
 
 ## Client
@@ -65,13 +65,13 @@ Load Plugin
 sleeping device
 -----------
 
-PINGREQ must have a ClientId which is identical to the one in CONNECT message. Without ClientId, emq-sn will ignore such PINGREQ.
+PINGREQ must have a ClientId which is identical to the one in CONNECT message. Without ClientId, emqx-sn will ignore such PINGREQ.
 
 
 pre-defined topics
 -----------
 
-The mapping of a pre-defined topic id and topic name should be known inadvance by both client's application and gateway. We define this mapping info in emq_sn.conf file, and which shall be kept equivalent in all client's side.
+The mapping of a pre-defined topic id and topic name should be known inadvance by both client's application and gateway. We define this mapping info in emqx_sn.conf file, and which shall be kept equivalent in all client's side.
 
 
 

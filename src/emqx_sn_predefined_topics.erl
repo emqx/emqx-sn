@@ -14,7 +14,7 @@
 %%% limitations under the License.
 %%%-------------------------------------------------------------------
 
--module(emq_sn_predefined_topics).
+-module(emqx_sn_predefined_topics).
 
 -author("Feng Lee <feng@emqtt.io>").
 
@@ -23,7 +23,7 @@
 -define(LOG(Level, Format, Args),
     lager:Level("MQTT-SN(predefined topics): " ++ Format, Args)).
 
--include("emq_sn.hrl").
+-include("emqx_sn.hrl").
 
 %% API.
 -export([start_link/1, stop/0, get_max_predef_topic_id/0, lookup_predef_topic/1, lookup_predef_topic_id/1]).

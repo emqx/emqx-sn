@@ -14,7 +14,7 @@
 %%% limitations under the License.
 %%%-------------------------------------------------------------------
 
--module(emq_sn_app).
+-module(emqx_sn_app).
 
 -author("Feng Lee <feng@emqtt.io>").
 
@@ -22,7 +22,7 @@
 
 -export([start/2, stop/1]).
 
--define(APP, emq_sn).
+-define(APP, emqx_sn).
 
 -define(LOG(Level, Format, Args),
     lager:Level("MQTT-SN(app): " ++ Format, Args)).
@@ -37,10 +37,10 @@ start(_Type, _Args) ->
     EnableStats = application:get_env(?APP, enable_stats, false),
     PredefTopicList = application:get_env(?APP, predefined, []),
     ?LOG(debug, "The PredefTopicList is ~p~n", [PredefTopicList]),
-    emq_sn_config:register(),
-    emq_sn_sup:start_link({Port, []}, Duration, GwId, EnableStats, PredefTopicList).
+    emqx_sn_config:register(),
+    emqx_sn_sup:start_link({Port, []}, Duration, GwId, EnableStats, PredefTopicList).
 
 stop(_State) ->
-	emq_sn_config:unregister(),
+	emqx_sn_config:unregister(),
 	ok.
 

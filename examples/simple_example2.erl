@@ -1,6 +1,6 @@
 -module(simple_example2).
 
--include("emq_sn.hrl").
+-include("emqx_sn.hrl").
 
 -define(HOST, "localhost").
 -define(PORT, 1884).
@@ -13,7 +13,7 @@ start() ->
     %% create udp socket
     {ok, Socket} = gen_udp:open(0, [binary]),
 
-    %% connect to emqttd_sn broker
+    %% connect to emqx_sn broker
     Packet = gen_connect_packet(<<"client1">>),
     ok = gen_udp:send(Socket, ?HOST, ?PORT, Packet),
     io:format("send connect packet=~p~n", [Packet]),
@@ -35,7 +35,7 @@ start() ->
     % wait for subscribed message from broker
     wait_response(),
 
-    %% disconnect from emqttd_sn broker
+    %% disconnect from emqx_sn broker
     DisConnectPacket = gen_disconnect_packet(),
     ok = gen_udp:send(Socket, ?HOST, ?PORT, DisConnectPacket),
     io:format("send disconnect packet=~p~n", [DisConnectPacket]).

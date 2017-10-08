@@ -14,17 +14,16 @@
 %%% limitations under the License.
 %%%-------------------------------------------------------------------
 
--module(emq_sn_gateway).
+-module(emqx_sn_gateway).
 
 -author("Feng Lee <feng@emqtt.io>").
 
 -behaviour(gen_fsm).
 
--include("emq_sn.hrl").
+-include("emqx_sn.hrl").
 
--include_lib("emqttd/include/emqttd.hrl").
--include_lib("emqttd/include/emqttd_protocol.hrl").
-
+-include_lib("emqx/include/emqx.hrl").
+-include_lib("emqx/include/emqx_mqtt.hrl").
 
 %% API.
 -export([start_link/4]).
@@ -73,7 +72,7 @@
 -define(LOG2(Level, Format, Args, Peer),
             lager:Level("MQTT-SN(~s): " ++ Format,
                         [esockd_net:format(Peer) | Args])).
--define(APP, emq_sn).
+-define(APP, emqx_sn).
 
 -define(APP_SOCK_OPTION, [{max_clientid_len, 24}, {max_packet_size, 256}]).
 
@@ -86,13 +85,13 @@
 -define(SET_CLIENT_STATS(A,B),          test_mqtt_broker:set_client_stats(A,B)).
 -define(PROTO_SEND(A, B),               test_mqtt_broker:send(A, B)).
 -else.
--define(PROTO_INIT(A, B, C),            emqttd_protocol:init(A, B, C)).
--define(PROTO_RECEIVE(A, B),            emqttd_protocol:received(A, B)).
--define(PROTO_SHUTDOWN(A, B),           emqttd_protocol:shutdown(A, B)).
--define(PROTO_STATS(A),                 emqttd_protocol:stats(A)).
--define(PROTO_GET_CLIENT_ID(A),         emqttd_protocol:clientid(A)).
--define(PROTO_SEND(A, B),               emqttd_protocol:send(A, B)).
--define(SET_CLIENT_STATS(A,B),          emqttd_stats:set_client_stats(A,B)).
+-define(PROTO_INIT(A, B, C),            emqx_protocol:init(A, B, C)).
+-define(PROTO_RECEIVE(A, B),            emqx_protocol:received(A, B)).
+-define(PROTO_SHUTDOWN(A, B),           emqx_protocol:shutdown(A, B)).
+-define(PROTO_STATS(A),                 emqx_protocol:stats(A)).
+-define(PROTO_GET_CLIENT_ID(A),         emqx_protocol:clientid(A)).
+-define(PROTO_SEND(A, B),               emqx_protocol:send(A, B)).
+-define(SET_CLIENT_STATS(A,B),          emqx_stats:set_client_stats(A,B)).
 -endif.
 
 -define(SOCK_STATS, [recv_oct, recv_cnt, send_oct, send_cnt, send_pend]).
@@ -126,7 +125,7 @@ init([Sock, Peer, GwId, EnableStats]) ->
     State = #state{gwid             = GwId,
                    conn             = Conn,
                    protocol         = proto_init(Conn, EnableStats),
-                   asleep_timer     = emq_sn_asleep_timer:init(),
+                   asleep_timer     = emqx_sn_asleep_timer:init(),
                    asleep_msg_queue = queue:new(),
                    enable_stats     = EnableStats,
                    enable_qos3      = application:get_env(?APP, enable_qos3, false)},
@@ -161,11 +160,11 @@ idle(?SN_PUBLISH_MSG(_Flag, _TopicId, _MsgId, _Data), StateData = #state{enable_
 idle(?SN_PUBLISH_MSG(#mqtt_sn_flags{qos = ?QOS_NEG1, topic_id_type = TopicIdType}, TopicId, _MsgId, Data), StateData = #state{client_id = ClientId}) ->
     TopicName = case (TopicIdType =:= ?SN_SHORT_TOPIC) of
                     false ->
-                        emq_sn_topic_manager:lookup_topic(ClientId, TopicId);
+                        emqx_sn_topic_manager:lookup_topic(ClientId, TopicId);
                     true  ->
                         <<TopicId:16>>
                 end,
-    (TopicName =/= undefined) andalso emqttd_server:publish(emqttd_message:make({?NEG_QOS_CLIENT_ID, application:get_env(?APP, username, undefined)}, ?QOS_0, TopicName, Data)),
+    (TopicName =/= undefined) andalso emqx_server:publish(emqx_message:make({?NEG_QOS_CLIENT_ID, application:get_env(?APP, username, undefined)}, ?QOS_0, TopicName, Data)),
     ?LOG(debug, "Client id=~p receives a publish with Qos=-1 in idle mode!", [ClientId], StateData),
     {next_state, idle, StateData};
 
@@ -222,7 +221,7 @@ wait_for_will_msg(Event, StateData) ->
     {next_state, wait_for_will_msg, StateData}.
 
 connected(?SN_REGISTER_MSG(_TopicId, MsgId, TopicName), StateData = #state{client_id = ClientId, conn = Conn}) ->
-    case emq_sn_topic_manager:register_topic(ClientId, TopicName) of
+    case emqx_sn_topic_manager:register_topic(ClientId, TopicName) of
         undefined ->
             ?LOG(error, "TopicId is full! ClientId=~p, TopicName=~p", [ClientId, TopicName], StateData),
             send_message(?SN_REGACK_MSG(?SN_INVALID_TOPIC_ID, MsgId, ?SN_RC_NOT_SUPPORTED), Conn);
@@ -401,9 +400,9 @@ handle_sync_event(Event, _From, StateName, StateData) ->
     {reply, ignored, StateName, StateData}.
 
 handle_info({datagram, _From, Data}, StateName, StateData) ->
-    case catch emq_sn_message:parse(Data) of
+    case catch emqx_sn_message:parse(Data) of
         {ok, Msg} ->
-            ?LOG(info, "RECV ~p at state ~p", [emq_sn_message:format(Msg), StateName], StateData),
+            ?LOG(info, "RECV ~p at state ~p", [emqx_sn_message:format(Msg), StateName], StateData),
             ?MODULE:StateName(Msg, StateData); %% cool?
         {'EXIT',{format_error,_Stack}} ->
             next_state(StateName, StateData)
@@ -431,7 +430,7 @@ handle_info({keepalive, start, Interval}, StateName, StateData = #state{conn = C
                         {error, Error}              -> {error, Error}
                     end
                 end,
-    case emqttd_keepalive:start(StatFun, Interval, {keepalive, check}) of
+    case emqx_keepalive:start(StatFun, Interval, {keepalive, check}) of
         {ok, KeepAlive} ->
             next_state(StateName, StateData#state{keepalive = KeepAlive});
         {error, Error} ->
@@ -453,7 +452,7 @@ handle_info({keepalive, start, _Interval}, StateName, StateData = #state{keepali
 
 
 handle_info({keepalive, check}, StateName, StateData = #state{keepalive = KeepAlive}) ->
-    case emqttd_keepalive:check(KeepAlive) of
+    case emqx_keepalive:check(KeepAlive) of
         {ok, KeepAlive1} ->
             ?LOG(debug, "Keepalive check ok StateName=~p, KeepAlive=~p", [StateName, KeepAlive], StateData),
             next_state(StateName, StateData#state{keepalive = KeepAlive1});
@@ -500,7 +499,7 @@ handle_info(idle_timeout, StateName, StateData) ->
 
 handle_info({asleep_timeout, Ref}, StateName, StateData=#state{asleep_timer = AsleepTimer}) ->
     ?LOG(debug, "asleep_timeout at ~p", [StateName], StateData),
-    case emq_sn_asleep_timer:timeout(AsleepTimer, StateName, Ref) of
+    case emqx_sn_asleep_timer:timeout(AsleepTimer, StateName, Ref) of
         terminate_process         -> stop(asleep_timeout, StateData);
         {restart_timer, NewTimer} -> goto_asleep_state(StateData#state{asleep_timer = NewTimer}, undefined);
         {stop_timer, NewTimer}    -> {next_state, StateName, StateData#state{asleep_timer = NewTimer}}
@@ -531,8 +530,8 @@ terminate(Reason, _StateName, StateData = #state{client_id = ClientId, keepalive
         {shutdown, conflict}              -> do_publish_will(StateData);
         _                                 -> ok
     end,
-    emq_sn_topic_manager:unregister_topic(ClientId),
-    emqttd_keepalive:cancel(KeepAlive),
+    emqx_sn_topic_manager:unregister_topic(ClientId),
+    emqx_keepalive:cancel(KeepAlive),
     case {Proto, Reason} of
         {undefined, _} ->
             ok;
@@ -565,7 +564,7 @@ transform(?PUBLISH_PACKET(Qos, Topic, PacketId, Payload), _FuncMsgIdToTopicId) -
                         true           -> PacketId
                     end,
     ClientId = get(client_id),
-    {TopicIdType, TopicContent} =   case emq_sn_topic_manager:lookup_topic_id(ClientId, Topic) of
+    {TopicIdType, TopicContent} =   case emqx_sn_topic_manager:lookup_topic_id(ClientId, Topic) of
                                         undefined ->
                                             {?SN_SHORT_TOPIC, Topic};
                                         {normal, TopicId} ->
@@ -623,9 +622,9 @@ send_connack(Conn=#connection{}) ->
 
 
 send_message(Msg, #connection{socket = Sock, peer = Peer}) ->
-    ?LOG2(debug, "SEND ~p~n", [emq_sn_message:format(Msg)], Peer),
+    ?LOG2(debug, "SEND ~p~n", [emqx_sn_message:format(Msg)], Peer),
     {Host, Port} = Peer,
-    gen_udp:send(Sock, Host, Port, emq_sn_message:serialize(Msg)).
+    gen_udp:send(Sock, Host, Port, emqx_sn_message:serialize(Msg)).
 
 next_state(StateName, StateData) ->
     {next_state, StateName, StateData}.
@@ -634,7 +633,7 @@ next_state(StateName, StateData) ->
 
 goto_asleep_state(StateData=#state{asleep_timer = AsleepTimer}, Duration) ->
     ?LOG(debug, "goto_asleep_state Duration=~p", [Duration], StateData),
-    NewTimer = emq_sn_asleep_timer:start(AsleepTimer, Duration),
+    NewTimer = emqx_sn_asleep_timer:start(AsleepTimer, Duration),
     {next_state, asleep, StateData#state{asleep_timer = NewTimer}, hibernate}.
 
 
@@ -675,13 +674,13 @@ do_connect(ClientId, CleanSession, Will, Duration, StateData=#state{protocol = P
 
 do_2nd_connect(Flags, Duration, ClientId, StateData = #state{client_id = OldClientId, protocol = Proto, conn = Conn, enable_stats = EnableStats}) ->
     ?PROTO_SHUTDOWN(normal, Proto),
-    emq_sn_topic_manager:unregister_topic(OldClientId),
+    emqx_sn_topic_manager:unregister_topic(OldClientId),
     NewProto = proto_init(Conn, EnableStats),
     #mqtt_sn_flags{will = Will, clean_session = CleanSession} = Flags,
     do_connect(ClientId, CleanSession, Will, Duration, StateData#state{protocol = NewProto}).
 
 do_subscribe(?SN_NORMAL_TOPIC, TopicId, Qos, MsgId, StateData=#state{client_id = ClientId}) ->
-    case emq_sn_topic_manager:register_topic(ClientId, TopicId) of
+    case emqx_sn_topic_manager:register_topic(ClientId, TopicId)of
         undefined ->
             send_message(?SN_SUBACK_MSG(#mqtt_sn_flags{qos = Qos}, ?SN_INVALID_TOPIC_ID, MsgId, ?SN_RC_INVALID_TOPIC_ID), StateData#state.conn),
             next_state(connected, StateData);
@@ -691,7 +690,7 @@ do_subscribe(?SN_NORMAL_TOPIC, TopicId, Qos, MsgId, StateData=#state{client_id =
             proto_subscribe(TopicId, Qos, MsgId, NewTopicId, StateData)
     end;
 do_subscribe(?SN_PREDEFINED_TOPIC, TopicId, Qos, MsgId, StateData=#state{client_id = ClientId}) ->
-    case emq_sn_topic_manager:lookup_topic(ClientId, TopicId) of
+    case emqx_sn_topic_manager:lookup_topic(ClientId, TopicId) of
         undefined ->
             send_message(?SN_SUBACK_MSG(#mqtt_sn_flags{qos = Qos}, TopicId, MsgId, ?SN_RC_INVALID_TOPIC_ID), StateData#state.conn),
             next_state(connected, StateData);
@@ -713,7 +712,7 @@ do_subscribe(_, _TopicId, Qos, MsgId, StateData) ->
 do_unsubscribe(?SN_NORMAL_TOPIC, TopicId, MsgId, StateData) ->
     proto_unsubscribe(TopicId, MsgId, StateData);
 do_unsubscribe(?SN_PREDEFINED_TOPIC, TopicId, MsgId, StateData=#state{client_id = ClientId}) ->
-    case emq_sn_topic_manager:lookup_topic(ClientId, TopicId) of
+    case emqx_sn_topic_manager:lookup_topic(ClientId, TopicId) of
         undefined ->
             send_message(?SN_UNSUBACK_MSG(MsgId), StateData#state.conn),
             next_state(connected, StateData);
@@ -736,7 +735,7 @@ do_publish(?SN_NORMAL_TOPIC, TopicId, Data, Flags, MsgId, StateData) ->
 do_publish(?SN_PREDEFINED_TOPIC, TopicId, Data, Flags, MsgId, StateData=#state{client_id = ClientId}) ->
     #mqtt_sn_flags{qos = Qos, dup = Dup, retain = Retain} = Flags,
     NewQos = get_corrected_qos(Qos, StateData),
-    case emq_sn_topic_manager:lookup_topic(ClientId, TopicId) of
+    case emqx_sn_topic_manager:lookup_topic(ClientId, TopicId) of
         undefined ->
             (NewQos =/= ?QOS0) andalso send_message(?SN_PUBACK_MSG(TopicId, MsgId, ?SN_RC_INVALID_TOPIC_ID), StateData#state.conn),
             next_state(connected, StateData);
@@ -747,7 +746,7 @@ do_publish(?SN_SHORT_TOPIC, TopicId, Data, Flags, MsgId, StateData) ->
     #mqtt_sn_flags{qos = Qos, dup = Dup, retain = Retain} = Flags,
     NewQos = get_corrected_qos(Qos, StateData),
     TopicName = <<TopicId:16>>,
-    case emq_sn_topic_manager:wildcard(TopicName) of
+    case emqx_sn_topic_manager:wildcard(TopicName) of
         true ->
             (NewQos =/= ?QOS0) andalso send_message(?SN_PUBACK_MSG(TopicId, MsgId, ?SN_RC_NOT_SUPPORTED), StateData#state.conn),
             next_state(connected, StateData);
@@ -783,7 +782,7 @@ do_puback(TopicId, MsgId, ReturnCode, StateName, StateData=#state{client_id = Cl
                 {stop, Reason, Proto1} -> stop(Reason, StateData#state{protocol = Proto1})
             end;
         ?SN_RC_INVALID_TOPIC_ID ->
-            case emq_sn_topic_manager:lookup_topic(ClientId, TopicId) of
+            case emqx_sn_topic_manager:lookup_topic(ClientId, TopicId) of
                 undefined -> ok;
                 TopicName ->
                     %%notice that this TopicName maybe normal or predefined,
@@ -854,10 +853,10 @@ find_suback_topicid(MsgId, [{_, _}|Rest]) ->
 publish_message_to_device(Msg, ClientId, StateData = #state{conn = Conn, protocol = ProtoState}) ->
     #mqtt_packet{header   = #mqtt_packet_header{type = ?PUBLISH, dup = Dup, qos = Qos, retain = Retain},
                  variable = #mqtt_packet_publish{topic_name = TopicName, packet_id = MsgId0},
-                 payload  = Payload} = emqttd_message:to_packet(Msg),
+                 payload  = Payload} = emqx_message:to_packet(Msg),
     MsgId = message_id(MsgId0),
     ?LOG(debug, "the TopicName of mqtt_message=~p~n", [TopicName], StateData),
-    case emq_sn_topic_manager:lookup_topic_id(ClientId, TopicName) of
+    case emqx_sn_topic_manager:lookup_topic_id(ClientId, TopicName) of
         undefined ->
             case byte_size(TopicName) of
                 2 ->
@@ -885,7 +884,7 @@ publish_asleep_messages_to_device(ClientId, StateData=#state{asleep_msg_queue = 
     end.
 
 register_and_notify_client(TopicName, Payload, Dup, Qos, Retain, MsgId, ClientId, Conn) ->
-    TopicId = emq_sn_topic_manager:register_topic(ClientId, TopicName),
+    TopicId = emqx_sn_topic_manager:register_topic(ClientId, TopicName),
     ?LOG2(debug, "register TopicId=~p, TopicName=~p, Payload=~p, Dup=~p, Qos=~p, Retain=~p, MsgId=~p",
         [TopicId, TopicName, Payload, Dup, Qos, Retain, MsgId], Conn#connection.peer),
     send_register(TopicName, TopicId, MsgId, Conn).
@@ -938,7 +937,7 @@ emit_stats(_ClientId, State = #state{enable_stats = false}) ->
     State;
 
 emit_stats(ClientId, #state{protocol=ProtoState, conn = #connection{socket = Sock}}) ->
-    StatsList = lists:append([emqttd_misc:proc_stats(),
+    StatsList = lists:append([emqx_misc:proc_stats(),
         ?PROTO_STATS(ProtoState),
         socket_stats(Sock, ?SOCK_STATS)]),
     ?SET_CLIENT_STATS(ClientId, StatsList).

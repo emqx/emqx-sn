@@ -25,9 +25,9 @@
 
 -record(state, {subscriber, peer, pkt_opts, connect_pkt, last_puback, last_pubrel, rx_message, subed, unsubed, stats_data}).
 
--include_lib("emqttd/include/emqttd.hrl").
--include_lib("emqttd/include/emqttd_protocol.hrl").
--include_lib("emqttd/include/emqttd_internal.hrl").
+-include_lib("emqx/include/emqx.hrl").
+-include_lib("emqx/include/emqx_mqtt.hrl").
+-include_lib("emqx/include/emqx_macros.hrl").
 
 
 -define(LOG(Format, Args),
@@ -269,7 +269,7 @@ stats(_) ->
     tl(?record_to_proplist(proto_stats, Stats)).
 
 set_client_stats(ClientId, Statlist) ->
-    ets:insert(test_client_stats, {ClientId, [{'$ts', emqttd_time:now_secs()}|Statlist]}).
+    ets:insert(test_client_stats, {ClientId, [{'$ts', emqx_time:now_secs()}|Statlist]}).
 
 print_table(client_stats) ->
     List = ets:tab2list(test_client_stats),
@@ -279,7 +279,7 @@ clientid(_) ->
      cleintid_test.
 
 send(Msg, ProtoState) ->
-    Packet =#mqtt_packet{variable = #mqtt_packet_publish{topic_name = Topic}} = emqttd_message:to_packet(Msg),
+    Packet =#mqtt_packet{variable = #mqtt_packet_publish{topic_name = Topic}} = emqx_message:to_packet(Msg),
     ?LOG("The topic_name is ~p~n", [Topic]),
     Send = get(debug_unit_test_send_func),
     Send(Packet),

@@ -14,12 +14,12 @@
 %%% limitations under the License.
 %%%-------------------------------------------------------------------
 
--module(emq_sn_message_SUITE).
+-module(emqx_sn_message_SUITE).
 
 -include_lib("eunit/include/eunit.hrl").
--include("emq_sn.hrl").
+-include("emqx_sn.hrl").
 
--import(emq_sn_message, [parse/1, serialize/1]).
+-import(emqx_sn_message, [parse/1, serialize/1]).
 
 -compile(export_all).
 

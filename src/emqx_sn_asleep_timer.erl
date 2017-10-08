@@ -14,7 +14,7 @@
 %%% limitations under the License.
 %%%-------------------------------------------------------------------
 
--module(emq_sn_asleep_timer).
+-module(emqx_sn_asleep_timer).
 
 -author("Feng Lee <feng@emqtt.io>").
 

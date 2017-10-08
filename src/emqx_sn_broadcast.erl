@@ -14,7 +14,7 @@
 %%% limitations under the License.
 %%%-------------------------------------------------------------------
 
--module(emq_sn_broadcast).
+-module(emqx_sn_broadcast).
 
 -author("Feng Lee <feng@emqtt.io>").
 
@@ -23,7 +23,7 @@
 -define(LOG(Level, Format, Args),
     lager:Level("MQTT-SN(broadcast): " ++ Format, Args)).
 
--include("emq_sn.hrl").
+-include("emqx_sn.hrl").
 
 %% API.
 -export([start_link/1, stop/0]).
@@ -91,7 +91,7 @@ code_change(_OldVsn, State, _Extra) ->
 %%--------------------------------------------------------------------
 
 send_advertise(#state{bc_address = IpList, sock = Sock, gwid = GwId, duration = Duration}) ->
-    Data = emq_sn_message:serialize(?SN_ADVERTISE_MSG(GwId, Duration)),
+    Data = emqx_sn_message:serialize(?SN_ADVERTISE_MSG(GwId, Duration)),
     send_advertise(Sock, IpList, Data).
 
 send_advertise(_Sock, [], _Data) ->

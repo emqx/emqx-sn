@@ -14,7 +14,7 @@
 %%% limitations under the License.
 %%%-------------------------------------------------------------------
 
--module(emq_sn_sup).
+-module(emqx_sn_sup).
 
 -author("Feng Lee <feng@emqtt.io>").
 
@@ -29,23 +29,23 @@ start_link(Listener, Duration, GwId, EnableStats, PredefTopicList) ->
 
 init([{Port, Opts}, Duration, GwId, EnableStats, PredefTopicList]) ->
 
-    BcSrv = {emq_sn_broadcast,
-                {emq_sn_broadcast, start_link, [[Duration, GwId]]},
-                    permanent, brutal_kill, worker, [emq_sn_broadcast]},
+    BcSrv = {emqx_sn_broadcast,
+                {emqx_sn_broadcast, start_link, [[Duration, GwId]]},
+                    permanent, brutal_kill, worker, [emqx_sn_broadcast]},
 
-    GwSup = {emq_sn_gateway_sup,
-                {emq_sn_gateway_sup, start_link, []},
-                    permanent, infinity, supervisor, [emq_sn_gateway_sup]},
+    GwSup = {emqx_sn_gateway_sup,
+                {emqx_sn_gateway_sup, start_link, []},
+                    permanent, infinity, supervisor, [emqx_sn_gateway_sup]},
 
-    MFA = {emq_sn_gateway_sup, start_gateway, [GwId, EnableStats]},
+    MFA = {emqx_sn_gateway_sup, start_gateway, [GwId, EnableStats]},
 
-    UdpSrv = {emq_sn_udp_server,
+    UdpSrv = {emqx_sn_udp_server,
                  {esockd_udp, server, [mqtt_sn, Port, Opts, MFA]},
                      permanent, 5000, worker, [esockd_udp]},
 
-    PreDefTopics = {emq_sn_predefined_topics,
-                       {emq_sn_predefined_topics, start_link, [PredefTopicList]},
-                           permanent, 5000, worker, [emq_sn_predefined_topics]},
+    PreDefTopics = {emqx_sn_predefined_topics,
+                       {emqx_sn_predefined_topics, start_link, [PredefTopicList]},
+                           permanent, 5000, worker, [emqx_sn_predefined_topics]},
 
-    {ok, { {one_for_all, 10, 3600}, [BcSrv, ?CHILD(emq_sn_normal_topics), GwSup, UdpSrv, PreDefTopics] }}.
+    {ok, { {one_for_all, 10, 3600}, [BcSrv, ?CHILD(emqx_sn_normal_topics), GwSup, UdpSrv, PreDefTopics] }}.
 

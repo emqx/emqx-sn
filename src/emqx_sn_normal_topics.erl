@@ -14,7 +14,7 @@
 %%% limitations under the License.
 %%%-------------------------------------------------------------------
 
--module(emq_sn_normal_topics).
+-module(emqx_sn_normal_topics).
 
 -author("Feng Lee <feng@emqtt.io>").
 
@@ -142,7 +142,7 @@ get_registered_id(ClientId, TopicName) ->
 
 register_new_topic(ClientId, TopicName) ->
     %% The values “0x0000” and “0xFFFF” are reserved and therefore should not be used.
-    NewTopicId = emq_sn_predefined_topics:get_max_predef_topic_id() + length(ets:lookup(sn_topic, ClientId)) + 1,
+    NewTopicId = emqx_sn_predefined_topics:get_max_predef_topic_id() + length(ets:lookup(sn_topic, ClientId)) + 1,
     case NewTopicId < 16#FFFF of
         true ->  % this id is new
             ets:insert(sn_topic, {ClientId, NewTopicId}),
