@@ -26,9 +26,10 @@
 -record(state, {subscriber, peer, pkt_opts, connect_pkt, last_puback, last_pubrel, rx_message, subed, unsubed, stats_data}).
 
 -include_lib("emqx/include/emqx.hrl").
--include_lib("emqx/include/emqx_mqtt.hrl").
--include_lib("emqx/include/emqx_macros.hrl").
 
+-include_lib("emqx/include/emqx_mqtt.hrl").
+
+-include_lib("emqx/include/emqx_internal.hrl").
 
 -define(LOG(Format, Args),
     lager:debug("TEST broker: " ++ Format, Args)).
