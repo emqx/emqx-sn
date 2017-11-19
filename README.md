@@ -1,4 +1,4 @@
-emq_sn
+emq-sn
 ======
 
 MQTT-SN Gateway for The EMQ Broker
@@ -53,7 +53,6 @@ Load Plugin
 - Please register your topics again each time connected with broker.
 
 
-
 ### Library
 
 - https://github.com/eclipse/paho.mqtt-sn.embedded-c/
@@ -74,8 +73,6 @@ pre-defined topics
 The mapping of a pre-defined topic id and topic name should be known inadvance by both client's application and gateway. We define this mapping info in emq_sn.conf file, and which shall be kept equivalent in all client's side.
 
 
-
-
 License
 -------
 
@@ -84,5 +81,5 @@ Apache License Version 2.0
 Author
 ------
 
-Feng Lee <feng@emqtt.io>
+EMQ X Team.
 
