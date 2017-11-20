@@ -41,6 +41,6 @@ start(_Type, _Args) ->
     emqx_sn_sup:start_link({Port, []}, Duration, GwId, EnableStats, PredefTopicList).
 
 stop(_State) ->
-	emqx_sn_config:unregister(),
-	ok.
+    emqx_sn_config:unregister(),
+    ok.
 

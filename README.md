@@ -1,7 +1,7 @@
-emqx_sn
+emqx-sn
 =======
 
-MQTT-SN Gateway for The EMQ Broker
+EMQ X MQTT-SN Connector.
 
 Configure Plugin
 ----------------
@@ -38,7 +38,6 @@ mqtt.sn.password = abc
 - mqtt.sn.password
   * This parameter is optional. Pair with username above.
 
-
 Load Plugin
 -----------
 
@@ -52,8 +51,6 @@ Load Plugin
 - Topic ID is per-client, and will be cleared if client disconnected with broker or keep-alive failure is detected in broker.
 - Please register your topics again each time connected with broker.
 
-
-
 ### Library
 
 - https://github.com/eclipse/paho.mqtt-sn.embedded-c/
@@ -61,20 +58,15 @@ Load Plugin
 - https://github.com/njh/mqtt-sn-tools
 - https://github.com/arobenko/mqtt-sn
 
-
 sleeping device
 -----------
 
 PINGREQ must have a ClientId which is identical to the one in CONNECT message. Without ClientId, emqx-sn will ignore such PINGREQ.
 
-
 pre-defined topics
 -----------
 
 The mapping of a pre-defined topic id and topic name should be known inadvance by both client's application and gateway. We define this mapping info in emqx_sn.conf file, and which shall be kept equivalent in all client's side.
-
-
-
 
 License
 -------
@@ -84,5 +76,5 @@ Apache License Version 2.0
 Author
 ------
 
-Feng Lee <feng@emqtt.io>
+EMQ X-Men Team.
 

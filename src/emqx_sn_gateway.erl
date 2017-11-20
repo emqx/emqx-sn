@@ -629,13 +629,10 @@ send_message(Msg, #connection{socket = Sock, peer = Peer}) ->
 next_state(StateName, StateData) ->
     {next_state, StateName, StateData}.
 
-
-
 goto_asleep_state(StateData=#state{asleep_timer = AsleepTimer}, Duration) ->
     ?LOG(debug, "goto_asleep_state Duration=~p", [Duration], StateData),
     NewTimer = emqx_sn_asleep_timer:start(AsleepTimer, Duration),
     {next_state, asleep, StateData#state{asleep_timer = NewTimer}, hibernate}.
-
 
 shutdown(Error, StateData) ->
     {stop, {shutdown, Error}, StateData}.

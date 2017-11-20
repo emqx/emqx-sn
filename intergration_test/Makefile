@@ -92,8 +92,8 @@ case5:
 	
 	
 $(RELX_CONF):
-	git clone https://github.com/emqtt/emqx-rel.git
-	git clone https://github.com/emqtt/emqx-sn.git
+	git clone -b free https://github.com/emqx/emqx-rel.git
+	git clone https://github.com/emqx/emqx-sn.git
 	@echo "update emqx-sn with this development code"
 	mv emqx-sn  emqx_sn
 	-rm -rf emqx_sn/etc
@@ -112,7 +112,9 @@ $(RELX_CONF):
 	@echo "start building ..."
 	make -C emqx-rel -f Makefile
 	
-
+paho:
+	make $(PAHO_GIT)
+	
 $(PAHO_GIT):
 	git clone https://github.com/eclipse/paho.mqtt-sn.embedded-c/
 	
@@ -141,5 +143,9 @@ clean: clean_result
 	-rm -f client/*.o
 	-rm -rf emqx-rel
 	-rm -rf paho.mqtt-sn.embedded-c
+	
+	
+lazy:  clean_result start_broker case1 case2 case3 case4 case5 stop_broker disable_qos3
+	@echo "lazy work"
 	
 	

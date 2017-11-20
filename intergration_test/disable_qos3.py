@@ -3,7 +3,7 @@ input = open("emqx-rel/deps/emqx_sn/etc/emqx_sn.conf")
 lines = input.readlines()
 input.close()
 
-output  = open("emqx-relx/deps/emqx_sn/etc/emqx_sn.conf",'w');
+output  = open("emqx-rel/deps/emqx_sn/etc/emqx_sn.conf",'w');
 for line in lines:
     if not line:
         break

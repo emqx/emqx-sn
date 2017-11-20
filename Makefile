@@ -1,13 +1,13 @@
 PROJECT = emqx_sn
 PROJECT_DESCRIPTION = EMQ X MQTT-SN Gateway
-PROJECT_VERSION = 2.4
+PROJECT_VERSION = 2.3.0
 
 DEPS = esockd clique
 dep_esockd = git https://github.com/emqtt/esockd master
 dep_clique = git https://github.com/emqtt/clique
 
 BUILD_DEPS = emqx cuttlefish
-dep_emqx = git https://github.com/emqtt/emqttd X
+dep_emqx = git git@github.com:emqx/emqx.git X
 dep_cuttlefish = git https://github.com/emqtt/cuttlefish
 
 ERLC_OPTS += +debug_info
