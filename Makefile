@@ -7,7 +7,7 @@ dep_esockd = git https://github.com/emqtt/esockd master
 dep_clique = git https://github.com/emqtt/clique
 
 BUILD_DEPS = emqx cuttlefish
-dep_emqx = git git@github.com:emqx/emqx.git X
+dep_emqx = git git@github.com:emqx/emqx-enterprise
 dep_cuttlefish = git https://github.com/emqtt/cuttlefish
 
 ERLC_OPTS += +debug_info
