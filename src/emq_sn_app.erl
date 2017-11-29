@@ -31,14 +31,16 @@
 %%--------------------------------------------------------------------
 
 start(_Type, _Args) ->
-    Listener = application:get_env(?APP, listener, {1884, []}),
+    Port = application:get_env(?APP, port, 1884),
     Duration = application:get_env(?APP, advertise_duration, 15*60),
     GwId = application:get_env(?APP, gateway_id, 1),
     EnableStats = application:get_env(?APP, enable_stats, false),
     PredefTopicList = application:get_env(?APP, predefined, []),
     ?LOG(debug, "The PredefTopicList is ~p~n", [PredefTopicList]),
-    emq_sn_sup:start_link(Listener, Duration, GwId, EnableStats, PredefTopicList).
+    emq_sn_config:register(),
+    emq_sn_sup:start_link({Port, []}, Duration, GwId, EnableStats, PredefTopicList).
 
 stop(_State) ->
+	emq_sn_config:unregister(),
 	ok.
 
