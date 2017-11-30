@@ -632,14 +632,13 @@ goto_asleep_state(StateData=#state{asleep_timer = AsleepTimer}, Duration) ->
 
 
 shutdown(Error, StateData) ->
+    ?LOG(error, "shutdown due to ~p", [Error], StateData),
     stop({shutdown, Error}, StateData).
 
 stop(Reason, StateData) ->
     case Reason of
         asleep_timeout                    -> do_publish_will(StateData);
         {shutdown, keepalive_timeout}     -> do_publish_will(StateData);
-        {shutdown, kick}                  -> do_publish_will(StateData);
-        {shutdown, conflict}              -> do_publish_will(StateData);
         _                                 -> ok
     end,
     {stop, normal, StateData}.
