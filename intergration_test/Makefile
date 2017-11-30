@@ -88,7 +88,11 @@ case5:
 	sleep 1
 	client/case5_qos3pub.exe
 	
-	
+case6:
+	-ps aux|grep case6_sleep|awk '{print $$2}'|xargs kill -9
+	gcc client/case6_sleep.c $(PAHO_SRC) $(INCLUDE_PATH) -o client/case6_sleep.exe
+	client/case6_sleep.exe
+
 	
 	
 $(RELX_CONF):
@@ -140,5 +144,9 @@ clean: clean_result
 	-rm -f client/*.o
 	-rm -rf emq-relx
 	-rm -rf paho.mqtt-sn.embedded-c
+	
+	
+lazy: clean_result start_broker case6 stop_broker
+	@echo "lazy mode"
 	
 	
