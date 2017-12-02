@@ -523,14 +523,7 @@ handle_info(Info, StateName, StateData) ->
     ?LOG(error, "UNEXPECTED INFO: ~p", [Info], StateData),
     {next_state, StateName, StateData}.
 
-terminate(Reason, _StateName, StateData = #state{client_id = ClientId, keepalive = KeepAlive, protocol = Proto}) ->
-    case Reason of
-        asleep_timeout                    -> do_publish_will(StateData);
-        {shutdown, keepalive_timeout}     -> do_publish_will(StateData);
-        {shutdown, kick}                  -> do_publish_will(StateData);
-        {shutdown, conflict}              -> do_publish_will(StateData);
-        _                                 -> ok
-    end,
+terminate(Reason, _StateName, #state{client_id = ClientId, keepalive = KeepAlive, protocol = Proto}) ->
     emq_sn_topic_manager:unregister_topic(ClientId),
     emqttd_keepalive:cancel(KeepAlive),
     case {Proto, Reason} of
@@ -639,10 +632,16 @@ goto_asleep_state(StateData=#state{asleep_timer = AsleepTimer}, Duration) ->
 
 
 shutdown(Error, StateData) ->
-    {stop, {shutdown, Error}, StateData}.
+    ?LOG(error, "shutdown due to ~p", [Error], StateData),
+    stop({shutdown, Error}, StateData).
 
 stop(Reason, StateData) ->
-    {stop, Reason, StateData}.
+    case Reason of
+        asleep_timeout                    -> do_publish_will(StateData);
+        {shutdown, keepalive_timeout}     -> do_publish_will(StateData);
+        _                                 -> ok
+    end,
+    {stop, normal, StateData}.
 
 mqttsn_to_mqtt(?SN_PUBACK)  -> ?PUBACK;
 mqttsn_to_mqtt(?SN_PUBREC)  -> ?PUBREC;
