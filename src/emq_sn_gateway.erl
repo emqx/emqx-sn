@@ -585,10 +585,12 @@ transform(?PUBACK_PACKET(?PUBREL, MsgId), _FuncMsgIdToTopicId) ->
 transform(?PUBACK_PACKET(?PUBCOMP, MsgId), _FuncMsgIdToTopicId) ->
     ?SN_PUBREC_MSG(?SN_PUBCOMP, MsgId);
 
-transform(?SUBACK_PACKET(_MsgId, _QosTable), _FuncMsgIdToTopicId)->
-    % SUBACK is not sent in this way
-    % please refer to handle_info({suback, MsgId, [GrantedQos]}, ...)
-    error(false);
+transform(?SUBACK_PACKET(MsgId, _QosTable), _FuncMsgIdToTopicId)->
+    % if success, suback is sent by handle_info({suback, MsgId, [GrantedQos]}, ...)
+    % if failure, suback is sent in this function.
+    Flags = #mqtt_sn_flags{qos = 0},
+    ?SN_SUBACK_MSG(Flags, ?SN_INVALID_TOPIC_ID, MsgId, ?SN_RC_MQTT_FAILURE);
+
 
 transform(?UNSUBACK_PACKET(MsgId), _FuncMsgIdToTopicId)->
     ?SN_UNSUBACK_MSG(MsgId).
