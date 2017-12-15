@@ -29,6 +29,7 @@ all:  clean_result $(RELX_CONF) $(PAHO_GIT) start_broker case1 case2 case3 case4
 clean_result:
 	-rm -f client/*_FAIL.txt
 	-rm -f client/*_PASS.txt
+	-rm -f emq-relx/_rel/emqttd/log/*
 	
 start_broker:
 	-emq-relx/_rel/emqttd/bin/emqttd stop
@@ -116,6 +117,8 @@ $(RELX_CONF):
 	@echo "start building ..."
 	make -C emq-relx -f Makefile
 	
+paho: $(PAHO_GIT)
+	@echo "clone paho"
 
 $(PAHO_GIT):
 	git clone https://github.com/eclipse/paho.mqtt-sn.embedded-c/
@@ -146,7 +149,7 @@ clean: clean_result
 	-rm -rf paho.mqtt-sn.embedded-c
 	
 	
-lazy: clean_result start_broker case6 stop_broker
+lazy: clean_result start_broker case1 stop_broker
 	@echo "lazy mode"
 	
 	
