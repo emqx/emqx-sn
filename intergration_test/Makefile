@@ -1,4 +1,3 @@
-
 .PHONY: clean, clean_result, start_broker  stop_broker  case1
 
 RELX_CONF = emqx-rel/relx.config
@@ -19,24 +18,24 @@ PAHO_SRC  = paho.mqtt-sn.embedded-c/MQTTSNPacket/src/MQTTSNConnectClient.c      
 			client/int_test_result.c
 
 INCLUDE_PATH = -Ipaho.mqtt-sn.embedded-c/MQTTSNPacket/src -Ipaho.mqtt-sn.embedded-c/MQTTSNPacket/samples -Iclient
-			
 
 all:  clean_result $(RELX_CONF) $(PAHO_GIT) start_broker case1 case2 case3 case4 case5 stop_broker disable_qos3
 	@echo "  "
 	@echo "  test complete"
 	@echo "  "
-	
+
 clean_result:
 	-rm -f client/*_FAIL.txt
 	-rm -f client/*_PASS.txt
-	
+	-rm -f emq-relx/_rel/emqttd/log/*
+
 start_broker:
 	-emqx-rel/_rel/emqx/bin/emqx stop
 	sleep 3
 	emqx-rel/_rel/emqx/bin/emqx start
 	sleep 5
 	emqx-rel/_rel/emqx/bin/emqx_ctl plugins load emqx_sn
-	
+
 stop_broker:
 	emqx-rel/_rel/emqx/bin/emqx stop
 
@@ -87,10 +86,12 @@ case5:
 	client/case5_qos3sub.exe &
 	sleep 1
 	client/case5_qos3pub.exe
-	
-	
-	
-	
+
+case6:
+	-ps aux|grep case6_sleep|awk '{print $$2}'|xargs kill -9
+	gcc client/case6_sleep.c $(PAHO_SRC) $(INCLUDE_PATH) -o client/case6_sleep.exe
+	client/case6_sleep.exe
+
 $(RELX_CONF):
 	git clone -b free https://github.com/emqx/emqx-rel.git
 	git clone https://github.com/emqx/emqx-sn.git
@@ -111,17 +112,20 @@ $(RELX_CONF):
 	python ./enable_qos3.py
 	@echo "start building ..."
 	make -C emqx-rel -f Makefile
-	
+
 paho:
 	make $(PAHO_GIT)
-	
+
+paho: $(PAHO_GIT)
+	@echo "clone paho"
+
 $(PAHO_GIT):
 	git clone https://github.com/eclipse/paho.mqtt-sn.embedded-c/
-	
+
 r: rebuild_emq
 	# short for rebuild_emq
 	@echo "rebuild complete"
-	
+
 rebuild_emq:
 	-rm -rf emqx-rel/deps/emqx_sn/etc
 	-rm -rf emqx-rel/deps/emqx_sn/include
@@ -136,16 +140,13 @@ rebuild_emq:
 	cp -rf ../Makefile emqx-rel/deps/emqx_sn/Makefile
 	python ./enable_qos3.py
 	make -C emqx-rel -f Makefile
-	
-	
+
 clean: clean_result
 	-rm -f client/*.exe
 	-rm -f client/*.o
 	-rm -rf emqx-rel
 	-rm -rf paho.mqtt-sn.embedded-c
-	
-	
+
 lazy:  clean_result start_broker case1 case2 case3 case4 case5 stop_broker disable_qos3
 	@echo "lazy work"
-	
-	
+

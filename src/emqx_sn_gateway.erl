@@ -522,16 +522,9 @@ handle_info(Info, StateName, StateData) ->
     ?LOG(error, "UNEXPECTED INFO: ~p", [Info], StateData),
     {next_state, StateName, StateData}.
 
-terminate(Reason, _StateName, StateData = #state{client_id = ClientId, keepalive = KeepAlive, protocol = Proto}) ->
-    case Reason of
-        asleep_timeout                    -> do_publish_will(StateData);
-        {shutdown, keepalive_timeout}     -> do_publish_will(StateData);
-        {shutdown, kick}                  -> do_publish_will(StateData);
-        {shutdown, conflict}              -> do_publish_will(StateData);
-        _                                 -> ok
-    end,
-    emqx_sn_topic_manager:unregister_topic(ClientId),
-    emqx_keepalive:cancel(KeepAlive),
+terminate(Reason, _StateName, #state{client_id = ClientId, keepalive = KeepAlive, protocol = Proto}) ->
+    emq_sn_topic_manager:unregister_topic(ClientId),
+    emqttd_keepalive:cancel(KeepAlive),
     case {Proto, Reason} of
         {undefined, _} ->
             ok;
@@ -591,10 +584,12 @@ transform(?PUBACK_PACKET(?PUBREL, MsgId), _FuncMsgIdToTopicId) ->
 transform(?PUBACK_PACKET(?PUBCOMP, MsgId), _FuncMsgIdToTopicId) ->
     ?SN_PUBREC_MSG(?SN_PUBCOMP, MsgId);
 
-transform(?SUBACK_PACKET(_MsgId, _QosTable), _FuncMsgIdToTopicId)->
-    % SUBACK is not sent in this way
-    % please refer to handle_info({suback, MsgId, [GrantedQos]}, ...)
-    error(false);
+transform(?SUBACK_PACKET(MsgId, _QosTable), _FuncMsgIdToTopicId)->
+    % if success, suback is sent by handle_info({suback, MsgId, [GrantedQos]}, ...)
+    % if failure, suback is sent in this function.
+    Flags = #mqtt_sn_flags{qos = 0},
+    ?SN_SUBACK_MSG(Flags, ?SN_INVALID_TOPIC_ID, MsgId, ?SN_RC_MQTT_FAILURE);
+
 
 transform(?UNSUBACK_PACKET(MsgId), _FuncMsgIdToTopicId)->
     ?SN_UNSUBACK_MSG(MsgId).
@@ -635,10 +630,16 @@ goto_asleep_state(StateData=#state{asleep_timer = AsleepTimer}, Duration) ->
     {next_state, asleep, StateData#state{asleep_timer = NewTimer}, hibernate}.
 
 shutdown(Error, StateData) ->
-    {stop, {shutdown, Error}, StateData}.
+    ?LOG(error, "shutdown due to ~p", [Error], StateData),
+    stop({shutdown, Error}, StateData).
 
 stop(Reason, StateData) ->
-    {stop, Reason, StateData}.
+    case Reason of
+        asleep_timeout                    -> do_publish_will(StateData);
+        {shutdown, keepalive_timeout}     -> do_publish_will(StateData);
+        _                                 -> ok
+    end,
+    {stop, normal, StateData}.
 
 mqttsn_to_mqtt(?SN_PUBACK)  -> ?PUBACK;
 mqttsn_to_mqtt(?SN_PUBREC)  -> ?PUBREC;
