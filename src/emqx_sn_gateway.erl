@@ -523,8 +523,8 @@ handle_info(Info, StateName, StateData) ->
     {next_state, StateName, StateData}.
 
 terminate(Reason, _StateName, #state{client_id = ClientId, keepalive = KeepAlive, protocol = Proto}) ->
-    emq_sn_topic_manager:unregister_topic(ClientId),
-    emqttd_keepalive:cancel(KeepAlive),
+    emqx_sn_topic_manager:unregister_topic(ClientId),
+    emqx_keepalive:cancel(KeepAlive),
     case {Proto, Reason} of
         {undefined, _} ->
             ok;
