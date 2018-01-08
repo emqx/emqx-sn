@@ -9,15 +9,49 @@ Configure Plugin
 File: etc/emqx_sn.conf
 
 ```
+## The UDP port which emq-sn is listening on.
+##
+## Value: IP:Port | Port
+##
+## Examples: 1884, 127.0.0.1:1884, ::1:1884
 mqtt.sn.port = 1884
+
+## The duration(seconds) that emq-sn broadcast ADVERTISE message through.
+##
+## Value: Second
 mqtt.sn.advertise_duration = 900
+
+## The MQTT-SN Gateway id in ADVERTISE message.
+##
+## Value: Number
 mqtt.sn.gateway_id = 1
+
+## To control whether write statistics data into ETS table for dashbord to read.
+##
+## Value: on | off
 mqtt.sn.enable_stats = off
+
+## To control whether accept and process the received publish message with qos=-1.
+##
+## Value: on | off
 mqtt.sn.enable_qos3 = off
+
+## The pre-defined topic name corresponding to the pre-defined topic id of N.
+## Note that the pre-defined topic id of 0 is reserved.
 mqtt.sn.predefined.topic.0 = reserved
 mqtt.sn.predefined.topic.1 = /predefined/topic/name/hello
 mqtt.sn.predefined.topic.2 = /predefined/topic/name/nice
+
+## Default username for MQTT-SN. This parameter is optional. If specified,
+## emq-sn will connect EMQ core with this username. It is useful if any auth
+## plug-in is enabled.
+##
+## Value: String
 mqtt.sn.username = mqtt_sn_user
+
+## This parameter is optional. Pair with username above.
+##
+## Value: String
 mqtt.sn.password = abc
 ```
 
