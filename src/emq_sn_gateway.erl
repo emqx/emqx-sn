@@ -1,5 +1,5 @@
 %%%-------------------------------------------------------------------
-%%% Copyright (c) 2013-2017 EMQ Enterprise, Inc. (http://emqtt.io)
+%%% Copyright (c) 2013-2018 EMQ Enterprise, Inc. (http://emqtt.io)
 %%%
 %%% Licensed under the Apache License, Version 2.0 (the "License");
 %%% you may not use this file except in compliance with the License.
@@ -298,9 +298,19 @@ connected(?SN_ADVERTISE_MSG(_GwId, _Radius), StateData) ->
     % ignore
     {next_state, connected, StateData};
 
-connected(?SN_CONNECT_MSG(Flags, _ProtoId, Duration, ClientId), StateData) ->
-    do_2nd_connect(Flags, Duration, ClientId, StateData);
+connected(?SN_CONNECT_MSG(Flags, _ProtoId, Duration, ClientId), StateData = #state{client_id = ClientId, keepalive_duration = Duration, conn = Conn}) ->
+    send_connack(Conn),
+    update_2nd_connect_params(Flags, StateData);
 
+connected(?SN_CONNECT_MSG(Flags, _ProtoId, Duration, ClientId), StateData = #state{client_id = OldClientId}) ->
+    ?LOG(error, "receive connect with new clientid: ~p, different from stored clientId: ~p, will not accept this connect and quit", [ClientId, OldClientId], StateData),
+    send_message(?SN_CONNACK_MSG(?SN_RC_NOT_SUPPORTED), StateData#state.conn),
+    stop(wrong_connect, StateData);
+
+connected(?SN_CONNECT_MSG(Flags, _ProtoId, Duration, ClientId), StateData = #state{keepalive_duration = OldDuration}) ->
+    ?LOG(error, "receive connect with new duration: ~p, different from stored duration: ~p, will not accept this connect and quit", [Duration, OldDuration], StateData),
+    send_message(?SN_CONNACK_MSG(?SN_RC_NOT_SUPPORTED), StateData#state.conn),
+    stop(wrong_connect, StateData);
 
 connected(Event, StateData) ->
     ?LOG(error, "connected UNEXPECTED Event: ~p", [Event], StateData),
@@ -680,6 +690,16 @@ do_2nd_connect(Flags, Duration, ClientId, StateData = #state{client_id = OldClie
     NewProto = proto_init(Conn, EnableStats),
     #mqtt_sn_flags{will = Will, clean_session = CleanSession} = Flags,
     do_connect(ClientId, CleanSession, Will, Duration, StateData#state{protocol = NewProto}).
+
+update_2nd_connect_params(Flags, StateData) ->
+    #mqtt_sn_flags{will = Will} = Flags,
+    case Will of
+        true  ->
+            send_message(?SN_WILLTOPICREQ_MSG(), StateData#state.conn),
+            {next_state, wait_for_will_topic, StateData};
+        false ->
+            next_state(connected, StateData)
+    end.
 
 do_subscribe(?SN_NORMAL_TOPIC, TopicId, Qos, MsgId, StateData=#state{client_id = ClientId}) ->
     case emq_sn_topic_manager:register_topic(ClientId, TopicId) of

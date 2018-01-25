@@ -2,7 +2,7 @@
 %% emq_sn config mapping
 {mapping, "mqtt.sn.port", "emq_sn.port", [
   {default, 1884},
-  {datatype, integer}
+  {datatype, [integer, ip]}
 ]}.
 
 {mapping, "mqtt.sn.advertise_duration", "emq_sn.advertise_duration", [
