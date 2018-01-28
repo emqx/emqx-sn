@@ -21,7 +21,7 @@ PAHO_SRC  = paho.mqtt-sn.embedded-c/MQTTSNPacket/src/MQTTSNConnectClient.c      
 INCLUDE_PATH = -Ipaho.mqtt-sn.embedded-c/MQTTSNPacket/src -Ipaho.mqtt-sn.embedded-c/MQTTSNPacket/samples -Iclient
 			
 
-all:  clean_result $(RELX_CONF) $(PAHO_GIT) start_broker case1 case2 case3 case4 case5 stop_broker disable_qos3
+all:  clean_result $(RELX_CONF) $(PAHO_GIT) start_broker case1 case2 case3 case4 case5 case6 case7 stop_broker disable_qos3
 	@echo "  "
 	@echo "  test complete"
 	@echo "  "
@@ -93,6 +93,11 @@ case6:
 	-ps aux|grep case6_sleep|awk '{print $$2}'|xargs kill -9
 	gcc client/case6_sleep.c $(PAHO_SRC) $(INCLUDE_PATH) -o client/case6_sleep.exe
 	client/case6_sleep.exe
+
+case7:
+	-ps aux|grep case7_double_connect|awk '{print $$2}'|xargs kill -9
+	gcc client/case7_double_connect.c $(PAHO_SRC) $(INCLUDE_PATH) -o client/case7_double_connect.exe
+	client/case7_double_connect.exe
 
 	
 	
