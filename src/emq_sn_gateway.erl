@@ -372,31 +372,31 @@ awake(?SN_REGACK_MSG(TopicId, MsgId, ReturnCode), StateData) ->
     next_state(awake, StateData);
 
 awake(Event, StateData) ->
-    ?LOG(error, "asleep UNEXPECTED Event: ~p", [Event], StateData),
+    ?LOG(error, "UNEXPECTED Event(@awake): ~p", [Event], StateData),
     {next_state, awake, StateData}.
 
 idle(Event, _From, StateData) ->
-    ?LOG(error, "UNEXPECTED Event: ~p", [Event], StateData),
+    ?LOG(error, "UNEXPECTED Event(@idle): ~p", [Event], StateData),
     {reply, ignored, idle, StateData}.
 
 wait_for_will_topic(Event, _From, StateData) ->
-    ?LOG(error, "UNEXPECTED Event: ~p", [Event], StateData),
+    ?LOG(error, "UNEXPECTED Event(@wait_for_will_topic): ~p", [Event], StateData),
     {reply, ignored, wait_for_will_topic, StateData}.
 
 wait_for_will_msg(Event, _From, StateData) ->
-    ?LOG(error, "UNEXPECTED Event: ~p", [Event], StateData),
+    ?LOG(error, "UNEXPECTED Event(@wait_for_will_msg): ~p", [Event], StateData),
     {reply, ignored, wait_for_will_msg, StateData}.
 
 connected(Event, _From, StateData) ->
-    ?LOG(error, "UNEXPECTED Event: ~p", [Event], StateData),
+    ?LOG(error, "UNEXPECTED Event(@connected): ~p", [Event], StateData),
     {reply, ignored, connected, StateData}.
 
 asleep(Event, _From, StateData) ->
-    ?LOG(error, "UNEXPECTED Event: ~p", [Event], StateData),
+    ?LOG(error, "UNEXPECTED Event(@asleep): ~p", [Event], StateData),
     {reply, ignored, asleep, StateData}.
 
 awake(Event, _From, StateData) ->
-    ?LOG(error, "UNEXPECTED Event: ~p", [Event], StateData),
+    ?LOG(error, "UNEXPECTED Event(@awake): ~p", [Event], StateData),
     {reply, ignored, awake, StateData}.
 
 socket_stats(Sock, Stats) when is_port(Sock), is_list(Stats)->
@@ -432,6 +432,13 @@ handle_info({redeliver, {?PUBREL, MsgId}}, StateName, StateData) ->
     send_message(?SN_PUBREC_MSG(?SN_PUBREL, MsgId), StateData#state.conn),
     next_state(StateName, StateData);
 
+handle_info(do_awake_jobs, StateName, StateData=#state{client_id = ClientId}) ->
+    NewStateData = process_awake_jobs(ClientId, StateData),
+    case StateName of
+        awake -> goto_asleep_state(NewStateData, undefined);
+        Other -> next_state(Other, NewStateData) % device send a CONNECT immediately before this do_awake_jobs is handled
+    end;
+
 handle_info({keepalive, start, Interval}, StateName, StateData = #state{conn = Conn, keepalive = undefined}) ->
     ?LOG(debug, "Keepalive at the interval of ~p seconds", [Interval], StateData),
     emit_stats(StateData),
@@ -447,13 +454,6 @@ handle_info({keepalive, start, Interval}, StateName, StateData = #state{conn = C
         {error, Error} ->
             ?LOG(warning, "Keepalive error - ~p", [Error], StateData),
             shutdown(Error, StateData)
-    end;
-
-handle_info(do_awake_jobs, StateName, StateData=#state{client_id = ClientId}) ->
-    NewStateData = process_awake_jobs(ClientId, StateData),
-    case StateName of
-        awake -> goto_asleep_state(NewStateData, undefined);
-        Other -> next_state(Other, NewStateData) % device send a CONNECT immediately before this do_awake_jobs is handled
     end;
 
 
@@ -691,7 +691,11 @@ do_2nd_connect(Flags, Duration, ClientId, StateData = #state{client_id = OldClie
     #mqtt_sn_flags{will = Will, clean_session = CleanSession} = Flags,
     do_connect(ClientId, CleanSession, Will, Duration, StateData#state{protocol = NewProto}).
 
-update_2nd_connect_params(Flags, StateData) ->
+update_2nd_connect_params(Flags, StateData = #state{client_id = ClientId}) ->
+    % we don't know this 2nd CONNECT is from a rebooted device or not,
+    % it is safe to clean all registered topics
+    emq_sn_topic_manager:unregister_topic(ClientId),
+    
     #mqtt_sn_flags{will = Will} = Flags,
     case Will of
         true  ->
