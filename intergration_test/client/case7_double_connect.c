@@ -78,7 +78,7 @@ int main(int argc, char** argv)
     char *host = "127.0.0.1";
     int port = 1884;
     int i = 0;
-    MQTTSNString msstr;
+    MQTTSNString msstr = {0};
     MQTTSNPacket_connectData options = MQTTSNPacket_connectData_initializer;
 
     mysock = transport_open();
@@ -99,6 +99,7 @@ int main(int argc, char** argv)
 
     sleep(2);
 
+    // a new client-id on the same udp port will be refused by emq-sn
     options.clientID.cstring = "testclientid_case7_new";
     TLOG("will send connect with new clientId:%s\n", options.clientID.cstring);
     if((rc = connect(&options, host, port, buf, buflen)) == 0)
@@ -106,6 +107,7 @@ int main(int argc, char** argv)
 
     sleep(2);
 
+    // go back to the old client-id and the connection will be successful
     options.clientID.cstring = "testclientid_case7";
     TLOG("will send connect with old clientId:%s\n", options.clientID.cstring);
     if((rc = connect(&options, host, port, buf, buflen)) != 0)
