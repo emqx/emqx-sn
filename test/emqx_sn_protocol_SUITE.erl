@@ -1,5 +1,5 @@
 %%%-------------------------------------------------------------------
-%%% Copyright (c) 2013-2017 EMQ Enterprise, Inc. (http://emqtt.io)
+%%% Copyright (c) 2013-2018 EMQ Enterprise, Inc. (http://emqtt.io)
 %%%
 %%% Licensed under the Apache License, Version 2.0 (the "License");
 %%% you may not use this file except in compliance with the License.
@@ -124,8 +124,8 @@ connect_test03(_Config) ->
     timer:sleep(300),
 
     send_connect_msg(Socket, <<"cleintid_other">>),
-    ?assertEqual(<<3, ?SN_CONNACK, 0>>, receive_response(Socket)),
-    ?assertEqual({<<"cleintid_other">>, <<"user1">>}, test_mqtt_broker:get_online_user()),
+    ?assertEqual(<<3, ?SN_CONNACK, 3>>, receive_response(Socket)),  % 3 is reject(not support)
+    ?assertEqual({<<"cleintid_test">>, <<"user1">>}, test_mqtt_broker:get_online_user()),
 
     gen_udp:close(Socket),
     test_mqtt_broker:stop().

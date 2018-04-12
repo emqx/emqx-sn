@@ -1,5 +1,5 @@
 %%%-------------------------------------------------------------------
-%%% Copyright (c) 2013-2017 EMQ Enterprise, Inc. (http://emqtt.io)
+%%% Copyright (c) 2013-2018 EMQ Enterprise, Inc. (http://emqtt.io)
 %%%
 %%% Licensed under the Apache License, Version 2.0 (the "License");
 %%% you may not use this file except in compliance with the License.
@@ -35,8 +35,6 @@
     lager:debug("TEST broker: " ++ Format, Args)).
 
 proto_init(Peer, SendFun, PktOpts) ->
-    KeepaliveDuration = 3,   % seconds
-    self() ! {keepalive, start, KeepaliveDuration},
     put(debug_unit_test_send_func, SendFun),
     gen_server:call(?MODULE, {init, self(), Peer, PktOpts}).
 
@@ -78,6 +76,7 @@ start_link() ->
     gen_server:start_link({local, ?MODULE}, ?MODULE, [], []).
 
 stop() ->
+    timer:sleep(100), % prevent crash, since emq_sn_gateway may gen_server:call() to test_mqtt_broker
     gen_server:stop(?MODULE).
 
 init(_Param) ->
@@ -95,11 +94,13 @@ handle_call({init, Subscriber, Peer, PktOpts}, _From, State) ->
     ?LOG("test broker init Subscriber=~p, Peer=~p, PktOpts=~p, broker_pid=~p~n", [Subscriber, Peer, PktOpts, self()]),
     {reply, ok, State#state{subscriber = Subscriber, peer = Peer, pkt_opts = PktOpts}};
 
-handle_call({received_packet, ?CONNECT_PACKET(ConnPkt)}, _From, State=#state{}) ->
+handle_call({received_packet, ?CONNECT_PACKET(ConnPkt)}, _From, State=#state{subscriber = Subscriber}) ->
     #mqtt_packet_connect{client_id  = ClientId, username = Username} = ConnPkt,
     ?LOG("test broker get CONNECT ~p~n", [ConnPkt]),
     (is_binary(ClientId) and is_binary(Username)) orelse error("ClientId and Username should be binary"),
     OutPkt = ?CONNACK_PACKET(?CONNACK_ACCEPT),
+    KeepaliveDuration = 3,   % seconds
+    Subscriber ! {keepalive, start, KeepaliveDuration},
     {reply, {ok, [], OutPkt}, State#state{connect_pkt = ConnPkt}};
 
 handle_call({received_packet, Msg = ?PUBLISH_PACKET(Qos, PacketId)}, _From, State=#state{}) ->

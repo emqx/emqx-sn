@@ -84,6 +84,9 @@ Load Plugin
 ### NOTE
 - Topic ID is per-client, and will be cleared if client disconnected with broker or keep-alive failure is detected in broker.
 - Please register your topics again each time connected with broker.
+- If your udp socket(mqtt-sn client) has successfully connected to broker, don't try to send another CONNECT on this socket again, which will lead to confusing behaviour. If you want to start from beging, please do as following:
+    + destroy your present socket and create a new socket to connect again
+    + or send DISCONNECT on the same socket and connect again.
 
 ### Library
 
