@@ -1,5 +1,5 @@
-%%%-------------------------------------------------------------------
-%%% Copyright (c) 2013-2017 EMQ Enterprise, Inc. (http://emqtt.io)
+%%%===================================================================
+%%% Copyright (c) 2013-2018 EMQ Inc. All rights reserved.
 %%%
 %%% Licensed under the Apache License, Version 2.0 (the "License");
 %%% you may not use this file except in compliance with the License.
@@ -12,111 +12,88 @@
 %%% WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 %%% See the License for the specific language governing permissions and
 %%% limitations under the License.
-%%%-------------------------------------------------------------------
+%%%===================================================================
 
 -module(emqx_sn_broadcast).
 
--author("Feng Lee <feng@emqtt.io>").
-
 -behaviour(gen_server).
-
--define(LOG(Level, Format, Args),
-    lager:Level("MQTT-SN(broadcast): " ++ Format, Args)).
 
 -include("emqx_sn.hrl").
 
-%% API.
--export([start_link/1, stop/0]).
+-export([start_link/2, stop/0]).
 
-%% gen_server.
+%% gen_server
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2,
          terminate/2, code_change/3]).
 
--record(state, {bc_address, sock, duration, gwid, tref}).
+-record(state, {gwid, sock, port, addrs, duration, tref}).
 
--define(PORT, 1884).
+-define(DEFAULT_DURATION, 15*60*1000).
+-define(LOG(Level, Format, Args),
+        emqx_logger:Level("MQTT-SN(broadcast): " ++ Format, Args)).
 
 %%--------------------------------------------------------------------
 %% API
 %%--------------------------------------------------------------------
 
--spec(start_link(list()) -> {ok, pid()}).
-start_link(Args) ->
-	gen_server:start_link({local, ?MODULE}, ?MODULE, Args, []).
+-spec(start_link(pos_integer(), inet:port_number())
+      -> {ok, pid()} | {error, term()}).
+start_link(GwId, Port) ->
+	gen_server:start_link({local, ?MODULE}, ?MODULE, [GwId, Port], []).
 
 -spec(stop() -> ok).
 stop() ->
-    gen_server:call(?MODULE, stop).
-
+    gen_server:stop(?MODULE, nomal, infinity).
 
 %%--------------------------------------------------------------------
-%% gen_server Callbacks
+%% gen_server callbacks
 %%--------------------------------------------------------------------
 
-init([Duration, GwId]) ->
+init([GwId, Port]) ->
+    Duration = emqx_sn_config:get_env(advertise_duration, ?DEFAULT_DURATION),
     {ok, Sock} = gen_udp:open(0, [binary, {broadcast, true}]),
-    IpList = get_boradcast_ip(),
-    State = #state{bc_address = IpList, sock = Sock, duration = Duration, gwid = GwId},
-    send_advertise(State),
-	{ok, State#state{tref = start_timer(Duration)}}.
+    {ok, ensure_advertise(#state{gwid = GwId, addrs = boradcast_addrs(),
+                                 sock = Sock, port = Port, duration = Duration})}.
 
-
-handle_call(stop, _From, State) ->
-    {stop, normal, ok, State};
-
-handle_call(_Request, _From, State) ->
+handle_call(Req, _From, State) ->
+    ?LOG(error, "Unexpected request: ~p", [Req]),
 	{reply, ignored, State}.
 
-handle_cast(_Msg, State) ->
+handle_cast(Msg, State) ->
+    ?LOG(error, "Unexpected msg: ~p", [Msg]),
 	{noreply, State}.
 
-handle_info(broadcast_advertise, State=#state{duration = Duration}) ->
-    send_advertise(State),
-    {noreply, State#state{tref = start_timer(Duration)}, hibernate};
+handle_info(broadcast_advertise, State) ->
+    {noreply, ensure_advertise(State), hibernate};
 
-handle_info(_Info, State) ->
-	{noreply, State, hibernate}.
+handle_info(Info, State) ->
+    ?LOG(error, "Unexpected info: ~p", [Info]),
+	{noreply, State}.
 
 terminate(_Reason, #state{tref = Timer}) ->
     erlang:cancel_timer(Timer),
-	ok.
+    ok.
 
 code_change(_OldVsn, State, _Extra) ->
 	{ok, State}.
-
-
 
 %%--------------------------------------------------------------------
 %% Internal Functions
 %%--------------------------------------------------------------------
 
-send_advertise(#state{bc_address = IpList, sock = Sock, gwid = GwId, duration = Duration}) ->
-    Data = emqx_sn_message:serialize(?SN_ADVERTISE_MSG(GwId, Duration)),
-    send_advertise(Sock, IpList, Data).
+ensure_advertise(State = #state{duration = Duration}) ->
+    send_advertise(State),
+    State#state{tref = erlang:send_after(Duration, self(), broadcast_advertise)}.
 
-send_advertise(_Sock, [], _Data) ->
-    ok;
-send_advertise(Sock, [IP|T], Data) ->
-    ?LOG(debug, "SEND SN_ADVERTISE to ~p~n", [IP]),
-    gen_udp:send(Sock, IP, ?PORT, Data),
-    send_advertise(Sock, T, Data).
+send_advertise(#state{gwid = GwId, sock = Sock, port = Port,
+                      addrs = Addrs, duration = Duration}) ->
+    Data = emqx_sn_frame:serialize(?SN_ADVERTISE_MSG(GwId, Duration)),
+    lists:foreach(fun(Addr) ->
+                      ?LOG(debug, "SEND SN_ADVERTISE to ~p~n", [Addr]),
+                      gen_udp:send(Sock, Addr, Port, Data)
+                  end, Addrs).
 
-start_timer(Duration) ->
-    erlang:send_after(timer:seconds(Duration), self(), broadcast_advertise).
-
-
-get_boradcast_ip() ->
-    {ok, IfList} = inet:getiflist(),
-    B = [inet:ifget(X, [broadaddr]) || X <- IfList],
-    extract_ip(B, []).
-
-extract_ip([], Acc) ->
-    Acc;
-extract_ip([{ok,[{broadaddr,IP}]}|T], Acc) ->
-    case lists:member(IP, Acc) of
-        true -> extract_ip(T, Acc);
-        false -> extract_ip(T, [IP | Acc])
-    end;
-extract_ip([_H|T], Acc) ->
-    extract_ip(T, Acc).
+boradcast_addrs() ->
+    lists:usort([Addr || {ok, IfList} <- [inet:getiflist()], If <- IfList,
+                         {ok, [{broadaddr, Addr}]} <- [inet:ifget(If, [broadaddr])]]).
 

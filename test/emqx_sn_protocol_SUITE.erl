@@ -16,13 +16,14 @@
 
 -module (emqx_sn_protocol_SUITE).
 
--include_lib("eunit/include/eunit.hrl").
 -include("emqx_sn.hrl").
+-include_lib("eunit/include/eunit.hrl").
 -include_lib("emqx/include/emqx.hrl").
 -include_lib("emqx/include/emqx_mqtt.hrl").
 
-
 -compile(export_all).
+-compile(nowarn_export_all).
+
 -define(HOST, "localhost").
 -define(PORT, 1884).
 
@@ -68,9 +69,7 @@ init_per_suite(Config) ->
 end_per_suite(_Config) ->
     application:stop(emqx_sn).
 
-
 init_per_testcase(_TestCase, Config) ->
-    %application:set_env(emqx_sn, advertise_duration, 2),
     application:set_env(emqx_sn, enable_qos3, ?ENABLE_QOS3),
     application:set_env(emqx_sn, enable_stats, true),
     application:set_env(emqx_sn, username, <<"user1">>),
@@ -83,7 +82,6 @@ end_per_testcase(_TestCase, _Config) ->
     ok = application:stop(emqx_sn),
     ok = application:stop(esockd),
     ok.
-
 
 connect_test01(_Config) ->
     test_mqtt_broker:start_link(),

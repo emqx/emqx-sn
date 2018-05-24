@@ -1,5 +1,5 @@
-%%%-------------------------------------------------------------------
-%%% Copyright (c) 2013-2017 EMQ Enterprise, Inc. (http://emqtt.io)
+%%%===================================================================
+%%% Copyright (c) 2013-2018 EMQ Inc. All rights reserved.
 %%%
 %%% Licensed under the Apache License, Version 2.0 (the "License");
 %%% you may not use this file except in compliance with the License.
@@ -12,11 +12,10 @@
 %%% WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 %%% See the License for the specific language governing permissions and
 %%% limitations under the License.
-%%%-------------------------------------------------------------------
-
+%%%===================================================================
 
 %%--------------------------------------------------------------------
-%% MQTT-SN MsgTypes
+%% MQTT-SN Types
 %%--------------------------------------------------------------------
 
 -define(SN_ADVERTISE,     16#00).
@@ -64,7 +63,7 @@
 %% MQTT-SN Message
 %%--------------------------------------------------------------------
 
--record(mqtt_sn_flags, {dup, qos, retain, will, clean_session, topic_id_type}).
+-record(mqtt_sn_flags, {dup, qos, retain, will, clean_start, topic_id_type}).
 
 -type(mqtt_sn_flags() :: #mqtt_sn_flags{}).
 
@@ -108,7 +107,7 @@
 -define(SN_WILLMSGREQ_MSG(),
         #mqtt_sn_message{type = ?SN_WILLMSGREQ}).
 
--define(SN_WILLMSG_MSG(Msg), 
+-define(SN_WILLMSG_MSG(Msg),
         #mqtt_sn_message{type = ?SN_WILLMSG, variable = Msg}).
 
 -define(SN_REGISTER_MSG(TopicId, MsgId, TopicName),
@@ -128,7 +127,7 @@
                         variable = {TopicId, MsgId, ReturnCode}}).
 
 -define(SN_PUBREC_MSG(Type, MsgId),
-        #mqtt_sn_message{type     = Type, 
+        #mqtt_sn_message{type     = Type,
                          variable = MsgId}).
 
 -define(SN_SUBSCRIBE_MSG(Flags, Msgid, Topic),
