@@ -424,9 +424,6 @@ subscribe_test12(_Config) ->
     gen_udp:close(Socket),
     test_mqtt_broker:stop().
 
-
-
-
 subscribe_test13(_Config) ->
     test_mqtt_broker:start_link(),
     Dup = 0,

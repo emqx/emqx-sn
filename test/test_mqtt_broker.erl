@@ -210,11 +210,6 @@ terminate(Reason, _State) ->
 code_change(_OldVsn, State, _Extra) ->
     {ok, State}.
 
-
-
-
-
-
 -record(keepalive, {statfun, statval, tsec, tmsg, tref, repeat = 0}).
 
 -type(keepalive() :: #keepalive{}).
