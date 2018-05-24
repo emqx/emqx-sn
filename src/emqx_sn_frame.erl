@@ -1,5 +1,5 @@
-%%%-------------------------------------------------------------------
-%%% Copyright (c) 2013-2017 EMQ Enterprise, Inc. (http://emqtt.io)
+%%%===================================================================
+%% Copyright (c) 2013-2018 EMQ Inc. All rights reserved.
 %%%
 %%% Licensed under the Apache License, Version 2.0 (the "License");
 %%% you may not use this file except in compliance with the License.
@@ -12,11 +12,9 @@
 %%% WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 %%% See the License for the specific language governing permissions and
 %%% limitations under the License.
-%%%-------------------------------------------------------------------
+%%%===================================================================
 
--module(emqx_sn_message).
-
--author("Feng Lee <feng@emqtt.io>").
+-module(emqx_sn_frame).
 
 -include("emqx_sn.hrl").
 
@@ -27,7 +25,7 @@
 -define(short, 16/big-integer).
 
 -define(LOG(Level, Format, Args),
-    lager:Level("MQTT-SN(message): " ++ Format, Args)).
+        emqx_logger:Level("MQTT-SN(Frame): " ++ Format, Args)).
 
 %%--------------------------------------------------------------------
 %% Parse MQTT-SN Message
@@ -101,9 +99,9 @@ parse_var(?SN_WILLMSGRESP, <<ReturnCode:?byte>>) ->
     ReturnCode;
 parse_var(_Type, _Var) ->
     error(format_error).
- 
-parse_flags(?SN_CONNECT, <<_D:1, _Q:2, _R:1, Will:1, CleanSession:1, _IdType:2>>) ->
-    #mqtt_sn_flags{will = bool(Will), clean_session = bool(CleanSession)};
+
+parse_flags(?SN_CONNECT, <<_D:1, _Q:2, _R:1, Will:1, CleanStart:1, _IdType:2>>) ->
+    #mqtt_sn_flags{will = bool(Will), clean_start = bool(CleanStart)};
 parse_flags(?SN_WILLTOPIC, <<_D:1, Qos:2, Retain:1, _Will:1, _C:1, _:2>>) ->
     #mqtt_sn_flags{qos = Qos, retain = bool(Retain)};
 parse_flags(?SN_PUBLISH, <<Dup:1, Qos:2, Retain:1, _Will:1, _C:1, IdType:2>>) ->
@@ -193,8 +191,8 @@ serialize(?SN_DISCONNECT, Duration) ->
     <<Duration:?short>>.
 
 serialize_flags(#mqtt_sn_flags{dup = Dup, qos = Qos, retain = Retain, will = Will,
-                               clean_session = CleanSession, topic_id_type = IdType}) ->
-    <<(bool(Dup)):1, (i(Qos)):2, (bool(Retain)):1, (bool(Will)):1, (bool(CleanSession)):1, (i(IdType)):2>>.
+                               clean_start = CleanStart, topic_id_type = IdType}) ->
+    <<(bool(Dup)):1, (i(Qos)):2, (bool(Retain)):1, (bool(Will)):1, (bool(CleanStart)):1, (i(IdType)):2>>.
 
 serialize_topic(2#00, Topic) -> Topic;
 serialize_topic(2#01, Id)    -> <<Id:?short>>;
@@ -305,12 +303,10 @@ format(?SN_REGACK_MSG(TopicId, MsgId, ReturnCode)) ->
     lists:flatten(io_lib:format("mqtt_sn_message SN_REGACK, TopicId=~w, MsgId=~w, ReturnCode=~w",
         [TopicId, MsgId, ReturnCode]));
 format(#mqtt_sn_message{type = Type, variable = Var}) ->
-    lists:flatten(io_lib:format("mqtt_sn_message type=~s, Var=~w", [emqx_sn_message:message_type(Type), Var])).
+    lists:flatten(io_lib:format("mqtt_sn_message type=~s, Var=~w", [emqx_sn_frame:message_type(Type), Var])).
 
-
-format_flag(#mqtt_sn_flags{dup = Dup, qos = Qos, retain = Retain, will = Will, clean_session = CleanSession, topic_id_type = TopicType}) ->
-    lists:flatten(io_lib:format("mqtt_sn_flags{dup=~p, qos=~p, retain=~p, will=~p, clean_session=~p, topic_id_type=~p}", [Dup, Qos, Retain, Will, CleanSession, TopicType]));
+format_flag(#mqtt_sn_flags{dup = Dup, qos = Qos, retain = Retain, will = Will, clean_start = CleanStart, topic_id_type = TopicType}) ->
+    lists:flatten(io_lib:format("mqtt_sn_flags{dup=~p, qos=~p, retain=~p, will=~p, clean_session=~p, topic_id_type=~p}", [Dup, Qos, Retain, Will, CleanStart, TopicType]));
 format_flag(_Flag) ->
     "invalid flag".
-
 

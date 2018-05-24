@@ -1,5 +1,5 @@
-%%%-------------------------------------------------------------------
-%%% Copyright (c) 2013-2017 EMQ Enterprise, Inc. (http://emqtt.io)
+%%%===================================================================
+%%% Copyright (c) 2013-2018 EMQ Inc. All rights reserved.
 %%%
 %%% Licensed under the Apache License, Version 2.0 (the "License");
 %%% you may not use this file except in compliance with the License.
@@ -12,40 +12,46 @@
 %%% WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 %%% See the License for the specific language governing permissions and
 %%% limitations under the License.
-%%%-------------------------------------------------------------------
+%%%===================================================================
 
 -module(emqx_sn_sup).
 
--author("Feng Lee <feng@emqtt.io>").
-
 -behaviour(supervisor).
 
--export([start_link/5, init/1]).
+-export([start_link/2, init/1]).
 
--define(CHILD(I), {I, {I, start_link, []}, permanent, 5000, worker, [I]}).
+start_link(ListenOn, GwId) ->
+	supervisor:start_link({local, ?MODULE}, ?MODULE, [ListenOn, GwId]).
 
-start_link(Listener, Duration, GwId, EnableStats, PredefTopicList) ->
-	supervisor:start_link({local, ?MODULE}, ?MODULE, [Listener, Duration, GwId, EnableStats, PredefTopicList]).
+init([{Port, Opts}, GwId]) ->
+    Registry = #{id       => emqx_sn_registry,
+                 start    => {emqx_sn_registry, start_link, []},
+                 restart  => permanent,
+                 shutdown => 5000,
+                 type     => worker,
+                 modules  => [emqx_sn_registry]},
 
-init([{Port, Opts}, Duration, GwId, EnableStats, PredefTopicList]) ->
+    GwSup = #{id       => emqx_sn_gateway_sup,
+              start    => {emqx_sn_gateway_sup, start_link, []},
+              restart  => permanent,
+              shutdown => infinity,
+              type     => supervisor,
+              modules  => [emqx_sn_gateway_sup]},
 
-    BcSrv = {emqx_sn_broadcast,
-                {emqx_sn_broadcast, start_link, [[Duration, GwId]]},
-                    permanent, brutal_kill, worker, [emqx_sn_broadcast]},
+    MFA = {emqx_sn_gateway_sup, start_gateway, [GwId]},
+    UdpSrv = #{id       => emqx_sn_udp_server,
+               start    => {esockd_udp, server,
+                            [emqx_sn_udp_server, mqtt_sn, Port, Opts, MFA]},
+               restart  => permanent,
+               shutdown => 5000,
+               type     => worker,
+               modules  => [esockd_udp]},
 
-    GwSup = {emqx_sn_gateway_sup,
-                {emqx_sn_gateway_sup, start_link, []},
-                    permanent, infinity, supervisor, [emqx_sn_gateway_sup]},
-
-    MFA = {emqx_sn_gateway_sup, start_gateway, [GwId, EnableStats]},
-
-    UdpSrv = {emqx_sn_udp_server,
-                 {esockd_udp, server, [mqtt_sn, Port, Opts, MFA]},
-                     permanent, 5000, worker, [esockd_udp]},
-
-    PreDefTopics = {emqx_sn_predefined_topics,
-                       {emqx_sn_predefined_topics, start_link, [PredefTopicList]},
-                           permanent, 5000, worker, [emqx_sn_predefined_topics]},
-
-    {ok, { {one_for_all, 10, 3600}, [BcSrv, ?CHILD(emqx_sn_normal_topics), GwSup, UdpSrv, PreDefTopics] }}.
+    Broadcast = #{id       => emqx_sn_broadcast,
+                  start    => {emqx_sn_broadcast, start_link, [GwId, Port]},
+                  restart  => permanent,
+                  shutdown => brutal_kill,
+                  type     => worker,
+                  modules  => [emqx_sn_broadcast]},
+    {ok, {{one_for_all, 10, 3600}, [Registry, GwSup, UdpSrv, Broadcast]}}.
 

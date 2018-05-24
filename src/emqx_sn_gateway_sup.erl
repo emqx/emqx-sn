@@ -1,5 +1,5 @@
-%%%-------------------------------------------------------------------
-%%% Copyright (c) 2013-2017 EMQ Enterprise, Inc. (http://emqtt.io)
+%%%===================================================================
+%%% Copyright (c) 2013-2018 EMQ Inc. All rights reserved.
 %%%
 %%% Licensed under the Apache License, Version 2.0 (the "License");
 %%% you may not use this file except in compliance with the License.
@@ -12,28 +12,34 @@
 %%% WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 %%% See the License for the specific language governing permissions and
 %%% limitations under the License.
-%%%-------------------------------------------------------------------
+%%%===================================================================
 
 -module(emqx_sn_gateway_sup).
 
--author("Feng Lee <feng@emqtt.io>").
-
 -behaviour(supervisor).
 
--export([start_link/0, start_gateway/4, init/1]).
+-export([start_link/0, start_gateway/3, init/1]).
 
-%% @doc Start MQTT-SN Gateway Supervisor.
 -spec(start_link() -> {ok, pid()}).
 start_link() ->
 	supervisor:start_link({local, ?MODULE}, ?MODULE, []).
 
 %% @doc Start a MQTT-SN Gateway.
--spec(start_gateway(inet:socket(), {inet:ip_address(), inet:port()}, integer(), boolean()) -> {ok, pid()}).
-start_gateway(Sock, Peer, GwId, EnableStats) ->
-    supervisor:start_child(?MODULE, [Sock, Peer, GwId, EnableStats]).
+-spec(start_gateway(inet:socket(), {inet:ip_address(), inet:port()},
+                    pos_integer()) -> {ok, pid()}).
+start_gateway(Sock, Peer, GwId) ->
+    supervisor:start_child(?MODULE, [Sock, Peer, GwId]).
+
+%%--------------------------------------------------------------------
+%% Supervisor callbacks
+%%--------------------------------------------------------------------
 
 init([]) ->
-    {ok, {{simple_one_for_one, 0, 1},
-            [{sn_gateway, {emqx_sn_gateway, start_link, []},
-                temporary, 5000, worker, [emqx_sn_gateway]}]}}.
+    Gateway = #{id       => emqx_sn_gateway,
+                start    => {emqx_sn_gateway, start_link, []},
+                restart  => temporary,
+                shutdown => 5000,
+                type     => worker,
+                modules  => [emqx_sn_gateway]},
+    {ok, {{simple_one_for_one, 0, 1}, [Gateway]}}.
 

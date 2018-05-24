@@ -17,6 +17,7 @@
 -module(test_mqtt_broker).
 
 -compile(export_all).
+-compile(nowarn_export_all).
 
 -behaviour(gen_server).
 
@@ -26,13 +27,10 @@
 -record(state, {subscriber, peer, pkt_opts, connect_pkt, last_puback, last_pubrel, rx_message, subed, unsubed, stats_data}).
 
 -include_lib("emqx/include/emqx.hrl").
-
 -include_lib("emqx/include/emqx_mqtt.hrl").
+-include_lib("emqx/include/emqx_misc.hrl").
 
--include_lib("emqx/include/emqx_internal.hrl").
-
--define(LOG(Format, Args),
-    lager:debug("TEST broker: " ++ Format, Args)).
+-define(LOG(Format, Args), ct:print("TEST broker: " ++ Format, Args)).
 
 proto_init(Peer, SendFun, PktOpts) ->
     KeepaliveDuration = 3,   % seconds
@@ -96,10 +94,10 @@ handle_call({init, Subscriber, Peer, PktOpts}, _From, State) ->
     {reply, ok, State#state{subscriber = Subscriber, peer = Peer, pkt_opts = PktOpts}};
 
 handle_call({received_packet, ?CONNECT_PACKET(ConnPkt)}, _From, State=#state{}) ->
-    #mqtt_packet_connect{client_id  = ClientId, username = Username} = ConnPkt,
+    #mqtt_packet_connect{client_id = ClientId, username = Username} = ConnPkt,
     ?LOG("test broker get CONNECT ~p~n", [ConnPkt]),
     (is_binary(ClientId) and is_binary(Username)) orelse error("ClientId and Username should be binary"),
-    OutPkt = ?CONNACK_PACKET(?CONNACK_ACCEPT),
+    OutPkt = ?CONNACK_PACKET(?RC_SUCCESS),
     {reply, {ok, [], OutPkt}, State#state{connect_pkt = ConnPkt}};
 
 handle_call({received_packet, Msg = ?PUBLISH_PACKET(Qos, PacketId)}, _From, State=#state{}) ->
@@ -108,24 +106,24 @@ handle_call({received_packet, Msg = ?PUBLISH_PACKET(Qos, PacketId)}, _From, Stat
     #mqtt_packet_header{type = ?PUBLISH, dup = _Dup, qos = Qos, retain = Retain} = Header,
     #mqtt_packet_publish{topic_name = TopicName, packet_id = MsgId} = Var,
     OutPkt = case Qos of
-                 ?QOS1 -> ?PUBACK_PACKET(?PUBACK, MsgId);
-                 ?QOS2 -> ?PUBACK_PACKET(?PUBREC, MsgId);
+                 ?QOS1 -> ?PUBACK_PACKET(MsgId);
+                 ?QOS2 -> ?PUBREC_PACKET(MsgId);
                  _ -> undefined
              end,
     {reply, {ok, [], OutPkt}, State#state{rx_message = {MsgId, Qos, Retain, TopicName, Payload}}};
 
-handle_call({received_packet, ?PUBACK_PACKET(?PUBACK, MsgId)}, _From, State=#state{}) ->
+handle_call({received_packet, ?PUBACK_PACKET(MsgId)}, _From, State=#state{}) ->
     ?LOG("test broker get PUBACK MsgId=~p~n", [MsgId]),
     {reply, {ok, []}, State#state{last_puback = MsgId}};
 
-handle_call({received_packet, ?PUBACK_PACKET(?PUBREC, MsgId)}, _From, State=#state{}) ->
+handle_call({received_packet, ?PUBREC_PACKET(MsgId)}, _From, State=#state{}) ->
     ?LOG("test broker get PUBREC MsgId=~p~n", [MsgId]),
-    OutPkt = ?PUBACK_PACKET(?PUBREL, MsgId),
+    OutPkt = ?PUBREL_PACKET(MsgId),
     {reply, {ok, [], OutPkt}, State};
 
-handle_call({received_packet, ?PUBACK_PACKET(?PUBREL, MsgId)}, _From, State=#state{}) ->
+handle_call({received_packet, ?PUBREL_PACKET(MsgId)}, _From, State=#state{}) ->
     ?LOG("test broker get PUBREL MsgId=~p~n", [MsgId]),
-    OutPkt = ?PUBACK_PACKET(?PUBCOMP, MsgId),
+    OutPkt = ?PUBCOMP_PACKET(MsgId),
     {reply, {ok, [], OutPkt}, State#state{last_pubrel = MsgId}};
 
 handle_call({received_packet, ?SUBSCRIBE_PACKET(MsgId, [{TopicName, Qos}])}, _From, State=#state{subscriber = Pid}) ->
@@ -141,8 +139,6 @@ handle_call({received_packet, ?UNSUBSCRIBE_PACKET(MsgId, [TopicName])}, _From, S
 handle_call({received_packet, ?PACKET(?DISCONNECT)}, _From, State=#state{}) ->
     ?LOG("test broker get DISCONNECT~n", []),
     {reply, {stop, normal, []}, State#state{connect_pkt = undefined}};
-
-
 
 handle_call(get_online_user, _From, State=#state{connect_pkt = undefined}) ->
     ?LOG("test broker get online user none~n", []),
@@ -188,7 +184,7 @@ handle_call({dispatch, {_MsgId, _Qos, _Retain, Topic, Msg}}, _From, State=#state
 handle_call({dispatch, {MsgId, Qos, Retain, Topic, Msg}}, _From, State=#state{subscriber = SubProc}) ->
     ?LOG("test broker dispatch topic=~p, Msg=~p~n", [Topic, Msg]),
     (is_binary(Topic) and is_binary(Msg)) orelse error("Topic and Msg should be binary"),
-    SubProc ! {deliver, #mqtt_message{pktid = MsgId, qos = Qos, retain = Retain, topic = Topic, payload = Msg}},
+    SubProc ! {deliver, #mqtt_message{packet_id = MsgId, qos = Qos, retain = Retain, topic = Topic, payload = Msg}},
     {reply, ok, State};
 
 handle_call(stop, _From, State) ->
@@ -285,3 +281,4 @@ send(Msg, ProtoState) ->
     Send = get(debug_unit_test_send_func),
     Send(Packet),
     {ok, ProtoState}.
+

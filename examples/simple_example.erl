@@ -2,7 +2,7 @@
 
 -include("emqx_sn.hrl").
 
--define(HOST, "localhost").
+-define(HOST, {127,0,0,1}).
 -define(PORT, 1884).
 
 -export([start/0]).

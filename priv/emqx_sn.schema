@@ -6,8 +6,8 @@
 ]}.
 
 {mapping, "mqtt.sn.advertise_duration", "emqx_sn.advertise_duration", [
-  {default, 900},
-  {datatype, integer}
+  {default, "15s"},
+  {datatype, {duration, ms}}
 ]}.
 
 {mapping, "mqtt.sn.gateway_id", "emqx_sn.gateway_id", [
