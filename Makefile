@@ -11,8 +11,15 @@ dep_emqx = git git@github.com:emqtt/emqttd emqx30
 dep_cuttlefish = git https://github.com/emqtt/cuttlefish
 
 ERLC_OPTS += +debug_info
-ERLC_OPTS += +'{parse_transform, lager_transform}'
-TEST_ERLC_OPTS += +'{parse_transform, lager_transform}'
+
+TEST_DEPS = meck emqx_ct_helpers
+dep_meck = https://github.com/eproxus/meck.git
+dep_emqx_ct_helpers = git https://github.com/emqx/emqx-ct-helpers
+
+TEST_ERLC_OPTS += +debug_info
+TEST_ERLC_OPTS += +'{parse_transform, emqx_ct_transform}'
+
+COVER = true
 
 include erlang.mk
 
