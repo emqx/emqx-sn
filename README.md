@@ -1,7 +1,7 @@
 emqx-sn
 =======
 
-EMQ X MQTT-SN Connector.
+EMQ X MQTT-SN Gateway.
 
 Configure Plugin
 ----------------
