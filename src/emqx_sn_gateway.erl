@@ -838,7 +838,7 @@ emit_stats(_ClientId, State = #state{enable_stats = false}) ->
     State;
 
 emit_stats(ClientId, #state{sock_stats = SockStats, protocol = ProtoState}) ->
-    StatsList = lists:append([emqx_misc:proc_stats(), ?PROTO_STATS(ProtoState), maps:to_list(SockStats)]),
+    StatsList = lists:append([emqx_misc:proc_stats(), emqx_protocol:stats(ProtoState), maps:to_list(SockStats)]),
     emqx_stats:set_client_stats(ClientId, StatsList).
 
 get_corrected_qos(?QOS_NEG1, StateData) ->
