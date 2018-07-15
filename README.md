@@ -82,7 +82,7 @@ Load Plugin
 ## Client
 
 ### NOTE
-- Topic ID is per-client, and will be cleared if client disconnected with broker or keep-alive failure is detected in broker.
+- Topic ID is per-client, and will be cleared if client disconnected with broker or keepalive failure is detected in broker.
 - Please register your topics again each time connected with broker.
 
 ### Library

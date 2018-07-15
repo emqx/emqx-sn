@@ -1,18 +1,16 @@
-%%%===================================================================
-%%% Copyright (c) 2013-2018 EMQ Inc. All rights reserved.
-%%%
-%%% Licensed under the Apache License, Version 2.0 (the "License");
-%%% you may not use this file except in compliance with the License.
-%%% You may obtain a copy of the License at
-%%%
-%%%     http://www.apache.org/licenses/LICENSE-2.0
-%%%
-%%% Unless required by applicable law or agreed to in writing, software
-%%% distributed under the License is distributed on an "AS IS" BASIS,
-%%% WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-%%% See the License for the specific language governing permissions and
-%%% limitations under the License.
-%%%===================================================================
+%% Copyright (c) 2018 EMQ Technologies Co., Ltd. All Rights Reserved.
+%%
+%% Licensed under the Apache License, Version 2.0 (the "License");
+%% you may not use this file except in compliance with the License.
+%% You may obtain a copy of the License at
+%%
+%%     http://www.apache.org/licenses/LICENSE-2.0
+%%
+%% Unless required by applicable law or agreed to in writing, software
+%% distributed under the License is distributed on an "AS IS" BASIS,
+%% WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+%% See the License for the specific language governing permissions and
+%% limitations under the License.
 
 -module(emqx_sn_gateway).
 
@@ -41,8 +39,10 @@
                    topic           :: binary() | undefined,
                    payload         :: binary() | undefined}).
 
+-type(sock_stats() :: #{recv_oct => integer(), recv_cnt => integer(), send_oct => integer(), send_cnt => integer()}).
+
 -record(state, {gwid                 :: integer(),
-                sock                 :: inet:socket(),
+                sockpid              :: pid(),
                 peer                 :: {inet:ip_address(), inet:port()},
                 protocol             :: term(),
                 client_id            :: binary(),
@@ -54,13 +54,14 @@
                 asleep_timer         :: tuple(),
                 asleep_msg_queue     :: term(),
                 enable_stats         :: boolean(),
-                enable_qos3 = false  :: boolean()}).
+                enable_qos3 = false  :: boolean(),
+                sock_stats           :: sock_stats()}).
 
+-define(SOCK_STATS, [recv_oct, recv_cnt, send_oct, send_cnt]).
 -define(IDLE_TIMEOUT, 10000).
 -define(DEFAULT_PROTO_OPTIONS, [{max_clientid_len, 24}, {max_packet_size, 256}]).
 -define(LOG(Level, Format, Args, State),
-        emqx_logger:Level("MQTT-SN(~s): " ++ Format,
-                          [esockd_net:format(State#state.peer) | Args])).
+        emqx_logger:Level("MQTT-SN(~s): " ++ Format, [esockd_net:format(State#state.peer) | Args])).
 
 -ifdef(TEST).
 -define(PROTO_INIT(A, B, C),            test_mqtt_broker:proto_init(A, B, C)).
@@ -80,17 +81,16 @@
 -define(SET_CLIENT_STATS(A,B),          emqx_stats:set_client_stats(A,B)).
 -endif.
 
--define(SOCK_STATS, [recv_oct, recv_cnt, send_oct, send_cnt, send_pend]).
 -define(NEG_QOS_CLIENT_ID, <<"NegQos-Client">>).
 
 %%--------------------------------------------------------------------
 %% Exported APIs
 %%--------------------------------------------------------------------
 
--spec(start_link(inet:socket(), {inet:ip_address(), inet:port()}, pos_integer())
+-spec(start_link(pos_integer(), esockd:udp_transport(), {inet:ip_address(), inet:port()})
       -> {ok, pid()} | {error, term()}).
-start_link(Sock, Peer, GwId) ->
-    gen_statem:start_link(?MODULE, [Sock, Peer, GwId], []).
+start_link(GwId, Transport, Peer) ->
+    gen_statem:start_link(?MODULE, [GwId, Transport, Peer], []).
 
 subscribe(GwPid, TopicTable) ->
     gen_statem:cast(GwPid, {subscribe, TopicTable}).
@@ -102,18 +102,20 @@ kick(GwPid) ->
     gen_statem:call(GwPid, kick).
 
 %%--------------------------------------------------------------------
-%% gen_fsm Callbacks
+%% gen_fsm callbacks
 %%--------------------------------------------------------------------
 
-init([Sock, Peer, GwId]) ->
+init([GwId, {_, SockPid, _Sock}, Peer]) ->
     EnableStats = emqx_sn_config:get_env(enable_stats, false),
+    SockStats = #{recv_oct => 0, recv_cnt => 0, send_oct => 0, send_cnt => 0},
     State = #state{gwid             = GwId,
-                   sock             = Sock,
+                   sockpid          = SockPid,
                    peer             = Peer,
                    asleep_timer     = emqx_sn_asleep_timer:init(),
                    asleep_msg_queue = queue:new(),
                    enable_stats     = EnableStats,
-                   enable_qos3      = emqx_sn_config:get_env(enable_qos3, false)},
+                   enable_qos3      = emqx_sn_config:get_env(enable_qos3, false),
+                   sock_stats       = SockStats},
     {ok, idle, State#state{protocol = proto_init(State)}}.%%, ?IDLE_TIMEOUT}.
 
 callback_mode() -> state_functions.
@@ -351,16 +353,16 @@ awake(cast, ?SN_REGACK_MSG(TopicId, MsgId, ReturnCode), StateData) ->
 awake(EventType, EventContent, StateData) ->
     handle_event(EventType, EventContent, awake, StateData).
 
-handle_event(info, {datagram, _From, Data}, StateName, StateData) ->
+handle_event(info, {datagram, SockPid, Data}, StateName, StateData = #state{sockpid = SockPid, sock_stats = SockStats}) ->
     case catch emqx_sn_frame:parse(Data) of
         {ok, Msg} ->
-            ?LOG(info, "RECV ~p at state ~s",
-                 [emqx_sn_frame:format(Msg), StateName], StateData),
             gen_statem:cast(self(), Msg),
-            {keep_state, StateData};
+            ?LOG(info, "RECV ~s at state ~s", [emqx_sn_frame:format(Msg), StateName], StateData),
+            SockStats1 = maps:update_with(recv_oct, fun(V) -> V + iolist_size(Data) end,
+                                          maps:update_with(recv_cnt, fun(V) -> V + 1 end, SockStats)),
+            {keep_state, StateData#state{sock_stats = SockStats1}};
         {'EXIT', Error} ->
-            ?LOG(info, "Parse frame error: ~p at state ~s",
-                 [Error, StateName], StateData),
+            ?LOG(info, "Parse frame error: ~p at state ~s", [Error, StateName], StateData),
            shutdown(frame_error, StateData)
     end;
 
@@ -371,8 +373,7 @@ handle_event(info, {deliver, Msg}, asleep,
     NewAsleepMsgQue = queue:in(Msg, AsleepMsgQue),
     {keep_state, StateData#state{asleep_msg_queue = NewAsleepMsgQue}};
 
-handle_event(info, {deliver, Msg}, _StateName,
-             StateData = #state{client_id = ClientId}) ->
+handle_event(info, {deliver, Msg}, _StateName, StateData = #state{client_id = ClientId}) ->
     {ok, ProtoState} = publish_message_to_device(Msg, ClientId, StateData),
     {keep_state, StateData#state{protocol = ProtoState}};
 
@@ -381,15 +382,10 @@ handle_event(info, {redeliver, {?PUBREL, MsgId}}, _StateName, StateData) ->
     {keep_state, StateData};
 
 handle_event(info, {keepalive, start, Interval}, _StateName,
-             StateData = #state{sock = Sock, keepalive = undefined}) ->
+             StateData = #state{keepalive = undefined, sock_stats = SockStats}) ->
     ?LOG(debug, "Keepalive at the interval of ~p seconds", [Interval], StateData),
     emit_stats(StateData),
-    StatFun = fun() ->
-                  case inet:getstat(Sock, [recv_oct]) of
-                      {ok, [{recv_oct, RecvOct}]} -> {ok, RecvOct};
-                      {error, Reason}             -> {error, Reason}
-                  end
-              end,
+    StatFun = fun() -> maps:get(recv_oct, SockStats) end,
     case emqx_keepalive:start(StatFun, Interval, {keepalive, check}) of
         {ok, KeepAlive} ->
             {keep_state, StateData#state{keepalive = KeepAlive}};
@@ -488,9 +484,6 @@ code_change(_Vsn, StateName, StateData, _Extra) ->
 %% Internal Functions
 %%--------------------------------------------------------------------
 
-sock_stats(Sock, Stats) when is_port(Sock) ->
-    inet:getstat(Sock, Stats).
-
 transform(?CONNACK_PACKET(0), _FuncMsgIdToTopicId) ->
     ?SN_CONNACK_MSG(0);
 
@@ -548,9 +541,9 @@ send_pingresp(StateData) ->
 send_connack(StateData) ->
     send_message(?SN_CONNACK_MSG(?SN_RC_ACCECPTED), StateData).
 
-send_message(Msg, StateData = #state{sock = Sock, peer = {Host, Port}}) ->
-    ?LOG(debug, "SEND ~p~n", [emqx_sn_frame:format(Msg)], StateData),
-    gen_udp:send(Sock, Host, Port, emqx_sn_frame:serialize(Msg)).
+send_message(Msg, StateData = #state{sockpid = SockPid, peer = Peer}) ->
+    ?LOG(debug, "SEND ~s~n", [emqx_sn_frame:format(Msg)], StateData),
+    SockPid ! {datagram, Peer, emqx_sn_frame:serialize(Msg)}.
 
 goto_asleep_state(StateData=#state{asleep_timer = AsleepTimer}, Duration) ->
     ?LOG(debug, "goto_asleep_state Duration=~p", [Duration], StateData),
@@ -854,16 +847,14 @@ is_qos2_msg(#mqtt_message{qos = 2})->
 is_qos2_msg(#mqtt_message{})->
     false.
 
-emit_stats(StateData = #state{protocol=ProtoState}) ->
+emit_stats(StateData = #state{protocol = ProtoState}) ->
     emit_stats(?PROTO_GET_CLIENT_ID(ProtoState), StateData).
 
 emit_stats(_ClientId, State = #state{enable_stats = false}) ->
     ?LOG(debug, "The enable_stats is false, skip emit_state~n", [], State),
     State;
-emit_stats(ClientId, #state{sock = Sock, protocol = ProtoState}) ->
-    StatsList = lists:append([emqx_misc:proc_stats(),
-                              ?PROTO_STATS(ProtoState),
-                              sock_stats(Sock, ?SOCK_STATS)]),
+emit_stats(ClientId, #state{sock_stats = SockStats, protocol = ProtoState}) ->
+    StatsList = lists:append([emqx_misc:proc_stats(), ?PROTO_STATS(ProtoState), maps:to_list(SockStats)]),
     ?SET_CLIENT_STATS(ClientId, StatsList).
 
 get_corrected_qos(?QOS_NEG1, StateData) ->
