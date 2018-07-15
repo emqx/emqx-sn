@@ -62,23 +62,7 @@
         emqx_logger:Level("MQTT-SN(~s): " ++ Format,
                           [esockd_net:format(State#state.peer) | Args])).
 
--ifdef(TEST).
--define(PROTO_INIT(A, B, C),            test_mqtt_broker:proto_init(A, B, C)).
--define(PROTO_RECEIVE(A, B),            test_mqtt_broker:proto_receive(A, B)).
--define(PROTO_SHUTDOWN(A, B),           ok).
--define(PROTO_STATS(A),                 test_mqtt_broker:stats(A)).
--define(PROTO_GET_CLIENT_ID(A),         test_mqtt_broker:clientid(A)).
--define(SET_CLIENT_STATS(A,B),          test_mqtt_broker:set_client_stats(A,B)).
--define(PROTO_SEND(A, B),               test_mqtt_broker:send(A, B)).
--else.
--define(PROTO_INIT(A, B, C),            emqx_protocol:init(A, B, C)).
--define(PROTO_RECEIVE(A, B),            emqx_protocol:received(A, B)).
--define(PROTO_SHUTDOWN(A, B),           emqx_protocol:shutdown(A, B)).
--define(PROTO_STATS(A),                 emqx_protocol:stats(A)).
--define(PROTO_GET_CLIENT_ID(A),         emqx_protocol:clientid(A)).
--define(PROTO_SEND(A, B),               emqx_protocol:send(A, B)).
 -define(SET_CLIENT_STATS(A,B),          emqx_stats:set_client_stats(A,B)).
--endif.
 
 -define(SOCK_STATS, [recv_oct, recv_cnt, send_oct, send_cnt, send_pend]).
 -define(NEG_QOS_CLIENT_ID, <<"NegQos-Client">>).
@@ -160,7 +144,7 @@ idle(EventType, EventContent, State) ->
 wait_for_will_topic(cast, ?SN_WILLTOPIC_EMPTY_MSG,
                     StateData = #state{connpkt = ConnPkt, protocol = Proto}) ->
     % empty willtopic means deleting will
-    case ?PROTO_RECEIVE(?CONNECT_PACKET(ConnPkt), Proto) of
+    case emqx_protocol:received(?CONNECT_PACKET(ConnPkt), Proto) of
         {ok, Proto1}           -> {next_state, connected, StateData#state{protocol = Proto1, will_msg = undefined}};
         {error, Error}         -> shutdown(Error, StateData);
         {error, Error, Proto1} -> shutdown(Error, StateData#state{protocol = Proto1});
@@ -189,7 +173,7 @@ wait_for_will_topic(EventType, EventContent, State) ->
 
 wait_for_will_msg(cast, ?SN_WILLMSG_MSG(Payload),
                   StateData = #state{protocol = Proto, will_msg = WillMsg, connpkt = ConnPkt}) ->
-    case ?PROTO_RECEIVE(?CONNECT_PACKET(ConnPkt), Proto) of
+    case emqx_protocol:received(?CONNECT_PACKET(ConnPkt), Proto) of
         {ok, Proto1} ->
             {next_state, connected, StateData#state{protocol = Proto1,
                                                     will_msg = WillMsg#will_msg{payload = Payload}}};
@@ -264,7 +248,7 @@ connected(cast, ?SN_DISCONNECT_MSG(Duration), StateData = #state{protocol = Prot
     send_message(?SN_DISCONNECT_MSG(undefined), StateData),
     case Duration of
         undefined ->
-            {stop, Reason, Proto1} = ?PROTO_RECEIVE(?PACKET(?DISCONNECT), Proto),
+            {stop, Reason, Proto1} = emqx_protocol:received(?PACKET(?DISCONNECT), Proto),
             stop(Reason, StateData#state{protocol = Proto1});
         Other -> goto_asleep_state(StateData, Other)
     end;
@@ -295,7 +279,7 @@ asleep(cast, ?SN_DISCONNECT_MSG(Duration), StateData = #state{protocol = Proto})
     send_message(?SN_DISCONNECT_MSG(undefined), StateData),
     case Duration of
         undefined ->
-            {stop, Reason, Proto1} = ?PROTO_RECEIVE(?PACKET(?DISCONNECT), Proto),
+            {stop, Reason, Proto1} = emqx_protocol:received(?PACKET(?DISCONNECT), Proto),
             stop(Reason, StateData#state{protocol = Proto1});
         Other     ->
             goto_asleep_state(StateData, Other)
@@ -476,9 +460,9 @@ terminate(Reason, _StateName, #state{client_id = ClientId,
     case {Proto, Reason} of
         {undefined, _} -> ok;
         {_, {shutdown, Error}} ->
-            ?PROTO_SHUTDOWN(Error, Proto);
+            emqx_protocol:shutdown(Error, Proto);
         {_, Reason} ->
-            ?PROTO_SHUTDOWN(Reason, Proto)
+            emqx_protocol:shutdown(Reason, Proto)
     end.
 
 code_change(_Vsn, StateName, StateData, _Extra) ->
@@ -592,7 +576,7 @@ do_connect(ClientId, CleanStart, WillFlag, Duration, StateData = #state{protocol
             send_message(?SN_WILLTOPICREQ_MSG(), StateData),
             {next_state, wait_for_will_topic, StateData#state{connpkt = ConnPkt, client_id = ClientId, keepalive_interval = Duration}};
         false ->
-            case ?PROTO_RECEIVE(?CONNECT_PACKET(ConnPkt), Proto) of
+            case emqx_protocol:received(?CONNECT_PACKET(ConnPkt), Proto) of
                 {ok, Proto1}           -> {next_state, connected, StateData#state{client_id = ClientId, protocol = Proto1, keepalive_interval = Duration}};
                 {error, Error}         -> shutdown(Error, StateData);
                 {error, Error, Proto1} -> shutdown(Error, StateData#state{protocol = Proto1});
@@ -601,7 +585,7 @@ do_connect(ClientId, CleanStart, WillFlag, Duration, StateData = #state{protocol
     end.
 
 do_2nd_connect(Flags, Duration, ClientId, StateData = #state{client_id = OldClientId, protocol = Proto}) ->
-    ?PROTO_SHUTDOWN(normal, Proto),
+    emqx_protocol:shutdown(normal, Proto),
     emqx_sn_registry:unregister_topic(OldClientId),
     NewProto = proto_init(StateData),
     #mqtt_sn_flags{will = Will, clean_start = CleanStart} = Flags,
@@ -698,14 +682,14 @@ do_publish_will(#state{will_msg = WillMsg, protocol = Proto}) ->
                                                           qos = Qos, retain = Retain},
                            variable = #mqtt_packet_publish{topic_name = Topic, packet_id = 1000},
                            payload  = Payload},
-    ?PROTO_RECEIVE(Publish, Proto),
+    emqx_protocol:received(Publish, Proto),
     %% 1000?
-    Qos =:= ?QOS2 andalso ?PROTO_RECEIVE(?PUBREL_PACKET(1000), Proto).
+    Qos =:= ?QOS2 andalso emqx_protocol:received(?PUBREL_PACKET(1000), Proto).
 
 do_puback(TopicId, MsgId, ReturnCode, _StateName, StateData=#state{client_id = ClientId, protocol = Proto}) ->
     case ReturnCode of
         ?SN_RC_ACCECPTED ->
-            case ?PROTO_RECEIVE(?PUBACK_PACKET(MsgId), Proto) of
+            case emqx_protocol:received(?PUBACK_PACKET(MsgId), Proto) of
                 {ok, Proto1}           -> {keep_state, StateData#state{protocol = Proto1}};
                 {error, Error}         -> shutdown(Error, StateData);
                 {error, Error, Proto1} -> shutdown(Error, StateData#state{protocol = Proto1});
@@ -726,7 +710,7 @@ do_puback(TopicId, MsgId, ReturnCode, _StateName, StateData=#state{client_id = C
     end.
 
 do_pubrec(PubRec, MsgId, StateData = #state{protocol = Proto}) ->
-    case ?PROTO_RECEIVE(mqttsn_to_mqtt(PubRec, MsgId), Proto) of
+    case emqx_protocol:received(mqttsn_to_mqtt(PubRec, MsgId), Proto) of
         {ok, Proto1}           -> {keep_state, StateData#state{protocol = Proto1}};
         {error, Error}         -> shutdown(Error, StateData);
         {error, Error, Proto1} -> shutdown(Error, StateData#state{protocol = Proto1});
@@ -740,13 +724,13 @@ proto_init(StateData = #state{peer = Peername, enable_stats = EnableStats}) ->
                                                  end), StateData)
               end,
     PktOpts = [{client_enable_stats, EnableStats} | ?DEFAULT_PROTO_OPTIONS],
-    ?PROTO_INIT(Peername, SendFun, PktOpts).
+    emqx_protocol:init(Peername, SendFun, PktOpts).
 
 proto_subscribe(TopicName, Qos, MsgId, TopicId,
                 StateData = #state{protocol = Proto, awaiting_suback = Awaiting}) ->
     ?LOG(debug, "subscribe Topic=~p, MsgId=~p, TopicId=~p", [TopicName, MsgId, TopicId], StateData),
     NewAwaiting = lists:append(Awaiting, [{MsgId, TopicId}]),
-    case ?PROTO_RECEIVE(?SUBSCRIBE_PACKET(MsgId, [{TopicName, Qos}]), Proto) of
+    case emqx_protocol:received(?SUBSCRIBE_PACKET(MsgId, [{TopicName, Qos}]), Proto) of
         {ok, Proto1}           -> {keep_state, StateData#state{protocol = Proto1, awaiting_suback = NewAwaiting}};
         {error, Error}         -> shutdown(Error, StateData);
         {error, Error, Proto1} -> shutdown(Error, StateData#state{protocol = Proto1});
@@ -755,7 +739,7 @@ proto_subscribe(TopicName, Qos, MsgId, TopicId,
 
 proto_unsubscribe(TopicName, MsgId, StateData = #state{protocol = Proto}) ->
     ?LOG(debug, "unsubscribe Topic=~p, MsgId=~p", [TopicName, MsgId], StateData),
-    case ?PROTO_RECEIVE(?UNSUBSCRIBE_PACKET(MsgId, [TopicName]), Proto) of
+    case emqx_protocol:received(?UNSUBSCRIBE_PACKET(MsgId, [TopicName]), Proto) of
         {ok, Proto1}           -> {keep_state, StateData#state{protocol = Proto1}};
         {error, Error}         -> shutdown(Error, StateData);
         {error, Error, Proto1} -> shutdown(Error, StateData#state{protocol = Proto1});
@@ -768,7 +752,7 @@ proto_publish(TopicName, Data, Dup, Qos, Retain, MsgId, TopicId,
     Publish = #mqtt_packet{header   = #mqtt_packet_header{type = ?PUBLISH, dup = Dup, qos = Qos, retain = Retain},
                            variable = #mqtt_packet_publish{topic_name = TopicName, packet_id = MsgId},
                            payload  = Data},
-    case ?PROTO_RECEIVE(Publish, Proto) of
+    case emqx_protocol:received(Publish, Proto) of
         {ok, Proto1}           -> {keep_state, StateData#state{protocol = Proto1}};
         {error, Error}         -> shutdown(Error, StateData);
         {error, Error, Proto1} -> shutdown(Error, StateData#state{protocol = Proto1});
@@ -791,14 +775,13 @@ publish_message_to_device(Msg, ClientId, StateData = #state{protocol = ProtoStat
     case emqx_sn_registry:lookup_topic_id(ClientId, TopicName) of
         undefined ->
             case byte_size(TopicName) of
-                2 ->
-                    ?PROTO_SEND(Msg, ProtoState);
-                _ ->
-                    register_and_notify_client(TopicName, Payload, Dup, Qos, Retain, MsgId, ClientId, StateData),
-                    ?PROTO_SEND(Msg, ProtoState)
+                2 -> emqx_protocol:send(Msg, ProtoState);
+                _ -> register_and_notify_client(TopicName, Payload, Dup, Qos,
+                                                Retain, MsgId, ClientId, StateData),
+                     emqx_protocol:send(Msg, ProtoState)
             end;
-        _         ->
-            ?PROTO_SEND(Msg, ProtoState)
+        _ ->
+            emqx_protocol:send(Msg, ProtoState)
     end.
 
 publish_asleep_messages_to_device(ClientId, StateData = #state{asleep_msg_queue = AsleepMsgQueue}, Qos2Count) ->
@@ -855,16 +838,16 @@ is_qos2_msg(#mqtt_message{})->
     false.
 
 emit_stats(StateData = #state{protocol=ProtoState}) ->
-    emit_stats(?PROTO_GET_CLIENT_ID(ProtoState), StateData).
+    emit_stats(emqx_protocol:clientid(ProtoState), StateData).
 
 emit_stats(_ClientId, State = #state{enable_stats = false}) ->
     ?LOG(debug, "The enable_stats is false, skip emit_state~n", [], State),
     State;
 emit_stats(ClientId, #state{sock = Sock, protocol = ProtoState}) ->
     StatsList = lists:append([emqx_misc:proc_stats(),
-                              ?PROTO_STATS(ProtoState),
+                              emqx_protocol:stats(ProtoState),
                               sock_stats(Sock, ?SOCK_STATS)]),
-    ?SET_CLIENT_STATS(ClientId, StatsList).
+    emqx_stats:set_client_stats(ClientId, StatsList).
 
 get_corrected_qos(?QOS_NEG1, StateData) ->
     ?LOG(debug, "Receive a publish with Qos=-1", [], StateData),
