@@ -825,9 +825,9 @@ enqueue_puback_msgid(TopicId, MsgId) ->
 dequeue_puback_msgid(MsgId) ->
     erase({puback_msgid, MsgId}).
 
-is_qos2_msg(#mqtt_message{qos = 2})->
+is_qos2_msg(#message{qos = 2})->
     true;
-is_qos2_msg(#mqtt_message{})->
+is_qos2_msg(#message{})->
     false.
 
 emit_stats(StateData = #state{protocol=ProtoState}) ->
