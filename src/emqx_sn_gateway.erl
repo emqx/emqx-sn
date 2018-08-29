@@ -35,7 +35,7 @@
 -export([init/1, callback_mode/0, handle_event/4, terminate/3, code_change/4]).
 
 -record(will_msg, {retain = false  :: boolean(),
-                   qos    = ?QOS_0 :: mqtt_qos(),
+                   qos    = ?QOS_0 :: emqx_mqtt_types:qos(),
                    topic           :: binary() | undefined,
                    payload         :: binary() | undefined}).
 
