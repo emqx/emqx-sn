@@ -344,6 +344,7 @@ handle_event(info, {datagram, SockPid, Data}, StateName, StateData = #state{sock
             ?LOG(info, "RECV ~s at state ~s", [emqx_sn_frame:format(Msg), StateName], StateData),
             SockStats1 = maps:update_with(recv_oct, fun(V) -> V + iolist_size(Data) end,
                                           maps:update_with(recv_cnt, fun(V) -> V + 1 end, SockStats)),
+            put(last_packet_ts, erlang:system_time(millisecond)),
             {keep_state, StateData#state{sock_stats = SockStats1}};
         {'EXIT', Error} ->
             ?LOG(info, "Parse frame error: ~p at state ~s", [Error, StateName], StateData),
@@ -369,8 +370,7 @@ handle_event(info, {keepalive, start, Interval}, _StateName,
              StateData = #state{keepalive = undefined, sock_stats = SockStats}) ->
     ?LOG(debug, "Keepalive at the interval of ~p seconds", [Interval], StateData),
     emit_stats(StateData),
-    StatFun = fun() -> maps:get(recv_oct, SockStats) end,
-    case emqx_keepalive:start(StatFun, Interval, {keepalive, check}) of
+    case emqx_keepalive:start(Interval, {keepalive, check}) of
         {ok, KeepAlive} ->
             {keep_state, StateData#state{keepalive = KeepAlive}};
         {error, Reason} ->
@@ -383,7 +383,7 @@ handle_event(info, {keepalive, start, _Interval}, _StateName, StateData) ->
     {keep_state, StateData};
 
 handle_event(info, {keepalive, check}, StateName, StateData = #state{keepalive = KeepAlive}) ->
-    case emqx_keepalive:check(KeepAlive) of
+    case emqx_keepalive:check(KeepAlive, get(last_packet_ts)) of
         {ok, KeepAlive1} ->
             ?LOG(debug, "Keepalive check ok StateName=~p, KeepAlive=~p",
                  [StateName, KeepAlive], StateData),
