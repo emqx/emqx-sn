@@ -55,8 +55,7 @@
                 asleep_msg_queue     :: term(),
                 enable_stats         :: boolean(),
                 enable_qos3 = false  :: boolean(),
-                sock_stats           :: sock_stats(),
-                last_packet_ts = 0   :: integer()}).
+                sock_stats           :: sock_stats()}).
 
 -define(SOCK_STATS, [recv_oct, recv_cnt, send_oct, send_cnt]).
 -define(IDLE_TIMEOUT, 10000).
@@ -345,7 +344,8 @@ handle_event(info, {datagram, SockPid, Data}, StateName, StateData = #state{sock
             ?LOG(info, "RECV ~s at state ~s", [emqx_sn_frame:format(Msg), StateName], StateData),
             SockStats1 = maps:update_with(recv_oct, fun(V) -> V + iolist_size(Data) end,
                                           maps:update_with(recv_cnt, fun(V) -> V + 1 end, SockStats)),
-            {keep_state, StateData#state{sock_stats = SockStats1, last_packet_ts = erlang:system_time(millisecond)}};
+            put(last_packet_ts, erlang:system_time(millisecond)),
+            {keep_state, StateData#state{sock_stats = SockStats1}};
         {'EXIT', Error} ->
             ?LOG(info, "Parse frame error: ~p at state ~s", [Error, StateName], StateData),
            shutdown(frame_error, StateData)
@@ -382,8 +382,8 @@ handle_event(info, {keepalive, start, _Interval}, _StateName, StateData) ->
     %% keepalive is still running, do nothing
     {keep_state, StateData};
 
-handle_event(info, {keepalive, check}, StateName, StateData = #state{keepalive = KeepAlive, last_packet_ts = LastPacketTs}) ->
-    case emqx_keepalive:check(KeepAlive, LastPacketTs) of
+handle_event(info, {keepalive, check}, StateName, StateData = #state{keepalive = KeepAlive}) ->
+    case emqx_keepalive:check(KeepAlive, get(last_packet_ts)) of
         {ok, KeepAlive1} ->
             ?LOG(debug, "Keepalive check ok StateName=~p, KeepAlive=~p",
                  [StateName, KeepAlive], StateData),
