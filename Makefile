@@ -19,7 +19,7 @@ dep_emqx_ct_helpers = git https://github.com/emqx/emqx-ct-helpers
 TEST_ERLC_OPTS += +debug_info
 TEST_ERLC_OPTS += +'{parse_transform, emqx_ct_transform}'
 
-CT_SUITES = emqx-sn-frame emqx-sn-protocol emqx-sn-registry
+CT_SUITES = emqx_sn_frame emqx_sn_protocol emqx_sn_registry
 
 CT_NODE_NAME = emqxct@127.0.0.1
 CT_OPTS = -cover test/ct.cover.spec -erl_args -name $(CT_NODE_NAME)
