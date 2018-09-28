@@ -1,0 +1,14 @@
+{application, emqx_sn,
+              [{description, "EMQ X MQTT SN Plugin"},
+               {vsn, "3.0"},
+               {modules, []},
+               {registered, [emqx_sup]},
+               {applications, [kernel, stdlib, 
+                               esockd, clique,
+                               emqx]},
+               {env, []},
+               {mod, {emqx_sn_app, []}},
+               {licenses, ["Apache-2.0"]},
+               {links, ["Github", "https://github.com/emqx/emqx-sn"]}
+              ]}.
+
