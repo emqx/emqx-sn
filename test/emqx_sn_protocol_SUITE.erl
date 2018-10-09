@@ -17,9 +17,12 @@
 -module (emqx_sn_protocol_SUITE).
 
 -include("emqx_sn.hrl").
+
+-include_lib("eunit/include/eunit.hrl").
+-include_lib("common_test/include/ct.hrl").
+
 -include_lib("emqx/include/emqx.hrl").
 -include_lib("emqx/include/emqx_mqtt.hrl").
--include_lib("eunit/include/eunit.hrl").
 
 -compile(export_all).
 -compile(nowarn_export_all).
@@ -62,6 +65,10 @@ all() -> [
 ].
 
 init_per_suite(Config) ->
+    dbg:start(),
+    dbg:tracer(),
+    dbg:p(all,c),
+    dbg:tpl(emqx_sn_protocol_SUITE, generate_config, x),
     application:set_env(emqx_sn, enable_qos3, ?ENABLE_QOS3),
     application:set_env(emqx_sn, enable_stats, true),
     application:set_env(emqx_sn, username, <<"user1">>),
@@ -69,20 +76,20 @@ init_per_suite(Config) ->
     application:set_env(emqx_sn, predefined,
                         [{?PREDEF_TOPIC_ID1, ?PREDEF_TOPIC_NAME1},
                          {?PREDEF_TOPIC_ID2, ?PREDEF_TOPIC_NAME2}]),
-    {ok, _} = application:ensure_all_started(esockd),
+    [run_setup_steps(App) || App <- [emqx, emqx_sn]],
     Config.
 
 end_per_suite(_Config) ->
-    ok = application:stop(esockd).
+    [application:stop(App) || App <- [emqx_backend_mongo, emqx]].
 
 init_per_testcase(_TestCase, Config) ->
-    ok = emqx_ct_helpers:ensure_broker_started(),
+    emqx_ct_broker_helpers:run_setup_steps(),
     {ok, _} = application:ensure_all_started(emqx_sn),
     Config.
 
 end_per_testcase(_TestCase, _Config) ->
     ok = application:stop(emqx_sn),
-    ok = emqx_ct_helpers:ensure_broker_stopped().
+    emqx_ct_broker_helpers:run_teardown_steps().
 
 connect_test01(_Config) ->
     {ok, Socket} = gen_udp:open(0, [binary]),
@@ -1984,4 +1991,67 @@ check_register_msg_on_udp(TopicName, UdpData) ->
 check_regack_msg_on_udp(MsgId, UdpData) ->
     <<7, ?SN_REGACK, TopicId:16, MsgId:16, 0:8>> = UdpData,
     TopicId.
+run_setup_steps(App) ->
+    NewConfig = generate_config(App),
+    lists:foreach(fun set_app_env/1, NewConfig),
+    application:ensure_all_started(App).
 
+generate_config(emqx) ->
+    Schema = cuttlefish_schema:files([local_path(["emqx", "priv", "emqx.schema"])]),
+    Conf = conf_parse:file([local_path(["emqx", "etc", "gen.emqx.conf"])]),
+    cuttlefish_generator:map(Schema, Conf);
+
+generate_config(emqx_sn) ->
+    Schema = cuttlefish_schema:files([local_path(["emqx_sn", "priv", "emqx_sn.schema"])]),
+    Conf = conf_parse:file([local_path(["emqx_sn", "etc", "emqx_sn.conf"])]),
+    cuttlefish_generator:map(Schema, Conf).
+
+get_base_dir(Module) ->
+    {file, Here} = code:is_loaded(Module),
+    find_base_dir(Here).
+
+find_base_dir(Here) ->
+    CurrentPath = filename:dirname(filename:dirname(Here)),
+    {ok, SubDirs} = file:list_dir(CurrentPath),
+    filename:dirname(CurrentPath),
+    case lists:member("deps", SubDirs) of
+        true ->
+            filename:join([CurrentPath, "deps"]);
+        false ->
+            filename:dirname(CurrentPath)
+    end.
+
+get_base_dir() ->
+    get_base_dir(?MODULE).
+
+local_path(Components, Module) ->
+    filename:join([get_base_dir(Module) | Components]).
+
+priv_path(Path, 0) ->
+    Path;
+priv_path(Path, Depth) ->
+    priv_path(filename:dirname(Path), Depth - 1).
+
+local_path(["emqx_sn"| RestComponents]) ->
+    {file, Here} = code:is_loaded(?MODULE),
+    CurrentPath = filename:dirname(filename:dirname(Here)),
+    {ok, SubDirs} = file:list_dir(CurrentPath),
+    DestPath = case lists:member("etc", SubDirs) of
+                   true ->
+                       CurrentPath;
+                   false ->
+                       priv_path(CurrentPath, 4)
+               end,
+        filename:join([DestPath | RestComponents]);
+local_path(Components) ->
+    local_path(Components, ?MODULE).
+
+set_app_env({App, Lists}) ->
+    lists:foreach(fun({acl_file, _Var}) -> 
+                          application:set_env(App, acl_file, local_path(["emqx", "etc", "acl.conf"]));
+                     ({plugins_loaded_file, _Var}) ->
+                          application:set_env(App, plugins_loaded_file, 
+                                              local_path(["emqx", "test", "emqx_SUITE_data", "loaded_plugins"]));
+                     ({Par, Var}) ->
+                          application:set_env(App, Par, Var)
+                  end, Lists).

@@ -10,6 +10,8 @@ BUILD_DEPS = emqx cuttlefish
 dep_emqx = git git@github.com:emqtt/emqttd emqx30
 dep_cuttlefish = git https://github.com/emqtt/cuttlefish emqx30
 
+NO_AUTOPATCH = cuttlefish
+
 ERLC_OPTS += +debug_info
 
 TEST_DEPS = meck emqx_ct_helpers
@@ -28,8 +30,10 @@ COVER = true
 
 include erlang.mk
 
-app.config::
+app.config: cuttlefish gen-config
 	$(verbose) ./cuttlefish -l info -e etc/ -c etc/emqx_sn.conf -i priv/emqx_sn.schema -d data
+
+ct: app.config
 
 rebar-cover:@rebar3 cover
 
@@ -40,6 +44,11 @@ cuttlefish: rebar-deps
 	@if [ ! -f cuttlefish ]; then \
 		make -C _build/default/lib/cuttlefish; \
 		mv _build/default/lib/cuttlefish/cuttlefish ./cuttlefish; \
+	fi
+
+gen-config:
+	@if [ -d deps/emqx ]; then make -C deps/emqx etc/gen.emqx.conf; \
+		else make -C _build/default/lib/emqx etc/gen.emqx.conf; \
 	fi
 
 rebar-xref:
@@ -54,7 +63,7 @@ rebar-eunit: cuttlefish
 rebar-compile:
 	@rebar3 compile
 
-rebar-ct: cuttlefish app.config
+rebar-ct: app.config
 	@rebar3 as test compile
 	@rebar3 ct -v --readable=false --name $(CT_NODE_NAME) --suite=$(shell echo $(foreach var,$(CT_SUITES),test/$(var)_SUITE) | tr ' ' ',')
 
