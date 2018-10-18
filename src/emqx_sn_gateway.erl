@@ -55,17 +55,20 @@
                 asleep_msg_queue     :: term(),
                 enable_stats         :: boolean(),
                 enable_qos3 = false  :: boolean(),
+                send_fun             :: function(),
                 sock_stats           :: sock_stats()}).
 
 -define(SOCK_STATS, [recv_oct, recv_cnt, send_oct, send_cnt]).
 -define(IDLE_TIMEOUT, 10000).
--define(DEFAULT_PROTO_OPTIONS, [{max_clientid_len, 24}, {max_packet_size, 256}]).
+-define(DEFAULT_PROTO_OPTIONS, [{max_packet_size, 256}]).
 -define(LOG(Level, Format, Args, State),
         emqx_logger:Level("MQTT-SN(~s): " ++ Format, [esockd_net:format(State#state.peer) | Args])).
 
 -define(SET_CLIENT_STATS(A,B),          emqx_stats:set_client_stats(A,B)).
 
 -define(NEG_QOS_CLIENT_ID, <<"NegQos-Client">>).
+
+-define(NO_PEERCERT, undefined).
 
 %%--------------------------------------------------------------------
 %% Exported APIs
@@ -86,7 +89,7 @@ kick(GwPid) ->
     gen_statem:call(GwPid, kick).
 
 %%--------------------------------------------------------------------
-%% gen_fsm callbacks
+%% gen_statem callbacks
 %%--------------------------------------------------------------------
 
 init([GwId, {_, SockPid, _Sock}, Peer]) ->
@@ -369,7 +372,14 @@ handle_event(info, {keepalive, start, Interval}, _StateName,
              StateData = #state{keepalive = undefined, sock_stats = SockStats}) ->
     ?LOG(debug, "Keepalive at the interval of ~p seconds", [Interval], StateData),
     emit_stats(StateData),
-    StatFun = fun() -> maps:get(recv_oct, SockStats) end,
+    StatFun = fun() -> 
+                  case maps:get(recv_oct, SockStats, undefined) of
+                      undefined ->
+                          {error, undefined};
+                      StatVal ->
+                          {ok, StatVal}
+                  end
+              end,
     case emqx_keepalive:start(StatFun, Interval, {keepalive, check}) of
         {ok, KeepAlive} ->
             {keep_state, StateData#state{keepalive = KeepAlive}};
@@ -556,8 +566,8 @@ mqttsn_to_mqtt(?SN_PUBCOMP, MsgId) ->
     ?PUBCOMP_PACKET(MsgId).
 
 do_connect(ClientId, CleanStart, WillFlag, Duration, StateData = #state{protocol = Proto}) ->
-    Username = emqx_sn_config:get_env(username),
-    Password = emqx_sn_config:get_env(password),
+    {ok, Username} = emqx_sn_config:get_env(username),
+    {ok, Password} = emqx_sn_config:get_env(password),
     ConnPkt = #mqtt_packet_connect{client_id   = ClientId,
                                    clean_start = CleanStart,
                                    username    = Username,
@@ -710,14 +720,16 @@ do_pubrec(PubRec, MsgId, StateData = #state{protocol = Proto}) ->
         {stop, Reason, Proto1} -> stop(Reason, StateData#state{protocol = Proto1})
     end.
 
-proto_init(StateData = #state{peer = Peername, enable_stats = EnableStats}) ->
-    SendFun = fun(Packet) ->
+proto_init(StateData = #state{peer = Peername}) ->
+    SendFun = fun(_Serialize, Packet, _Options) ->
                   send_message(transform(Packet, fun(MsgId) ->
                                                      dequeue_puback_msgid(MsgId)
-                                                 end), StateData)
+                                                 end), StateData),
+                  ok
               end,
-    PktOpts = [{client_enable_stats, EnableStats} | ?DEFAULT_PROTO_OPTIONS],
-    emqx_protocol:init(Peername, SendFun, PktOpts).
+    emqx_protocol:init(#{peername => Peername, 
+                         peercert => ?NO_PEERCERT,
+                         sendfun => SendFun}, ?DEFAULT_PROTO_OPTIONS).
 
 proto_subscribe(TopicName, Qos, MsgId, TopicId,
                 StateData = #state{protocol = Proto, awaiting_suback = Awaiting}) ->
@@ -831,7 +843,7 @@ is_qos2_msg(#message{})->
     false.
 
 emit_stats(StateData = #state{protocol=ProtoState}) ->
-    emit_stats(emqx_protocol:clientid(ProtoState), StateData).
+    emit_stats(emqx_protocol:client_id(ProtoState), StateData).
 
 emit_stats(_ClientId, State = #state{enable_stats = false}) ->
     ?LOG(debug, "The enable_stats is false, skip emit_state~n", [], State),
