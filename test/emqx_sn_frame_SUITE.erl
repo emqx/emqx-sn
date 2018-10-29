@@ -33,7 +33,6 @@ all() ->
      willmsgresp_test, random_test].
 
 init_per_suite(Config) ->
-    lager_common_test_backend:bounce(debug),
     Config.
 
 end_per_suite(_Config) ->
