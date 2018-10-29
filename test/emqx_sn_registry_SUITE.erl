@@ -32,7 +32,6 @@ all() ->
      register_topic_test4, register_topic_test4].
 
 init_per_suite(Config) ->
-    lager_common_test_backend:bounce(debug),
     _ = application:set_env(emqx_sn, predefined, ?PREDEF_TOPICS),
     Config.
 
