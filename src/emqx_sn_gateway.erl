@@ -202,7 +202,7 @@ connected(cast, ?SN_REGISTER_MSG(_TopicId, MsgId, TopicName),
     case emqx_sn_registry:register_topic(ClientId, TopicName) of
         TopicId when is_integer(TopicId) ->
             ?LOG(debug, "register ClientId=~p, TopicName=~p, TopicId=~p", [ClientId, TopicName, TopicId], StateData),
-            send_message(?SN_REGACK_MSG(TopicId, MsgId, ?SN_RC_ACCECPTED), StateData);
+            send_message(?SN_REGACK_MSG(TopicId, MsgId, ?SN_RC_ACCEPTED), StateData);
         {error, too_large} ->
             ?LOG(error, "TopicId is full! ClientId=~p, TopicName=~p", [ClientId, TopicName], StateData),
             send_message(?SN_REGACK_MSG(?SN_INVALID_TOPIC_ID, MsgId, ?SN_RC_NOT_SUPPORTED), StateData);
@@ -243,7 +243,7 @@ connected(cast, ?SN_PINGREQ_MSG(_ClientId), StateData) ->
     send_message(?SN_PINGRESP_MSG(), StateData),
     {keep_state, StateData};
 
-connected(cast, ?SN_REGACK_MSG(_TopicId, _MsgId, ?SN_RC_ACCECPTED), StateData) ->
+connected(cast, ?SN_REGACK_MSG(_TopicId, _MsgId, ?SN_RC_ACCEPTED), StateData) ->
     {keep_state, StateData};
 connected(cast, ?SN_REGACK_MSG(TopicId, MsgId, ReturnCode), StateData) ->
     ?LOG(error, "client does not accept register TopicId=~p, MsgId=~p, ReturnCode=~p", [TopicId, MsgId, ReturnCode], StateData),
@@ -329,7 +329,7 @@ asleep(cast, ?SN_CONNECT_MSG(_Flags, _ProtoId, _Duration, _ClientId),
 asleep(EventType, EventContent, StateData) ->
     handle_event(EventType, EventContent, asleep, StateData).
 
-awake(cast, ?SN_REGACK_MSG(_TopicId, _MsgId, ?SN_RC_ACCECPTED), StateData) ->
+awake(cast, ?SN_REGACK_MSG(_TopicId, _MsgId, ?SN_RC_ACCEPTED), StateData) ->
     {keep_state, StateData};
 
 awake(cast, ?SN_REGACK_MSG(TopicId, MsgId, ReturnCode), StateData) ->
@@ -361,7 +361,7 @@ handle_event(info, {deliver, Msg}, asleep,
     {keep_state, StateData#state{asleep_msg_queue = NewAsleepMsgQue}};
 
 handle_event(info, {deliver, Msg}, _StateName, StateData = #state{client_id = ClientId}) ->
-    {ok, ProtoState} = publish_message_to_device(Msg, ClientId, StateData),
+    {ok, ProtoState} = send_message_to_device(Msg, ClientId, StateData),
     {keep_state, StateData#state{protocol = ProtoState}};
 
 handle_event(info, {redeliver, {?PUBREL, MsgId}}, _StateName, StateData) ->
@@ -430,7 +430,7 @@ handle_event(info, {suback, MsgId, [GrantedQos]}, _StateName,
     Flags = #mqtt_sn_flags{qos = GrantedQos},
     {MsgId, TopicId} = find_suback_topicid(MsgId, Awaiting),
     ?LOG(debug, "suback Awaiting=~p, MsgId=~p, TopicId=~p", [Awaiting, MsgId, TopicId], StateData),
-    send_message(?SN_SUBACK_MSG(Flags, TopicId, MsgId, ?SN_RC_ACCECPTED), StateData),
+    send_message(?SN_SUBACK_MSG(Flags, TopicId, MsgId, ?SN_RC_ACCEPTED), StateData),
     {keep_state, StateData#state{awaiting_suback = lists:delete({MsgId, TopicId}, Awaiting)}};
 
 handle_event(info, {asleep_timeout, Ref}, StateName, StateData=#state{asleep_timer = AsleepTimer}) ->
@@ -502,11 +502,8 @@ transform(?PUBLISH_PACKET(Qos, Topic, PacketId, Payload), _FuncMsgIdToTopicId) -
     ?SN_PUBLISH_MSG(Flags, TopicContent, NewPacketId, Payload);
 
 transform(?PUBACK_PACKET(MsgId), FuncMsgIdToTopicId) ->
-    TopicIdFinal =  case FuncMsgIdToTopicId(MsgId) of
-                        undefined -> 0;
-                        TopicId -> TopicId
-                    end,
-    ?SN_PUBACK_MSG(TopicIdFinal, MsgId, ?SN_RC_ACCECPTED);
+    TopicIdFinal =  get_topic_id(puback, MsgId, FuncMsgIdToTopicId),
+    ?SN_PUBACK_MSG(TopicIdFinal, MsgId, ?SN_RC_ACCEPTED);
 
 transform(?PUBREC_PACKET(MsgId), _FuncMsgIdToTopicId) ->
     ?SN_PUBREC_MSG(?SN_PUBREC, MsgId);
@@ -517,11 +514,19 @@ transform(?PUBREL_PACKET(MsgId), _FuncMsgIdToTopicId) ->
 transform(?PUBCOMP_PACKET(MsgId), _FuncMsgIdToTopicId) ->
     ?SN_PUBREC_MSG(?SN_PUBCOMP, MsgId);
 
-transform(?SUBACK_PACKET(MsgId, _QosTable), _FuncMsgIdToTopicId)->
+transform(?SUBACK_PACKET(MsgId, ReturnCodes), FuncMsgIdToTopicId)->
     % if success, suback is sent by handle_info({suback, MsgId, [GrantedQos]}, ...)
     % if failure, suback is sent in this function.
-    Flags = #mqtt_sn_flags{qos = 0},
-    ?SN_SUBACK_MSG(Flags, ?SN_INVALID_TOPIC_ID, MsgId, ?SN_RC_MQTT_FAILURE);
+    [ReturnCode | _ ] = ReturnCodes,
+    {QoS, TopicId, NewReturnCode} 
+        = case ?IS_QOS(ReturnCode) of
+              true ->
+                  {ReturnCode, get_topic_id(suback, MsgId, FuncMsgIdToTopicId), ?SN_RC_ACCEPTED};
+              _ ->
+                  {?QOS0, get_topic_id(suback, MsgId, FuncMsgIdToTopicId), ?SN_RC_NOT_SUPPORTED}
+          end,
+    Flags = #mqtt_sn_flags{qos = QoS},
+    ?SN_SUBACK_MSG(Flags, TopicId, MsgId, NewReturnCode);
 
 transform(?UNSUBACK_PACKET(MsgId), _FuncMsgIdToTopicId)->
     ?SN_UNSUBACK_MSG(MsgId).
@@ -533,7 +538,7 @@ send_pingresp(StateData) ->
     send_message(?SN_PINGRESP_MSG(), StateData).
 
 send_connack(StateData) ->
-    send_message(?SN_CONNACK_MSG(?SN_RC_ACCECPTED), StateData).
+    send_message(?SN_CONNACK_MSG(?SN_RC_ACCEPTED), StateData).
 
 send_message(Msg, StateData = #state{sockpid = SockPid, peer = Peer}) ->
     ?LOG(debug, "SEND ~s~n", [emqx_sn_frame:format(Msg)], StateData),
@@ -691,7 +696,7 @@ do_publish_will(#state{will_msg = WillMsg, protocol = Proto}) ->
 
 do_puback(TopicId, MsgId, ReturnCode, _StateName, StateData=#state{client_id = ClientId, protocol = Proto}) ->
     case ReturnCode of
-        ?SN_RC_ACCECPTED ->
+        ?SN_RC_ACCEPTED ->
             case emqx_protocol:received(?PUBACK_PACKET(MsgId), Proto) of
                 {ok, Proto1}           -> {keep_state, StateData#state{protocol = Proto1}};
                 {error, Error}         -> shutdown(Error, StateData);
@@ -721,21 +726,22 @@ do_pubrec(PubRec, MsgId, StateData = #state{protocol = Proto}) ->
     end.
 
 proto_init(StateData = #state{peer = Peername}) ->
-    SendFun = fun(_Serialize, Packet, _Options) ->
-                  send_message(transform(Packet, fun(MsgId) ->
-                                                     dequeue_puback_msgid(MsgId)
-                                                 end), StateData),
-                  ok
+    SendFun = fun(Packet, _Options) ->
+                  send_message(transform(Packet, fun(Type, MsgId) ->
+                                                     dequeue_msgid(Type, MsgId)
+                                                 end), StateData)
+                  %% ok
               end,
     emqx_protocol:init(#{peername => Peername, 
                          peercert => ?NO_PEERCERT,
                          sendfun => SendFun}, ?DEFAULT_PROTO_OPTIONS).
 
-proto_subscribe(TopicName, Qos, MsgId, TopicId,
+proto_subscribe(TopicName, QoS, MsgId, TopicId,
                 StateData = #state{protocol = Proto, awaiting_suback = Awaiting}) ->
     ?LOG(debug, "subscribe Topic=~p, MsgId=~p, TopicId=~p", [TopicName, MsgId, TopicId], StateData),
+    enqueue_msgid(suback, MsgId, TopicId),
     NewAwaiting = lists:append(Awaiting, [{MsgId, TopicId}]),
-    case emqx_protocol:received(?SUBSCRIBE_PACKET(MsgId, [{TopicName, Qos}]), Proto) of
+    case emqx_protocol:received(?SUBSCRIBE_PACKET(MsgId, [{TopicName, #{qos => QoS}}]), Proto) of
         {ok, Proto1}           -> {keep_state, StateData#state{protocol = Proto1, awaiting_suback = NewAwaiting}};
         {error, Error}         -> shutdown(Error, StateData);
         {error, Error, Proto1} -> shutdown(Error, StateData#state{protocol = Proto1});
@@ -753,7 +759,7 @@ proto_unsubscribe(TopicName, MsgId, StateData = #state{protocol = Proto}) ->
 
 proto_publish(TopicName, Data, Dup, Qos, Retain, MsgId, TopicId,
               StateData = #state{protocol = Proto}) ->
-    (Qos =/= ?QOS0) andalso enqueue_puback_msgid(TopicId, MsgId),
+    (Qos =/= ?QOS0) andalso enqueue_msgid(puback, MsgId, TopicId),
     Publish = #mqtt_packet{header   = #mqtt_packet_header{type = ?PUBLISH, dup = Dup, qos = Qos, retain = Retain},
                            variable = #mqtt_packet_publish{topic_name = TopicName, packet_id = MsgId},
                            payload  = Data},
@@ -771,12 +777,18 @@ find_suback_topicid(MsgId, [{MsgId, TopicId}|_Rest]) ->
 find_suback_topicid(MsgId, [{_, _}|Rest]) ->
     find_suback_topicid(MsgId, Rest).
 
-publish_message_to_device(Msg, ClientId, StateData = #state{protocol = ProtoState}) ->
+send_message_to_device({suback, PacketId, ReasonCodes}, _ClientId, StateData = #state{protocol = ProtoState}) ->
+    ?LOG(debug, "Failed subscription, Reason Codes: ~p", [ReasonCodes], StateData),
+    emqx_protocol:send(
+        ?SUBACK_PACKET(
+            PacketId, 
+            [emqx_reason_codes:compat(suback, RC) || RC <- ReasonCodes]), ProtoState);
+send_message_to_device(Msg, ClientId, StateData = #state{protocol = ProtoState}) ->
     #mqtt_packet{header   = #mqtt_packet_header{type = ?PUBLISH, dup = Dup, qos = Qos, retain = Retain},
                  variable = #mqtt_packet_publish{topic_name = TopicName, packet_id = MsgId0},
                  payload  = Payload} = emqx_message:to_packet(Msg),
     MsgId = message_id(MsgId0),
-    ?LOG(debug, "the TopicName of mqtt_message=~p~n", [TopicName], StateData),
+    ?LOG(debug, "The TopicName of mqtt_message=~p~n", [TopicName], StateData),
     case emqx_sn_registry:lookup_topic_id(ClientId, TopicName) of
         undefined ->
             case byte_size(TopicName) of
@@ -793,7 +805,7 @@ publish_asleep_messages_to_device(ClientId, StateData = #state{asleep_msg_queue 
     case queue:is_empty(AsleepMsgQueue) of
         false ->
             Msg = queue:get(AsleepMsgQueue),
-            {ok, NewProtoState} = publish_message_to_device(Msg, ClientId, StateData),
+            {ok, NewProtoState} = send_message_to_device(Msg, ClientId, StateData),
             NewCount = case is_qos2_msg(Msg) of
                            true -> Qos2Count + 1;
                            false -> Qos2Count
@@ -831,11 +843,15 @@ process_awake_jobs(ClientId, StateData) ->
     send_pingresp(StateData),
     NewStateData.
 
-enqueue_puback_msgid(TopicId, MsgId) ->
-    put({puback_msgid, MsgId}, TopicId).
+enqueue_msgid(suback, MsgId, TopicId) ->
+    put({suback, MsgId}, TopicId);
+enqueue_msgid(puback, MsgId, TopicId) ->
+    put({puback, MsgId}, TopicId).
 
-dequeue_puback_msgid(MsgId) ->
-    erase({puback_msgid, MsgId}).
+dequeue_msgid(suback, MsgId) ->
+    erase({suback, MsgId});
+dequeue_msgid(puback, MsgId) ->
+    erase({puback, MsgId}).
 
 is_qos2_msg(#message{qos = 2})->
     true;
@@ -860,3 +876,8 @@ get_corrected_qos(?QOS_NEG1, StateData) ->
 get_corrected_qos(Qos, _StateData) ->
     Qos.
 
+get_topic_id(Type, MsgId, Func) ->
+    case Func(Type, MsgId) of
+        undefined -> 0;
+        TopicId -> TopicId
+    end.

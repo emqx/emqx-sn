@@ -301,4 +301,3 @@ format_flag(#mqtt_sn_flags{dup = Dup, qos = Qos, retain = Retain, will = Will, c
                   [Dup, Qos, Retain, Will, CleanStart, TopicType]);
 format_flag(_Flag) ->
     "invalid flag".
-
