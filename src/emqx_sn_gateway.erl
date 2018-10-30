@@ -253,7 +253,7 @@ connected(cast, ?SN_DISCONNECT_MSG(Duration), StateData = #state{protocol = Prot
     send_message(?SN_DISCONNECT_MSG(undefined), StateData),
     case Duration of
         undefined ->
-            {stop, Reason, Proto1} = emqx_protocol:received(?PACKET(?DISCONNECT), Proto),
+            {stop, Reason, Proto1} = emqx_protocol:received(?DISCONNECT_PACKET(), Proto),
             stop(Reason, StateData#state{protocol = Proto1});
         Other -> goto_asleep_state(StateData, Other)
     end;
@@ -778,11 +778,14 @@ find_suback_topicid(MsgId, [{_, _}|Rest]) ->
     find_suback_topicid(MsgId, Rest).
 
 send_message_to_device({suback, PacketId, ReasonCodes}, _ClientId, StateData = #state{protocol = ProtoState}) ->
-    ?LOG(debug, "Failed subscription, Reason Codes: ~p", [ReasonCodes], StateData),
+    ?LOG(debug, "[suback] msgid: ~p, reason codes: ~p", [PacketId, ReasonCodes], StateData),
     emqx_protocol:send(
         ?SUBACK_PACKET(
             PacketId, 
             [emqx_reason_codes:compat(suback, RC) || RC <- ReasonCodes]), ProtoState);
+send_message_to_device({unsuback, PacketId, _ReasonCodes}, _ClientId, StateData = #state{protocol = ProtoState}) ->
+    ?LOG(debug, "[unsuback] msgid: ~p", [PacketId], StateData),
+    emqx_protocol:send(?UNSUBACK_PACKET(PacketId), ProtoState);
 send_message_to_device(Msg, ClientId, StateData = #state{protocol = ProtoState}) ->
     #mqtt_packet{header   = #mqtt_packet_header{type = ?PUBLISH, dup = Dup, qos = Qos, retain = Retain},
                  variable = #mqtt_packet_publish{topic_name = TopicName, packet_id = MsgId0},
