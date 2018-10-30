@@ -68,7 +68,7 @@ lookup_topic_id(ClientId, TopicName) when is_binary(TopicName) ->
     case lookup_element({predef, TopicName}, 2) of
         undefined ->
             lookup_element({ClientId, TopicName}, 2);
-        TopicId -> {predef, TopicId}
+        TopicId -> TopicId
     end.
 
 lookup_element(Key, Pos) ->
