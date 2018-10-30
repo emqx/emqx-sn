@@ -46,16 +46,14 @@
 
 -type(mqtt_sn_type() :: ?SN_ADVERTISE..?SN_WILLMSGRESP).
 
--define(SN_RC_ACCECPTED,        16#00).
+-define(SN_RC_ACCEPTED,        16#00).
 -define(SN_RC_CONGESTION,       16#01).
 -define(SN_RC_INVALID_TOPIC_ID, 16#02).
 -define(SN_RC_NOT_SUPPORTED,    16#03).
 
--define(SN_RC_MQTT_FAILURE,     16#80).
-
 -define(QOS_NEG1, 3).
 
--type(mqtt_sn_return_code() :: ?SN_RC_ACCECPTED .. ?SN_RC_NOT_SUPPORTED).
+-type(mqtt_sn_return_code() :: ?SN_RC_ACCEPTED .. ?SN_RC_NOT_SUPPORTED).
 
 %%--------------------------------------------------------------------
 %% MQTT-SN Message
@@ -99,8 +97,8 @@
                          variable = {Flags, Topic}}).
 
 -define(SN_WILLTOPIC_EMPTY_MSG,
-    #mqtt_sn_message{type     = ?SN_WILLTOPIC,
-        variable = undefined}).
+        #mqtt_sn_message{type     = ?SN_WILLTOPIC,
+                         variable = undefined}).
 
 -define(SN_WILLMSGREQ_MSG(),
         #mqtt_sn_message{type = ?SN_WILLMSGREQ}).
