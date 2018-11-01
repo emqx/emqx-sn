@@ -23,6 +23,11 @@
   {datatype, string}
 ]}.
 
+{mapping, "mqtt.sn.idle_timeout", "emqx_sn.idle_timeout", [
+  {default, "30s"},
+  {datatype, {duration, ms}}
+]}.
+
 {mapping, "mqtt.sn.enable_stats", "emqx_sn.enable_stats", [
   {datatype, flag}
 ]}.
@@ -49,4 +54,3 @@ end}.
     List = cuttlefish_variable:filter_by_prefix("mqtt.sn.predefined.topic", Conf),
     TopicIdList = lists:sort([{list_to_integer(I), iolist_to_binary(TopicName)} || {["mqtt", "sn", "predefined", "topic", I], TopicName} <- List, I =/= "0"])
 end}.
-
