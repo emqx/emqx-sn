@@ -62,7 +62,7 @@
 
 -define(SOCK_STATS, [recv_oct, recv_cnt, send_oct, send_cnt]).
 -define(IDLE_TIMEOUT, 10000).
--define(DEFAULT_PROTO_OPTIONS, [{max_packet_size, 256}]).
+-define(DEFAULT_PROTO_OPTIONS, [{max_packet_size, 256}, {zone, external}]).
 -define(LOG(Level, Format, Args, State),
         emqx_logger:Level("MQTT-SN(~s): " ++ Format, [esockd_net:format(State#state.peer) | Args])).
 
@@ -218,7 +218,6 @@ connected(cast, ?SN_PUBLISH_MSG(Flags, TopicId, MsgId, Data),
           StateData = #state{enable_qos3 = EnableQos3}) ->
     #mqtt_sn_flags{topic_id_type = TopicIdType, qos = QoS} = Flags,
     Skip = (EnableQos3 =:= false) andalso (QoS =:= ?QOS_NEG1),
-    io:format("~n StateData: ~p; EnableQos3: ~p; QoS: ~p; Skip: ~p ~n", [StateData, EnableQos3, QoS, Skip]),
     case Skip of
         true  ->
             ?LOG(debug, "The enable_qos3 is false, ignore the received publish with Qos=-1 in connected mode!", [], StateData),
@@ -349,6 +348,7 @@ handle_event(info, {datagram, SockPid, Data}, StateName,
     StateData1 = ensure_stats_timer(StateData),
     try emqx_sn_frame:parse(Data) of
         {ok, Msg} -> 
+            io:format("~n SockMsg: ~p ~n", [Msg]),
             gen_statem:cast(self(), Msg),
             ?LOG(info, "RECV ~s at state ~s", [emqx_sn_frame:format(Msg), StateName], StateData),
             SockStats1 = maps:update_with(recv_oct, fun(V) -> V + iolist_size(Data) end,
@@ -361,16 +361,17 @@ handle_event(info, {datagram, SockPid, Data}, StateName,
     end;
 
 handle_event(info, {deliver, Msg}, asleep,
-             StateData = #state{asleep_msg_queue = AsleepMsgQue, protocol = ProtoState}) ->
+             StateData = #state{asleep_msg_queue = AsleepMsgQue}) ->
     % section 6.14, Support of sleeping clients
-    ?LOG(debug, "enqueue downlink message in asleep state Msg=~p", [Msg], StateData),
+    StateData1 = ensure_stats_timer(StateData),
+    ?LOG(debug, "enqueue downlink message in asleep state Msg=~p", [Msg], StateData1),
     NewAsleepMsgQue = queue:in(Msg, AsleepMsgQue),
-    
-    {keep_state, StateData#state{asleep_msg_queue = NewAsleepMsgQue}};
+    {keep_state, StateData1#state{asleep_msg_queue = NewAsleepMsgQue}};
 
 handle_event(info, {deliver, Msg}, _StateName, StateData = #state{client_id = ClientId}) ->
-    {ok, ProtoState} = send_message_to_device(Msg, ClientId, StateData),
-    {keep_state, StateData#state{protocol = ProtoState}};
+    StateData1 = ensure_stats_timer(StateData),
+    {ok, ProtoState} = send_message_to_device(Msg, ClientId, StateData1),
+    {keep_state, StateData1#state{protocol = ProtoState}};
 
 handle_event(info, {timeout, Timer, emit_stats}, _StateName,
              StateData = #state{stats_timer = Timer,
@@ -553,6 +554,7 @@ send_connack(StateData) ->
 
 send_message(Msg, StateData = #state{sockpid = SockPid, peer = Peer}) ->
     ?LOG(debug, "SEND ~s~n", [emqx_sn_frame:format(Msg)], StateData),
+    io:format("~n Msg: ~p ~n", [Msg]),
     SockPid ! {datagram, Peer, emqx_sn_frame:serialize(Msg)}.
 
 goto_asleep_state(StateData=#state{asleep_timer = AsleepTimer}, Duration) ->
@@ -778,6 +780,7 @@ proto_publish(TopicName, Data, Dup, Qos, Retain, MsgId, TopicId,
     Publish = #mqtt_packet{header   = #mqtt_packet_header{type = ?PUBLISH, dup = Dup, qos = Qos, retain = Retain},
                            variable = #mqtt_packet_publish{topic_name = TopicName, packet_id = MsgId},
                            payload  = Data},
+    io:format("~n QoS2 Msg: ~p~n", [Publish]),
     case emqx_protocol:received(Publish, Proto) of
         {ok, Proto1}           -> {keep_state, StateData#state{protocol = Proto1}};
         {error, Error}         -> shutdown(Error, StateData);
