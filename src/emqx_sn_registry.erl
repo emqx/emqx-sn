@@ -68,7 +68,7 @@ lookup_topic_id(ClientId, TopicName) when is_binary(TopicName) ->
     case lookup_element({predef, TopicName}, 2) of
         undefined ->
             lookup_element({ClientId, TopicName}, 2);
-        TopicId -> TopicId
+        TopicId -> {predef, TopicId}
     end.
 
 lookup_element(Key, Pos) ->
@@ -98,6 +98,8 @@ init([]) ->
 handle_call({register, ClientId, TopicName}, _From,
             State = #state{max_predef_topic_id = PredefId}) ->
     case lookup_topic_id(ClientId, TopicName) of
+        {predef, PredefTopicId}  when is_integer(PredefTopicId) ->
+            {reply, PredefTopicId, State};
         TopicId when is_integer(TopicId) ->
             {reply, TopicId, State};
         undefined ->
