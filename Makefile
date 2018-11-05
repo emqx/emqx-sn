@@ -7,7 +7,7 @@ dep_esockd = git https://github.com/emqtt/esockd emqx30
 dep_clique = git https://github.com/emqtt/clique
 
 BUILD_DEPS = emqx cuttlefish
-dep_emqx = git git@github.com:emqtt/emqttd emqx30
+dep_emqx = git git@github.com:emqtt/emqttd Fix-for-mqtt-sn
 dep_cuttlefish = git https://github.com/emqtt/cuttlefish emqx30
 
 NO_AUTOPATCH = cuttlefish
@@ -21,7 +21,7 @@ dep_emqx_ct_helpers = git https://github.com/emqx/emqx-ct-helpers
 TEST_ERLC_OPTS += +debug_info
 TEST_ERLC_OPTS += +'{parse_transform, emqx_ct_transform}'
 
-CT_SUITES = emqx_sn_frame emqx_sn_protocol emqx_sn_registry
+CT_SUITES = emqx_sn_protocol
 
 CT_NODE_NAME = emqxct@127.0.0.1
 CT_OPTS = -cover test/ct.cover.spec -erl_args -name $(CT_NODE_NAME)
