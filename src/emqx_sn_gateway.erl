@@ -513,7 +513,7 @@ transform(?PUBLISH_PACKET(Qos, Topic, PacketId, Payload), _FuncMsgIdToTopicId) -
     io:format("~n Topic type: ~p Topic Content: ~p ~n", [TopicIdType, TopicContent]),
     ?SN_PUBLISH_MSG(Flags, TopicContent, NewPacketId, Payload);
 
-transform(?PUBACK_PACKET(MsgId), FuncMsgIdToTopicId) ->
+transform(?PUBACK_PACKET(MsgId, _ReasonCode), FuncMsgIdToTopicId) ->
     TopicIdFinal =  get_topic_id(puback, MsgId, FuncMsgIdToTopicId),
     ?SN_PUBACK_MSG(TopicIdFinal, MsgId, ?SN_RC_ACCEPTED);
 
@@ -555,7 +555,8 @@ send_connack(StateData) ->
 send_message(Msg, StateData = #state{sockpid = SockPid, peer = Peer}) ->
     ?LOG(debug, "SEND ~s~n", [emqx_sn_frame:format(Msg)], StateData),
     io:format("~n Msg: ~p ~n", [Msg]),
-    SockPid ! {datagram, Peer, emqx_sn_frame:serialize(Msg)}.
+    SockPid ! {datagram, Peer, emqx_sn_frame:serialize(Msg)},
+    ok.
 
 goto_asleep_state(StateData=#state{asleep_timer = AsleepTimer}, Duration) ->
     ?LOG(debug, "goto_asleep_state Duration=~p", [Duration], StateData),
@@ -881,9 +882,9 @@ dequeue_msgid(suback, MsgId) ->
 dequeue_msgid(puback, MsgId) ->
     erase({puback, MsgId}).
 
-is_qos2_msg(#message{qos = 2})->
+is_qos2_msg({publish, _PacketId, #message{qos = 2}})->
     true;
-is_qos2_msg(#message{})->
+is_qos2_msg(_)->
     false.
 
 stats(#state{protocol = ProtoState}) ->
