@@ -30,8 +30,11 @@ COVER = true
 
 include erlang.mk
 
-app.config: cuttlefish gen-config
-	$(verbose) ./cuttlefish -l info -e etc/ -c etc/emqx_sn.conf -i priv/emqx_sn.schema -d data
+CUTTLEFISH_SCRIPT = _build/default/lib/cuttlefish/cuttlefish
+
+
+app.config: $(CUTTLEFISH_SCRIPT) gen-config
+	$(verbose) $(CUTTLEFISH_SCRIPT) -l info -e etc/ -c etc/emqx_sn.conf -i priv/emqx_sn.schema -d data
 
 ct: app.config
 
@@ -40,11 +43,8 @@ rebar-cover:@rebar3 cover
 coveralls:
 	@rebar3 coveralls send
 
-cuttlefish: rebar-deps
-	@if [ ! -f cuttlefish ]; then \
-		make -C _build/default/lib/cuttlefish; \
-		mv _build/default/lib/cuttlefish/cuttlefish ./cuttlefish; \
-	fi
+$(CUTTLEFISH_SCRIPT): rebar-deps
+	@if [ ! -f cuttlefish ]; then make -C _build/default/lib/cuttlefish; fi
 
 gen-config:
 	@if [ -d deps/emqx ]; then make -C deps/emqx etc/gen.emqx.conf; \
@@ -57,7 +57,7 @@ rebar-xref:
 rebar-deps:
 	@rebar3 get-deps
 
-rebar-eunit: cuttlefish
+rebar-eunit: $(CUTTLEFISH_SCRIPT)
 	@rebar3 eunit
 
 rebar-compile:
