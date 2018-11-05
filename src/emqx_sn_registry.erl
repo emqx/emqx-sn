@@ -41,7 +41,7 @@ start_link() ->
 
 -spec(stop() -> ok).
 stop() ->
-    gen_sever:stop(?MODULE, normal, infinity).
+    gen_server:stop(?MODULE, normal, infinity).
 
 -spec(register_topic(binary(), binary()) -> integer() | {error, term()}).
 register_topic(ClientId, TopicName) when is_binary(TopicName) ->

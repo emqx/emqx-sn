@@ -1215,17 +1215,17 @@ asleep_test05_to_awake_qos1_dl_msg(_Config) ->
     UdpData2 = receive_response(Socket),
     MsgId2 = check_publish_msg_on_udp({Dup, Qos, Retain, WillBit, CleanSession, ?SN_NORMAL_TOPIC, TopicIdNew, Payload2}, UdpData2),
     send_puback_msg(Socket, TopicIdNew, MsgId2),
-    timer:sleep(100),
+    timer:sleep(50),
 
     UdpData3 = receive_response(Socket),
     MsgId3 = check_publish_msg_on_udp({Dup, Qos, Retain, WillBit, CleanSession, ?SN_NORMAL_TOPIC, TopicIdNew, Payload3}, UdpData3),
     send_puback_msg(Socket, TopicIdNew, MsgId3),
-    timer:sleep(100),
+    timer:sleep(50),
 
     UdpData4 = receive_response(Socket),
     MsgId4 = check_publish_msg_on_udp({Dup, Qos, Retain, WillBit, CleanSession, ?SN_NORMAL_TOPIC, TopicIdNew, Payload4}, UdpData4),
     send_puback_msg(Socket, TopicIdNew, MsgId4),
-    timer:sleep(100),
+    timer:sleep(50),
 
     ?assertEqual(<<2, ?SN_PINGRESP>>, receive_response(Socket)),
 
@@ -1843,8 +1843,6 @@ get_udp_broadcast_address() ->
     "255.255.255.255".
 
 check_publish_msg_on_udp({Dup, Qos, Retain, WillBit, CleanSession, TopicType, TopicId, Payload}, UdpData) ->
-    ct:log("UdpData: ~p", [UdpData]),
-    ct:log("Check Data: ~p ~p", [TopicId, Payload]),
     <<HeaderUdp:5/binary, MsgId:16, PayloadIn/binary>> = UdpData,
     Size9 = byte_size(Payload) + 7,
     Eexp = <<Size9:8, ?SN_PUBLISH, Dup:1, Qos:2, Retain:1, WillBit:1, CleanSession:1, TopicType:2, TopicId:16>>,
