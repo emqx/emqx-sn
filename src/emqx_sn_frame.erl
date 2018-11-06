@@ -101,17 +101,17 @@ parse_var(_Type, _Var) ->
 
 parse_flags(?SN_CONNECT, <<_D:1, _Q:2, _R:1, Will:1, CleanStart:1, _IdType:2>>) ->
     #mqtt_sn_flags{will = bool(Will), clean_start = bool(CleanStart)};
-parse_flags(?SN_WILLTOPIC, <<_D:1, Qos:2, Retain:1, _Will:1, _C:1, _:2>>) ->
-    #mqtt_sn_flags{qos = Qos, retain = bool(Retain)};
-parse_flags(?SN_PUBLISH, <<Dup:1, Qos:2, Retain:1, _Will:1, _C:1, IdType:2>>) ->
-    #mqtt_sn_flags{dup = bool(Dup), qos = Qos, retain = bool(Retain), topic_id_type = IdType};
-parse_flags(Sub, <<Dup:1, Qos:2, _R:1, _Will:1, _C:1, IdType:2>>)
+parse_flags(?SN_WILLTOPIC, <<_D:1, QoS:2, Retain:1, _Will:1, _C:1, _:2>>) ->
+    #mqtt_sn_flags{qos = QoS, retain = bool(Retain)};
+parse_flags(?SN_PUBLISH, <<Dup:1, QoS:2, Retain:1, _Will:1, _C:1, IdType:2>>) ->
+    #mqtt_sn_flags{dup = bool(Dup), qos = QoS, retain = bool(Retain), topic_id_type = IdType};
+parse_flags(Sub, <<Dup:1, QoS:2, _R:1, _Will:1, _C:1, IdType:2>>)
     when Sub == ?SN_SUBSCRIBE; Sub == ?SN_UNSUBSCRIBE ->
-    #mqtt_sn_flags{dup = bool(Dup), qos = Qos, topic_id_type = IdType};
-parse_flags(?SN_SUBACK, <<_D:1, Qos:2, _R:1, _W:1, _C:1, _Id:2>>) ->
-    #mqtt_sn_flags{qos = Qos};
-parse_flags(?SN_WILLTOPICUPD, <<_D:1, Qos:2, Retain:1, _W:1, _C:1, _Id:2>>) ->
-    #mqtt_sn_flags{qos = Qos, retain = bool(Retain)};
+    #mqtt_sn_flags{dup = bool(Dup), qos = QoS, topic_id_type = IdType};
+parse_flags(?SN_SUBACK, <<_D:1, QoS:2, _R:1, _W:1, _C:1, _Id:2>>) ->
+    #mqtt_sn_flags{qos = QoS};
+parse_flags(?SN_WILLTOPICUPD, <<_D:1, QoS:2, Retain:1, _W:1, _C:1, _Id:2>>) ->
+    #mqtt_sn_flags{qos = QoS, retain = bool(Retain)};
 parse_flags(_Type, _) ->
     error(format_error).
 
@@ -189,9 +189,9 @@ serialize(?SN_DISCONNECT, undefined) ->
 serialize(?SN_DISCONNECT, Duration) ->
     <<Duration:?short>>.
 
-serialize_flags(#mqtt_sn_flags{dup = Dup, qos = Qos, retain = Retain, will = Will,
+serialize_flags(#mqtt_sn_flags{dup = Dup, qos = QoS, retain = Retain, will = Will,
                                clean_start = CleanStart, topic_id_type = IdType}) ->
-    <<(bool(Dup)):1, (i(Qos)):2, (bool(Retain)):1, (bool(Will)):1, (bool(CleanStart)):1, (i(IdType)):2>>.
+    <<(bool(Dup)):1, (i(QoS)):2, (bool(Retain)):1, (bool(Will)):1, (bool(CleanStart)):1, (i(IdType)):2>>.
 
 serialize_topic(2#00, Topic) -> Topic;
 serialize_topic(2#01, Id)    -> <<Id:?short>>;
@@ -296,8 +296,8 @@ format(?SN_REGACK_MSG(TopicId, MsgId, ReturnCode)) ->
 format(#mqtt_sn_message{type = Type, variable = Var}) ->
     io_lib:format("mqtt_sn_message type=~s, Var=~w", [emqx_sn_frame:message_type(Type), Var]).
 
-format_flag(#mqtt_sn_flags{dup = Dup, qos = Qos, retain = Retain, will = Will, clean_start = CleanStart, topic_id_type = TopicType}) ->
+format_flag(#mqtt_sn_flags{dup = Dup, qos = QoS, retain = Retain, will = Will, clean_start = CleanStart, topic_id_type = TopicType}) ->
     io_lib:format("mqtt_sn_flags{dup=~p, qos=~p, retain=~p, will=~p, clean_session=~p, topic_id_type=~p}",
-                  [Dup, Qos, Retain, Will, CleanStart, TopicType]);
+                  [Dup, QoS, Retain, Will, CleanStart, TopicType]);
 format_flag(_Flag) ->
     "invalid flag".

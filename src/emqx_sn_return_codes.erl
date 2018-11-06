@@ -19,5 +19,5 @@
 
 -export([transform/2]).
 
-transform(suback, Code) when Code =< ?QOS2 -> ?SN_RC_ACCEPTED;
+transform(suback, Code) when Code =< ?QOS_2 -> ?SN_RC_ACCEPTED;
 transform(suback, Code) when Code == 16#80 -> ?SN_RC_NOT_SUPPORTED.

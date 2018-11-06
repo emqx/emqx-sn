@@ -46,12 +46,12 @@ gen_connect_packet(ClientId) ->
     Length = 6+byte_size(ClientId),
     MsgType = ?SN_CONNECT,
     Dup = 0,
-    Qos = 0,
+    QoS = 0,
     Retain = 0,
     Will = 0,
     CleanSession = 1,
     TopicIdType = 0,
-    Flag = <<Dup:1, Qos:2, Retain:1, Will:1, CleanSession:1, TopicIdType:2>>,
+    Flag = <<Dup:1, QoS:2, Retain:1, Will:1, CleanSession:1, TopicIdType:2>>,
     ProtocolId = 1,
     Duration = 10,
     <<Length:8, MsgType:8, Flag/binary, ProtocolId:8, Duration:16, ClientId/binary>>.
@@ -62,10 +62,10 @@ gen_subscribe_packet(ShortTopic) ->
     Dup = 0,
     Retain = 0,
     Will = 0,
-    Qos = 1,
+    QoS = 1,
     CleanSession = 0,
     TopicIdType = 2,   % SHORT TOPIC NAME
-    Flag = <<Dup:1, Qos:2, Retain:1, Will:1, CleanSession:1, TopicIdType:2>>,
+    Flag = <<Dup:1, QoS:2, Retain:1, Will:1, CleanSession:1, TopicIdType:2>>,
     MsgId = 1,
     <<Length:8, MsgType:8, Flag/binary, MsgId:16, ShortTopic/binary>>.
 
@@ -79,13 +79,13 @@ gen_publish_packet(ShortTopic, Payload) ->
     Length = 7+byte_size(Payload),
     MsgType = ?SN_PUBLISH,
     Dup = 0,
-    Qos = 1,
+    QoS = 1,
     Retain = 0,
     Will = 0,
     CleanSession = 0,
     MsgId = 1,
     TopicIdType = 2,  % SHORT TOPIC NAME
-    Flag = <<Dup:1, Qos:2, Retain:1, Will:1, CleanSession:1, TopicIdType:2>>,
+    Flag = <<Dup:1, QoS:2, Retain:1, Will:1, CleanSession:1, TopicIdType:2>>,
     <<Length:8, MsgType:8, Flag/binary, ShortTopic/binary, MsgId:16, Payload/binary>>.
 
 gen_disconnect_packet()->

@@ -116,7 +116,7 @@ connect_test03(_Config) ->
 
 subscribe_test(_Config) ->
     Dup = 0,
-    Qos = 0,
+    QoS = 0,
     Retain = 0,
     Will = 0,
     CleanSession = 0,
@@ -129,8 +129,8 @@ subscribe_test(_Config) ->
     TopicName1 = <<"abcD">>,
     send_register_msg(Socket, TopicName1, MsgId),
     ?assertEqual(<<7, ?SN_REGACK, TopicId:16, MsgId:16, 0:8>>, receive_response(Socket)),
-    send_subscribe_msg_normal_topic(Socket, Qos, TopicName1, MsgId),
-    ?assertEqual(<<8, ?SN_SUBACK, Dup:1, Qos:2, Retain:1, Will:1,
+    send_subscribe_msg_normal_topic(Socket, QoS, TopicName1, MsgId),
+    ?assertEqual(<<8, ?SN_SUBACK, Dup:1, QoS:2, Retain:1, Will:1,
                    CleanSession:1, ?SN_NORMAL_TOPIC:2, TopicId:16,
                    MsgId:16, ReturnCode>>, receive_response(Socket)),
     ?assertEqual([TopicName1], emqx_broker:topics()),
@@ -146,7 +146,7 @@ subscribe_test(_Config) ->
 
 subscribe_test1(_Config) ->
     Dup = 0,
-    Qos = 0,
+    QoS = 0,
     Retain = 0,
     Will = 0,
     CleanSession = 0,
@@ -160,8 +160,8 @@ subscribe_test1(_Config) ->
     TopicName1 = <<"abcD">>,
     send_register_msg(Socket, TopicName1, MsgId),
     ?assertEqual(<<7, ?SN_REGACK, TopicId:16, MsgId:16, 0:8>>, receive_response(Socket)),
-    send_subscribe_msg_normal_topic(Socket, Qos, TopicName1, MsgId),
-    ?assertEqual(<<8, ?SN_SUBACK, Dup:1, Qos:2, Retain:1, Will:1, CleanSession:1,
+    send_subscribe_msg_normal_topic(Socket, QoS, TopicName1, MsgId),
+    ?assertEqual(<<8, ?SN_SUBACK, Dup:1, QoS:2, Retain:1, Will:1, CleanSession:1,
                    ?SN_NORMAL_TOPIC:2, TopicId:16, MsgId:16, ReturnCode>>,
                  receive_response(Socket)),
 
@@ -175,7 +175,7 @@ subscribe_test1(_Config) ->
 
 subscribe_test2(_Config) ->
     Dup = 0,
-    Qos = 0,
+    QoS = 0,
     Retain = 0,
     Will = 0,
     CleanSession = 0,
@@ -190,8 +190,8 @@ subscribe_test2(_Config) ->
     Topic1 = ?PREDEF_TOPIC_NAME1,
     send_register_msg(Socket, Topic1, MsgId),
     ?assertEqual(<<7, ?SN_REGACK, TopicId:16, MsgId:16, 0:8>>, receive_response(Socket)),
-    send_subscribe_msg_predefined_topic(Socket, Qos, TopicId, MsgId),
-    ?assertEqual(<<8, ?SN_SUBACK, Dup:1, Qos:2, Retain:1, Will:1, CleanSession:1,
+    send_subscribe_msg_predefined_topic(Socket, QoS, TopicId, MsgId),
+    ?assertEqual(<<8, ?SN_SUBACK, Dup:1, QoS:2, Retain:1, Will:1, CleanSession:1,
                    ?SN_NORMAL_TOPIC:2, TopicId:16, MsgId:16, ReturnCode>>,
                  receive_response(Socket)),
 
@@ -205,7 +205,7 @@ subscribe_test2(_Config) ->
 
 subscribe_test3(_Config) ->
     Dup = 0,
-    Qos = 2,
+    QoS = 2,
     Retain = 0,
     Will = 0,
     CleanSession = 0,
@@ -218,8 +218,8 @@ subscribe_test3(_Config) ->
     send_connect_msg(Socket, ClientId),
     ?assertEqual(<<3, ?SN_CONNACK, 0>>, receive_response(Socket)),
 
-    send_subscribe_msg_short_topic(Socket, Qos, <<"te">>, MsgId),
-    ?assertEqual(<<8, ?SN_SUBACK, Dup:1, Qos:2, Retain:1, Will:1, CleanSession:1,
+    send_subscribe_msg_short_topic(Socket, QoS, <<"te">>, MsgId),
+    ?assertEqual(<<8, ?SN_SUBACK, Dup:1, QoS:2, Retain:1, Will:1, CleanSession:1,
                    ?SN_NORMAL_TOPIC:2, TopicId:16, MsgId:16, ReturnCode>>,
                  receive_response(Socket)),
  
@@ -234,7 +234,7 @@ subscribe_test3(_Config) ->
 %% emqx_sn_gateway's compatibility of dealing with predefined and normal topics. Once we give more restrictions to different topic id type, this case would be deleted or modified.
 subscribe_test4(_Config) ->
     Dup = 0,
-    Qos = 0,
+    QoS = 0,
     Retain = 0,
     Will = 0,
     CleanSession = 0,
@@ -247,8 +247,8 @@ subscribe_test4(_Config) ->
     Topic1 = ?PREDEF_TOPIC_NAME1,
     send_register_msg(Socket, Topic1, MsgId),
     ?assertEqual(<<7, ?SN_REGACK, TopicId:16, MsgId:16, 0:8>>, receive_response(Socket)),
-    send_subscribe_msg_normal_topic(Socket, Qos, Topic1, MsgId),
-    ?assertEqual(<<8, ?SN_SUBACK, Dup:1, Qos:2, Retain:1, Will:1, CleanSession:1, ?SN_NORMAL_TOPIC:2, TopicId:16, MsgId:16, ReturnCode>>,
+    send_subscribe_msg_normal_topic(Socket, QoS, Topic1, MsgId),
+    ?assertEqual(<<8, ?SN_SUBACK, Dup:1, QoS:2, Retain:1, Will:1, CleanSession:1, ?SN_NORMAL_TOPIC:2, TopicId:16, MsgId:16, ReturnCode>>,
         receive_response(Socket)),
 
     send_unsubscribe_msg_normal_topic(Socket, Topic1, MsgId),
@@ -261,7 +261,7 @@ subscribe_test4(_Config) ->
 
 subscribe_test5(_Config) ->
     Dup = 0,
-    Qos = 1,
+    QoS = 1,
     Retain = 0,
     Will = 0,
     CleanSession = 0,
@@ -278,20 +278,20 @@ subscribe_test5(_Config) ->
     send_register_msg(Socket, <<"abcD">>, MsgId),
     ?assertEqual(<<7, ?SN_REGACK, TopicId1:16, MsgId:16, 0:8>>, receive_response(Socket)),
 
-    send_subscribe_msg_normal_topic(Socket, Qos, <<"abcD">>, MsgId),
-    ?assertEqual(<<8, ?SN_SUBACK, Dup:1, Qos:2, Retain:1, Will:1, CleanSession:1, ?SN_NORMAL_TOPIC:2, TopicId1:16, MsgId:16, ReturnCode>>,
+    send_subscribe_msg_normal_topic(Socket, QoS, <<"abcD">>, MsgId),
+    ?assertEqual(<<8, ?SN_SUBACK, Dup:1, QoS:2, Retain:1, Will:1, CleanSession:1, ?SN_NORMAL_TOPIC:2, TopicId1:16, MsgId:16, ReturnCode>>,
         receive_response(Socket)),
 
-    send_subscribe_msg_normal_topic(Socket, Qos, <<"/sport/#">>, MsgId),
-    ?assertEqual(<<8, ?SN_SUBACK, Dup:1, Qos:2, Retain:1, Will:1, CleanSession:1, ?SN_NORMAL_TOPIC:2, TopicId0:16, MsgId:16, ReturnCode>>,
+    send_subscribe_msg_normal_topic(Socket, QoS, <<"/sport/#">>, MsgId),
+    ?assertEqual(<<8, ?SN_SUBACK, Dup:1, QoS:2, Retain:1, Will:1, CleanSession:1, ?SN_NORMAL_TOPIC:2, TopicId0:16, MsgId:16, ReturnCode>>,
         receive_response(Socket)),
 
-    send_subscribe_msg_normal_topic(Socket, Qos, <<"/a/+/water">>, MsgId),
-    ?assertEqual(<<8, ?SN_SUBACK, Dup:1, Qos:2, Retain:1, Will:1, CleanSession:1, ?SN_NORMAL_TOPIC:2, TopicId0:16, MsgId:16, ReturnCode>>,
+    send_subscribe_msg_normal_topic(Socket, QoS, <<"/a/+/water">>, MsgId),
+    ?assertEqual(<<8, ?SN_SUBACK, Dup:1, QoS:2, Retain:1, Will:1, CleanSession:1, ?SN_NORMAL_TOPIC:2, TopicId0:16, MsgId:16, ReturnCode>>,
         receive_response(Socket)),
 
-    send_subscribe_msg_normal_topic(Socket, Qos, <<"/Tom/Home">>, MsgId),
-    ?assertEqual(<<8, ?SN_SUBACK, Dup:1, Qos:2, Retain:1, Will:1, CleanSession:1,
+    send_subscribe_msg_normal_topic(Socket, QoS, <<"/Tom/Home">>, MsgId),
+    ?assertEqual(<<8, ?SN_SUBACK, Dup:1, QoS:2, Retain:1, Will:1, CleanSession:1,
                    ?SN_NORMAL_TOPIC:2, TopicId2:16, MsgId:16, ReturnCode>>,
                  receive_response(Socket)),
     send_unsubscribe_msg_normal_topic(Socket, <<"abcD">>, MsgId),
@@ -303,7 +303,7 @@ subscribe_test5(_Config) ->
 
 subscribe_test6(_Config) ->
     Dup = 0,
-    Qos = 0,
+    QoS = 0,
     Retain = 0,
     Will = 0,
     CleanSession = 0,
@@ -327,8 +327,8 @@ subscribe_test6(_Config) ->
     send_register_msg(Socket, <<"/$sys/rain">>, MsgId),
     ?assertEqual(<<7, ?SN_REGACK, TopicId2:16, MsgId:16, 0:8>>, receive_response(Socket)),
 
-    send_subscribe_msg_short_topic(Socket, Qos, <<"Q2">>, MsgId),
-    ?assertEqual(<<8, ?SN_SUBACK, Dup:1, Qos:2, Retain:1, Will:1, CleanSession:1, ?SN_NORMAL_TOPIC:2, TopicId0:16, MsgId:16, ReturnCode>>,
+    send_subscribe_msg_short_topic(Socket, QoS, <<"Q2">>, MsgId),
+    ?assertEqual(<<8, ?SN_SUBACK, Dup:1, QoS:2, Retain:1, Will:1, CleanSession:1, ?SN_NORMAL_TOPIC:2, TopicId0:16, MsgId:16, ReturnCode>>,
         receive_response(Socket)),
 
     send_unsubscribe_msg_normal_topic(Socket, <<"Q2">>, MsgId),
@@ -340,7 +340,7 @@ subscribe_test6(_Config) ->
 
 subscribe_test7(_Config) ->
     Dup = 0,
-    Qos = 0,
+    QoS = 0,
     Retain = 0,
     Will = 0,
     CleanSession = 0,
@@ -351,8 +351,8 @@ subscribe_test7(_Config) ->
     send_connect_msg(Socket, <<"test">>),
     ?assertEqual(<<3, ?SN_CONNACK, 0>>, receive_response(Socket)),
 
-    send_subscribe_msg_predefined_topic(Socket, Qos, TopicId1, MsgId),
-    ?assertEqual(<<8, ?SN_SUBACK, Dup:1, Qos:2, Retain:1, Will:1, CleanSession:1, ?SN_NORMAL_TOPIC:2, TopicId1:16, MsgId:16, ?SN_RC_INVALID_TOPIC_ID>>,
+    send_subscribe_msg_predefined_topic(Socket, QoS, TopicId1, MsgId),
+    ?assertEqual(<<8, ?SN_SUBACK, Dup:1, QoS:2, Retain:1, Will:1, CleanSession:1, ?SN_NORMAL_TOPIC:2, TopicId1:16, MsgId:16, ?SN_RC_INVALID_TOPIC_ID>>,
         receive_response(Socket)),
 
     send_unsubscribe_msg_predefined_topic(Socket, TopicId2, MsgId),
@@ -363,7 +363,7 @@ subscribe_test7(_Config) ->
 
 subscribe_test8(_Config) ->
     Dup = 0,
-    Qos = 0,
+    QoS = 0,
     Retain = 0,
     Will = 0,
     CleanSession = 0,
@@ -373,8 +373,8 @@ subscribe_test8(_Config) ->
     send_connect_msg(Socket, <<"test">>),
     ?assertEqual(<<3, ?SN_CONNACK, 0>>, receive_response(Socket)),
 
-    send_subscribe_msg_reserved_topic(Socket, Qos, TopicId2, MsgId),
-    ?assertEqual(<<8, ?SN_SUBACK, Dup:1, Qos:2, Retain:1, Will:1, CleanSession:1, ?SN_NORMAL_TOPIC:2, ?SN_INVALID_TOPIC_ID:16, MsgId:16, ?SN_RC_INVALID_TOPIC_ID>>,
+    send_subscribe_msg_reserved_topic(Socket, QoS, TopicId2, MsgId),
+    ?assertEqual(<<8, ?SN_SUBACK, Dup:1, QoS:2, Retain:1, Will:1, CleanSession:1, ?SN_NORMAL_TOPIC:2, ?SN_INVALID_TOPIC_ID:16, MsgId:16, ?SN_RC_INVALID_TOPIC_ID>>,
         receive_response(Socket)),
 
     send_disconnect_msg(Socket, undefined),
@@ -383,8 +383,8 @@ subscribe_test8(_Config) ->
 
 publish_negqos_test1(_Config) ->
     Dup = 0,
-    Qos = 0,
-    NegQos = 3,
+    QoS = 0,
+    NegQoS = 3,
     Retain = 0,
     Will = 0,
     CleanSession = 0,
@@ -395,17 +395,17 @@ publish_negqos_test1(_Config) ->
     ?assertEqual(<<3, ?SN_CONNACK, 0>>, receive_response(Socket)),
 
     Topic = <<"abc">>,
-    send_subscribe_msg_normal_topic(Socket, Qos, Topic, MsgId),
-    ?assertEqual(<<8, ?SN_SUBACK, Dup:1, Qos:2, Retain:1, Will:1, CleanSession:1, ?SN_NORMAL_TOPIC:2, TopicId1:16, MsgId:16, ?SN_RC_ACCEPTED>>,
+    send_subscribe_msg_normal_topic(Socket, QoS, Topic, MsgId),
+    ?assertEqual(<<8, ?SN_SUBACK, Dup:1, QoS:2, Retain:1, Will:1, CleanSession:1, ?SN_NORMAL_TOPIC:2, TopicId1:16, MsgId:16, ?SN_RC_ACCEPTED>>,
                  receive_response(Socket)),
 
     MsgId1 = 3,
     Payload1 = <<20, 21, 22, 23>>,
-    send_publish_msg_normal_topic(Socket, NegQos, MsgId1, TopicId1, Payload1),
+    send_publish_msg_normal_topic(Socket, NegQoS, MsgId1, TopicId1, Payload1),
     timer:sleep(100),
     case ?ENABLE_QOS3 of
         true  ->
-            Eexp = <<11, ?SN_PUBLISH, Dup:1, Qos:2, Retain:1, Will:1, CleanSession:1, ?SN_NORMAL_TOPIC:2, TopicId1:16, (mid(0)):16, <<20, 21, 22, 23>>/binary>>,
+            Eexp = <<11, ?SN_PUBLISH, Dup:1, QoS:2, Retain:1, Will:1, CleanSession:1, ?SN_NORMAL_TOPIC:2, TopicId1:16, (mid(0)):16, <<20, 21, 22, 23>>/binary>>,
             What = receive_response(Socket),
             ?assertEqual(Eexp, What)
     end,
@@ -415,7 +415,7 @@ publish_negqos_test1(_Config) ->
 
 publish_qos0_test1(_Config) ->
     Dup = 0,
-    Qos = 0,
+    QoS = 0,
     Retain = 0,
     Will = 0,
     CleanSession = 0,
@@ -426,17 +426,17 @@ publish_qos0_test1(_Config) ->
     ?assertEqual(<<3, ?SN_CONNACK, 0>>, receive_response(Socket)),
 
     Topic = <<"abc">>,
-    send_subscribe_msg_normal_topic(Socket, Qos, Topic, MsgId),
-    ?assertEqual(<<8, ?SN_SUBACK, Dup:1, Qos:2, Retain:1, Will:1, 
+    send_subscribe_msg_normal_topic(Socket, QoS, Topic, MsgId),
+    ?assertEqual(<<8, ?SN_SUBACK, Dup:1, QoS:2, Retain:1, Will:1, 
                    CleanSession:1, ?SN_NORMAL_TOPIC:2, TopicId1:16, 
                    MsgId:16, ?SN_RC_ACCEPTED>>,
                  receive_response(Socket)),
     MsgId1 = 3,
     Payload1 = <<20, 21, 22, 23>>,
-    send_publish_msg_normal_topic(Socket, Qos, MsgId1, TopicId1, Payload1),
+    send_publish_msg_normal_topic(Socket, QoS, MsgId1, TopicId1, Payload1),
     timer:sleep(100),
 
-    Eexp = <<11, ?SN_PUBLISH, Dup:1, Qos:2, Retain:1, Will:1, CleanSession:1, ?SN_NORMAL_TOPIC:2, TopicId1:16, (mid(0)):16, <<20, 21, 22, 23>>/binary>>,
+    Eexp = <<11, ?SN_PUBLISH, Dup:1, QoS:2, Retain:1, Will:1, CleanSession:1, ?SN_NORMAL_TOPIC:2, TopicId1:16, (mid(0)):16, <<20, 21, 22, 23>>/binary>>,
     What = receive_response(Socket),
     ?assertEqual(Eexp, What),
 
@@ -446,7 +446,7 @@ publish_qos0_test1(_Config) ->
 
 publish_qos0_test2(_Config) ->
     Dup = 0,
-    Qos = 0,
+    QoS = 0,
     Retain = 0,
     Will = 0,
     CleanSession = 0,
@@ -456,16 +456,16 @@ publish_qos0_test2(_Config) ->
     send_connect_msg(Socket, <<"test">>),
     ?assertEqual(<<3, ?SN_CONNACK, 0>>, receive_response(Socket)),
 
-    send_subscribe_msg_predefined_topic(Socket, Qos, PredefTopicId, MsgId),
-    ?assertEqual(<<8, ?SN_SUBACK, Dup:1, Qos:2, Retain:1, Will:1, CleanSession:1, ?SN_NORMAL_TOPIC:2, PredefTopicId:16, MsgId:16, ?SN_RC_ACCEPTED>>,
+    send_subscribe_msg_predefined_topic(Socket, QoS, PredefTopicId, MsgId),
+    ?assertEqual(<<8, ?SN_SUBACK, Dup:1, QoS:2, Retain:1, Will:1, CleanSession:1, ?SN_NORMAL_TOPIC:2, PredefTopicId:16, MsgId:16, ?SN_RC_ACCEPTED>>,
         receive_response(Socket)),
 
     MsgId1 = 3,
     Payload1 = <<20, 21, 22, 23>>,
-    send_publish_msg_predefined_topic(Socket, Qos, MsgId1, PredefTopicId, Payload1),
+    send_publish_msg_predefined_topic(Socket, QoS, MsgId1, PredefTopicId, Payload1),
     timer:sleep(100),
 
-    Eexp = <<11, ?SN_PUBLISH, Dup:1, Qos:2, Retain:1, Will:1, CleanSession:1, ?SN_PREDEFINED_TOPIC:2, PredefTopicId:16, (mid(0)):16, <<20, 21, 22, 23>>/binary>>,
+    Eexp = <<11, ?SN_PUBLISH, Dup:1, QoS:2, Retain:1, Will:1, CleanSession:1, ?SN_PREDEFINED_TOPIC:2, PredefTopicId:16, (mid(0)):16, <<20, 21, 22, 23>>/binary>>,
     What = receive_response(Socket),
     ?assertEqual(Eexp, What),
 
@@ -475,7 +475,7 @@ publish_qos0_test2(_Config) ->
 
 publish_qos0_test3(_Config) ->
     Dup = 0,
-    Qos = 0,
+    QoS = 0,
     Retain = 0,
     Will = 0,
     CleanSession = 0,
@@ -486,16 +486,16 @@ publish_qos0_test3(_Config) ->
     ?assertEqual(<<3, ?SN_CONNACK, 0>>, receive_response(Socket)),
 
     Topic = <<"/a/b/c">>,
-    send_subscribe_msg_normal_topic(Socket, Qos, Topic, MsgId),
-    ?assertEqual(<<8, ?SN_SUBACK, Dup:1, Qos:2, Retain:1, Will:1, CleanSession:1, ?SN_NORMAL_TOPIC:2, TopicId:16, MsgId:16, ?SN_RC_ACCEPTED>>,
+    send_subscribe_msg_normal_topic(Socket, QoS, Topic, MsgId),
+    ?assertEqual(<<8, ?SN_SUBACK, Dup:1, QoS:2, Retain:1, Will:1, CleanSession:1, ?SN_NORMAL_TOPIC:2, TopicId:16, MsgId:16, ?SN_RC_ACCEPTED>>,
         receive_response(Socket)),
 
     MsgId1 = 3,
     Payload1 = <<20, 21, 22, 23>>,
-    send_publish_msg_predefined_topic(Socket, Qos, MsgId1, TopicId, Payload1),
+    send_publish_msg_predefined_topic(Socket, QoS, MsgId1, TopicId, Payload1),
     timer:sleep(100),
 
-    Eexp = <<11, ?SN_PUBLISH, Dup:1, Qos:2, Retain:1, Will:1, CleanSession:1, ?SN_NORMAL_TOPIC:2, TopicId:16, (mid(0)):16, <<20, 21, 22, 23>>/binary>>,
+    Eexp = <<11, ?SN_PUBLISH, Dup:1, QoS:2, Retain:1, Will:1, CleanSession:1, ?SN_NORMAL_TOPIC:2, TopicId:16, (mid(0)):16, <<20, 21, 22, 23>>/binary>>,
     What = receive_response(Socket),
     ?assertEqual(Eexp, What),
 
@@ -505,7 +505,7 @@ publish_qos0_test3(_Config) ->
 
 publish_qos0_test4(_Config) ->
     Dup = 0,
-    Qos = 0,
+    QoS = 0,
     Retain = 0,
     Will = 0,
     CleanSession = 0,
@@ -515,17 +515,17 @@ publish_qos0_test4(_Config) ->
     send_connect_msg(Socket, <<"test">>),
     ?assertEqual(<<3, ?SN_CONNACK, 0>>, receive_response(Socket)),
 
-    send_subscribe_msg_normal_topic(Socket, Qos, <<"#">>, MsgId),
-    ?assertEqual(<<8, ?SN_SUBACK, Dup:1, Qos:2, Retain:1, Will:1, CleanSession:1, ?SN_NORMAL_TOPIC:2, TopicId0:16, MsgId:16, ?SN_RC_ACCEPTED>>,
+    send_subscribe_msg_normal_topic(Socket, QoS, <<"#">>, MsgId),
+    ?assertEqual(<<8, ?SN_SUBACK, Dup:1, QoS:2, Retain:1, Will:1, CleanSession:1, ?SN_NORMAL_TOPIC:2, TopicId0:16, MsgId:16, ?SN_RC_ACCEPTED>>,
         receive_response(Socket)),
 
     MsgId1 = 2,
     Payload1 = <<20, 21, 22, 23>>,
     Topic = <<"TR">>,
-    send_publish_msg_short_topic(Socket, Qos, MsgId1, Topic, Payload1),
+    send_publish_msg_short_topic(Socket, QoS, MsgId1, Topic, Payload1),
     timer:sleep(100),
 
-    Eexp = <<11, ?SN_PUBLISH, Dup:1, Qos:2, Retain:1, Will:1, CleanSession:1, ?SN_SHORT_TOPIC:2, Topic/binary, (mid(0)):16, <<20, 21, 22, 23>>/binary>>,
+    Eexp = <<11, ?SN_PUBLISH, Dup:1, QoS:2, Retain:1, Will:1, CleanSession:1, ?SN_SHORT_TOPIC:2, Topic/binary, (mid(0)):16, <<20, 21, 22, 23>>/binary>>,
     What = receive_response(Socket),
     ?assertEqual(Eexp, What),
 
@@ -535,7 +535,7 @@ publish_qos0_test4(_Config) ->
 
 publish_qos0_test5(_Config) ->
     Dup = 0,
-    Qos = 0,
+    QoS = 0,
     Retain = 0,
     Will = 0,
     CleanSession = 0,
@@ -544,8 +544,8 @@ publish_qos0_test5(_Config) ->
     {ok, Socket} = gen_udp:open(0, [binary]),
     send_connect_msg(Socket, <<"test">>),
     ?assertEqual(<<3, ?SN_CONNACK, 0>>, receive_response(Socket)),
-    send_subscribe_msg_short_topic(Socket, Qos, <<"/#">>, MsgId),
-    ?assertEqual(<<8, ?SN_SUBACK, Dup:1, Qos:2, Retain:1, Will:1, CleanSession:1, ?SN_NORMAL_TOPIC:2, TopicId0:16, MsgId:16, ?SN_RC_ACCEPTED>>,
+    send_subscribe_msg_short_topic(Socket, QoS, <<"/#">>, MsgId),
+    ?assertEqual(<<8, ?SN_SUBACK, Dup:1, QoS:2, Retain:1, Will:1, CleanSession:1, ?SN_NORMAL_TOPIC:2, TopicId0:16, MsgId:16, ?SN_RC_ACCEPTED>>,
         receive_response(Socket)),
     send_disconnect_msg(Socket, undefined),
     ?assertEqual(<<2, ?SN_DISCONNECT>>, receive_response(Socket)),
@@ -555,7 +555,7 @@ publish_qos0_test5(_Config) ->
 
 publish_qos0_test6(_Config) ->
     Dup = 0,
-    Qos = 0,
+    QoS = 0,
     Retain = 0,
     Will = 0,
     CleanSession = 0,
@@ -566,16 +566,16 @@ publish_qos0_test6(_Config) ->
     ?assertEqual(<<3, ?SN_CONNACK, 0>>, receive_response(Socket)),
 
     Topic = <<"abc">>,
-    send_subscribe_msg_normal_topic(Socket, Qos, Topic, MsgId),
-    ?assertEqual(<<8, ?SN_SUBACK, Dup:1, Qos:2, Retain:1, Will:1, CleanSession:1, ?SN_NORMAL_TOPIC:2, TopicId1:16, MsgId:16, ?SN_RC_ACCEPTED>>,
+    send_subscribe_msg_normal_topic(Socket, QoS, Topic, MsgId),
+    ?assertEqual(<<8, ?SN_SUBACK, Dup:1, QoS:2, Retain:1, Will:1, CleanSession:1, ?SN_NORMAL_TOPIC:2, TopicId1:16, MsgId:16, ?SN_RC_ACCEPTED>>,
         receive_response(Socket)),
 
     MsgId1 = 3,
     Payload1 = <<20, 21, 22, 23>>,
-    send_publish_msg_normal_topic(Socket, Qos, MsgId1, TopicId1, Payload1),
+    send_publish_msg_normal_topic(Socket, QoS, MsgId1, TopicId1, Payload1),
     timer:sleep(100),
 
-    Eexp = <<11, ?SN_PUBLISH, Dup:1, Qos:2, Retain:1, Will:1, CleanSession:1, ?SN_NORMAL_TOPIC:2, TopicId1:16, (mid(0)):16, <<20, 21, 22, 23>>/binary>>,
+    Eexp = <<11, ?SN_PUBLISH, Dup:1, QoS:2, Retain:1, Will:1, CleanSession:1, ?SN_NORMAL_TOPIC:2, TopicId1:16, (mid(0)):16, <<20, 21, 22, 23>>/binary>>,
     What = receive_response(Socket),
     ?assertEqual(Eexp, What),
 
@@ -585,7 +585,7 @@ publish_qos0_test6(_Config) ->
 
 publish_qos1_test1(_Config) ->
     Dup = 0,
-    Qos = 1,
+    QoS = 1,
     Retain = 0,
     Will = 0,
     CleanSession = 0,
@@ -595,24 +595,24 @@ publish_qos1_test1(_Config) ->
     {ok, Socket} = gen_udp:open(0, [binary]),
     send_connect_msg(Socket, <<"test">>),
     ?assertEqual(<<3, ?SN_CONNACK, 0>>, receive_response(Socket)),
-    send_subscribe_msg_normal_topic(Socket, Qos, Topic, MsgId),
-    ?assertEqual(<<8, ?SN_SUBACK, Dup:1, Qos:2, Retain:1, Will:1, CleanSession:1,
+    send_subscribe_msg_normal_topic(Socket, QoS, Topic, MsgId),
+    ?assertEqual(<<8, ?SN_SUBACK, Dup:1, QoS:2, Retain:1, Will:1, CleanSession:1,
                    ?SN_NORMAL_TOPIC:2, TopicId1:16, MsgId:16, ?SN_RC_ACCEPTED>>,
                  receive_response(Socket)),
 
     Payload1 = <<20, 21, 22, 23>>,
-    send_publish_msg_normal_topic(Socket, Qos, MsgId, TopicId1, Payload1),
+    send_publish_msg_normal_topic(Socket, QoS, MsgId, TopicId1, Payload1),
     ?assertEqual(<<7, ?SN_PUBACK, TopicId1:16, MsgId:16, ?SN_RC_ACCEPTED>>, receive_response(Socket)),
     timer:sleep(100),
 
-    ?assertEqual(<<11, ?SN_PUBLISH, Dup:1, Qos:2, Retain:1, Will:1, CleanSession:1, ?SN_NORMAL_TOPIC:2, TopicId1:16, MsgId:16, <<20, 21, 22, 23>>/binary>>, receive_response(Socket)),
+    ?assertEqual(<<11, ?SN_PUBLISH, Dup:1, QoS:2, Retain:1, Will:1, CleanSession:1, ?SN_NORMAL_TOPIC:2, TopicId1:16, MsgId:16, <<20, 21, 22, 23>>/binary>>, receive_response(Socket)),
 
     send_disconnect_msg(Socket, undefined),
     gen_udp:close(Socket).
 
 publish_qos1_test2(_Config) ->
     Dup = 0,
-    Qos = 1,
+    QoS = 1,
     Retain = 0,
     Will = 0,
     CleanSession = 0,
@@ -622,12 +622,12 @@ publish_qos1_test2(_Config) ->
     send_connect_msg(Socket, <<"test">>),
     ?assertEqual(<<3, ?SN_CONNACK, 0>>, receive_response(Socket)),
 
-    send_subscribe_msg_predefined_topic(Socket, Qos, PredefTopicId, MsgId),
-    ?assertEqual(<<8, ?SN_SUBACK, Dup:1, Qos:2, Retain:1, Will:1, CleanSession:1, ?SN_NORMAL_TOPIC:2, PredefTopicId:16, MsgId:16, ?SN_RC_ACCEPTED>>,
+    send_subscribe_msg_predefined_topic(Socket, QoS, PredefTopicId, MsgId),
+    ?assertEqual(<<8, ?SN_SUBACK, Dup:1, QoS:2, Retain:1, Will:1, CleanSession:1, ?SN_NORMAL_TOPIC:2, PredefTopicId:16, MsgId:16, ?SN_RC_ACCEPTED>>,
         receive_response(Socket)),
 
     Payload1 = <<20, 21, 22, 23>>,
-    send_publish_msg_predefined_topic(Socket, Qos, MsgId, PredefTopicId, Payload1),
+    send_publish_msg_predefined_topic(Socket, QoS, MsgId, PredefTopicId, Payload1),
     ?assertEqual(<<7, ?SN_PUBACK, PredefTopicId:16, MsgId:16, ?SN_RC_ACCEPTED>>, receive_response(Socket)),
     timer:sleep(100),
 
@@ -635,13 +635,13 @@ publish_qos1_test2(_Config) ->
     gen_udp:close(Socket).
 
 publish_qos1_test3(_Config) ->
-    Qos = 1,
+    QoS = 1,
     MsgId = 1,
     TopicId5 = 5,
     {ok, Socket} = gen_udp:open(0, [binary]),
     send_connect_msg(Socket, <<"test">>),
     ?assertEqual(<<3, ?SN_CONNACK, 0>>, receive_response(Socket)),
-    send_publish_msg_predefined_topic(Socket, Qos, MsgId, tid(5), <<20, 21, 22, 23>>),
+    send_publish_msg_predefined_topic(Socket, QoS, MsgId, tid(5), <<20, 21, 22, 23>>),
     ?assertEqual(<<7, ?SN_PUBACK, TopicId5:16, MsgId:16, ?SN_RC_INVALID_TOPIC_ID>>, receive_response(Socket)),
 
     send_disconnect_msg(Socket, undefined),
@@ -650,7 +650,7 @@ publish_qos1_test3(_Config) ->
 
 publish_qos1_test4(_Config) ->
     Dup = 0,
-    Qos = 1,
+    QoS = 1,
     Retain = 0,
     Will = 0,
     CleanSession = 0,
@@ -659,14 +659,14 @@ publish_qos1_test4(_Config) ->
     {ok, Socket} = gen_udp:open(0, [binary]),
     send_connect_msg(Socket, <<"test">>),
     ?assertEqual(<<3, ?SN_CONNACK, 0>>, receive_response(Socket)),
-    send_subscribe_msg_short_topic(Socket, Qos, <<"ab">>, MsgId),
-    ?assertEqual(<<8, ?SN_SUBACK, Dup:1, Qos:2, Retain:1, Will:1, CleanSession:1,
+    send_subscribe_msg_short_topic(Socket, QoS, <<"ab">>, MsgId),
+    ?assertEqual(<<8, ?SN_SUBACK, Dup:1, QoS:2, Retain:1, Will:1, CleanSession:1,
                    ?SN_NORMAL_TOPIC:2, TopicId0:16, MsgId:16, ?SN_RC_ACCEPTED>>,
                  receive_response(Socket)),
 
     Topic = <<"ab">>,
     Payload1 = <<20, 21, 22, 23>>,
-    send_publish_msg_short_topic(Socket, Qos, MsgId, Topic, Payload1),
+    send_publish_msg_short_topic(Socket, QoS, MsgId, Topic, Payload1),
     <<TopicIdShort:16>> = Topic,
     ?assertEqual(<<7, ?SN_PUBACK, TopicIdShort:16, MsgId:16, ?SN_RC_ACCEPTED>>, receive_response(Socket)),
     timer:sleep(100),
@@ -676,7 +676,7 @@ publish_qos1_test4(_Config) ->
 
 publish_qos1_test5(_Config) ->
     Dup = 0,
-    Qos = 1,
+    QoS = 1,
     Retain = 0,
     Will = 0,
     CleanSession = 0,
@@ -686,12 +686,12 @@ publish_qos1_test5(_Config) ->
     send_connect_msg(Socket, <<"test">>),
     ?assertEqual(<<3, ?SN_CONNACK, 0>>, receive_response(Socket)),
 
-    send_subscribe_msg_normal_topic(Socket, Qos, <<"ab">>, MsgId),
-    ?assertEqual(<<8, ?SN_SUBACK, Dup:1, Qos:2, Retain:1, Will:1, CleanSession:1,
+    send_subscribe_msg_normal_topic(Socket, QoS, <<"ab">>, MsgId),
+    ?assertEqual(<<8, ?SN_SUBACK, Dup:1, QoS:2, Retain:1, Will:1, CleanSession:1,
                    ?SN_NORMAL_TOPIC:2, TopicId1:16, MsgId:16, ?SN_RC_ACCEPTED>>,
                  receive_response(Socket)),
 
-    send_publish_msg_short_topic(Socket, Qos, MsgId, <<"/#">>, <<20, 21, 22, 23>>),
+    send_publish_msg_short_topic(Socket, QoS, MsgId, <<"/#">>, <<20, 21, 22, 23>>),
     <<TopicIdShort:16>> = <<"/#">>,
     ?assertEqual(<<7, ?SN_PUBACK, TopicIdShort:16, MsgId:16, ?SN_RC_NOT_SUPPORTED>>, receive_response(Socket)),
 
@@ -701,7 +701,7 @@ publish_qos1_test5(_Config) ->
 
 publish_qos1_test6(_Config) ->
     Dup = 0,
-    Qos = 1,
+    QoS = 1,
     Retain = 0,
     Will = 0,
     CleanSession = 0,
@@ -711,12 +711,12 @@ publish_qos1_test6(_Config) ->
     send_connect_msg(Socket, <<"test">>),
     ?assertEqual(<<3, ?SN_CONNACK, 0>>, receive_response(Socket)),
 
-    send_subscribe_msg_normal_topic(Socket, Qos, <<"ab">>, MsgId),
-    ?assertEqual(<<8, ?SN_SUBACK, Dup:1, Qos:2, Retain:1, Will:1, CleanSession:1,
+    send_subscribe_msg_normal_topic(Socket, QoS, <<"ab">>, MsgId),
+    ?assertEqual(<<8, ?SN_SUBACK, Dup:1, QoS:2, Retain:1, Will:1, CleanSession:1,
                    ?SN_NORMAL_TOPIC:2, TopicId1:16, MsgId:16, ?SN_RC_ACCEPTED>>,
                  receive_response(Socket)),
 
-    send_publish_msg_short_topic(Socket, Qos, MsgId, <<"/+">>, <<20, 21, 22, 23>>),
+    send_publish_msg_short_topic(Socket, QoS, MsgId, <<"/+">>, <<20, 21, 22, 23>>),
     <<TopicIdShort:16>> = <<"/+">>,
     ?assertEqual(<<7, ?SN_PUBACK, TopicIdShort:16, MsgId:16, ?SN_RC_NOT_SUPPORTED>>, receive_response(Socket)),
 
@@ -726,7 +726,7 @@ publish_qos1_test6(_Config) ->
 
 publish_qos2_test1(_Config) ->
     Dup = 0,
-    Qos = 2,
+    QoS = 2,
     Retain = 0,
     Will = 0,
     CleanSession = 0,
@@ -736,15 +736,15 @@ publish_qos2_test1(_Config) ->
     {ok, Socket} = gen_udp:open(0, [binary]),
     send_connect_msg(Socket, <<"test">>),
     ?assertEqual(<<3, ?SN_CONNACK, 0>>, receive_response(Socket)),
-    send_subscribe_msg_normal_topic(Socket, Qos, Topic, MsgId),
-    ?assertEqual(<<8, ?SN_SUBACK, ?FNU:1, Qos:2, ?FNU:5, TopicId1:16, MsgId:16,
+    send_subscribe_msg_normal_topic(Socket, QoS, Topic, MsgId),
+    ?assertEqual(<<8, ?SN_SUBACK, ?FNU:1, QoS:2, ?FNU:5, TopicId1:16, MsgId:16,
                    ?SN_RC_ACCEPTED>>, receive_response(Socket)),
     Payload1 = <<20, 21, 22, 23>>,
 
-    send_publish_msg_normal_topic(Socket, Qos, MsgId, TopicId1, Payload1),
+    send_publish_msg_normal_topic(Socket, QoS, MsgId, TopicId1, Payload1),
     ?assertEqual(<<4, ?SN_PUBREC, MsgId:16>>, receive_response(Socket)),
     send_pubrel_msg(Socket, MsgId),
-    ?assertEqual(<<11, ?SN_PUBLISH, Dup:1, Qos:2, Retain:1, Will:1, CleanSession:1, ?SN_NORMAL_TOPIC:2, TopicId1:16, 1:16, <<20, 21, 22, 23>>/binary>>, receive_response(Socket)),
+    ?assertEqual(<<11, ?SN_PUBLISH, Dup:1, QoS:2, Retain:1, Will:1, CleanSession:1, ?SN_NORMAL_TOPIC:2, TopicId1:16, 1:16, <<20, 21, 22, 23>>/binary>>, receive_response(Socket)),
     ?assertEqual(<<4, ?SN_PUBCOMP, MsgId:16>>, receive_response(Socket)),
     timer:sleep(100),
 
@@ -754,7 +754,7 @@ publish_qos2_test1(_Config) ->
 
 publish_qos2_test2(_Config) ->
     Dup = 0,
-    Qos = 2,
+    QoS = 2,
     Retain = 0,
     Will = 0,
     CleanSession = 0,
@@ -764,16 +764,16 @@ publish_qos2_test2(_Config) ->
     send_connect_msg(Socket, <<"test">>),
     ?assertEqual(<<3, ?SN_CONNACK, 0>>, receive_response(Socket)),
 
-    send_subscribe_msg_predefined_topic(Socket, Qos, PredefTopicId, MsgId),
-    ?assertEqual(<<8, ?SN_SUBACK, ?FNU:1, Qos:2, ?FNU:5, PredefTopicId:16, MsgId:16, ?SN_RC_ACCEPTED>>,
+    send_subscribe_msg_predefined_topic(Socket, QoS, PredefTopicId, MsgId),
+    ?assertEqual(<<8, ?SN_SUBACK, ?FNU:1, QoS:2, ?FNU:5, PredefTopicId:16, MsgId:16, ?SN_RC_ACCEPTED>>,
         receive_response(Socket)),
 
     Payload1 = <<20, 21, 22, 23>>,
-    send_publish_msg_predefined_topic(Socket, Qos, MsgId, PredefTopicId, Payload1),
+    send_publish_msg_predefined_topic(Socket, QoS, MsgId, PredefTopicId, Payload1),
     ?assertEqual(<<4, ?SN_PUBREC, MsgId:16>>, receive_response(Socket)),
     send_pubrel_msg(Socket, MsgId),
 
-    ?assertEqual(<<11, ?SN_PUBLISH, Dup:1, Qos:2, Retain:1, Will:1, CleanSession:1, ?SN_PREDEFINED_TOPIC :2, PredefTopicId:16, 1:16, <<20, 21, 22, 23>>/binary>>, receive_response(Socket)),
+    ?assertEqual(<<11, ?SN_PUBLISH, Dup:1, QoS:2, Retain:1, Will:1, CleanSession:1, ?SN_PREDEFINED_TOPIC :2, PredefTopicId:16, 1:16, <<20, 21, 22, 23>>/binary>>, receive_response(Socket)),
     ?assertEqual(<<4, ?SN_PUBCOMP, MsgId:16>>, receive_response(Socket)),
 
     timer:sleep(100),
@@ -784,7 +784,7 @@ publish_qos2_test2(_Config) ->
 
 publish_qos2_test3(_Config) ->
     Dup = 0,
-    Qos = 2,
+    QoS = 2,
     Retain = 0,
     Will = 0,
     CleanSession = 0,
@@ -794,16 +794,16 @@ publish_qos2_test3(_Config) ->
     send_connect_msg(Socket, <<"test">>),
     ?assertEqual(<<3, ?SN_CONNACK, 0>>, receive_response(Socket)),
 
-    send_subscribe_msg_normal_topic(Socket, Qos, <<"/#">>, MsgId),
-    ?assertEqual(<<8, ?SN_SUBACK, ?FNU:1, Qos:2, ?FNU:5, TopicId0:16, MsgId:16, ?SN_RC_ACCEPTED>>,
+    send_subscribe_msg_normal_topic(Socket, QoS, <<"/#">>, MsgId),
+    ?assertEqual(<<8, ?SN_SUBACK, ?FNU:1, QoS:2, ?FNU:5, TopicId0:16, MsgId:16, ?SN_RC_ACCEPTED>>,
         receive_response(Socket)),
 
     Payload1 = <<20, 21, 22, 23>>,
-    send_publish_msg_short_topic(Socket, Qos, MsgId, <<"/a">>, Payload1),
+    send_publish_msg_short_topic(Socket, QoS, MsgId, <<"/a">>, Payload1),
     ?assertEqual(<<4, ?SN_PUBREC, MsgId:16>>, receive_response(Socket)),
     send_pubrel_msg(Socket, MsgId),
 
-    ?assertEqual(<<11, ?SN_PUBLISH, Dup:1, Qos:2, Retain:1, Will:1, CleanSession:1, ?SN_SHORT_TOPIC :2, <<"/a">>/binary, 1:16, <<20, 21, 22, 23>>/binary>>, receive_response(Socket)),
+    ?assertEqual(<<11, ?SN_PUBLISH, Dup:1, QoS:2, Retain:1, Will:1, CleanSession:1, ?SN_SHORT_TOPIC :2, <<"/a">>/binary, 1:16, <<20, 21, 22, 23>>/binary>>, receive_response(Socket)),
     ?assertEqual(<<4, ?SN_PUBCOMP, MsgId:16>>, receive_response(Socket)),
     timer:sleep(100),
 
@@ -812,14 +812,14 @@ publish_qos2_test3(_Config) ->
     gen_udp:close(Socket).
 
 will_test1(_Config) ->
-    Qos = 1,
+    QoS = 1,
     Duration = 1,
     {ok, Socket} = gen_udp:open(0, [binary]),
     ClientId = <<"test">>,
     send_connect_msg_with_will(Socket, Duration, ClientId),
     ?assertEqual(<<2, ?SN_WILLTOPICREQ>>, receive_response(Socket)),
 
-    send_willtopic_msg(Socket, <<"abc">>, Qos),
+    send_willtopic_msg(Socket, <<"abc">>, QoS),
     ?assertEqual(<<2, ?SN_WILLMSGREQ>>, receive_response(Socket)),
 
     send_willmsg_msg(Socket, <<10, 11, 12, 13, 14>>),
@@ -839,14 +839,14 @@ will_test1(_Config) ->
     gen_udp:close(Socket).
 
 will_test2(_Config) ->
-    Qos = 2,
+    QoS = 2,
     Duration = 1,
     {ok, Socket} = gen_udp:open(0, [binary]),
 
     ClientId = <<"test">>,
     send_connect_msg_with_will(Socket, Duration, ClientId),
     ?assertEqual(<<2, ?SN_WILLTOPICREQ>>, receive_response(Socket)),
-    send_willtopic_msg(Socket, <<"goodbye">>, Qos),
+    send_willtopic_msg(Socket, <<"goodbye">>, QoS),
     ?assertEqual(<<2, ?SN_WILLMSGREQ>>, receive_response(Socket)),
     send_willmsg_msg(Socket, <<10, 11, 12, 13, 14>>),
     ?assertEqual(<<3, ?SN_CONNACK, 0>>, receive_response(Socket)),
@@ -885,20 +885,20 @@ will_test3(_Config) ->
     gen_udp:close(Socket).
 
 will_test4(_Config) ->
-    Qos = 1,
+    QoS = 1,
     Duration = 1,
     {ok, Socket} = gen_udp:open(0, [binary]),
 
     ClientId = <<"test">>,
     send_connect_msg_with_will(Socket, Duration, ClientId),
     ?assertEqual(<<2, ?SN_WILLTOPICREQ>>, receive_response(Socket)),
-    send_willtopic_msg(Socket, <<"abc">>, Qos),
+    send_willtopic_msg(Socket, <<"abc">>, QoS),
     ?assertEqual(<<2, ?SN_WILLMSGREQ>>, receive_response(Socket)),
     send_willmsg_msg(Socket, <<10, 11, 12, 13, 14>>),
     ?assertEqual(<<3, ?SN_CONNACK, 0>>, receive_response(Socket)),
     send_pingreq_msg(Socket, undefined),
     ?assertEqual(<<2, ?SN_PINGRESP>>, receive_response(Socket)),
-    send_willtopicupd_msg(Socket, <<"/XYZ">>, ?QOS1),
+    send_willtopicupd_msg(Socket, <<"/XYZ">>, ?QOS_1),
     ?assertEqual(<<3, ?SN_WILLTOPICRESP, ?SN_RC_ACCEPTED>>, receive_response(Socket)),
     send_willmsgupd_msg(Socket, <<"1A2B3C">>),
     ?assertEqual(<<3, ?SN_WILLMSGRESP, ?SN_RC_ACCEPTED>>, receive_response(Socket)),
@@ -913,14 +913,14 @@ will_test4(_Config) ->
     gen_udp:close(Socket).
 
 will_test5(_Config) ->
-    Qos = 1,
+    QoS = 1,
     Duration = 1,
     {ok, Socket} = gen_udp:open(0, [binary]),
 
     ClientId = <<"test">>,
     send_connect_msg_with_will(Socket, Duration, ClientId),
     ?assertEqual(<<2, ?SN_WILLTOPICREQ>>, receive_response(Socket)),
-    send_willtopic_msg(Socket, <<"abc">>, Qos),
+    send_willtopic_msg(Socket, <<"abc">>, QoS),
     ?assertEqual(<<2, ?SN_WILLMSGREQ>>, receive_response(Socket)),
     send_willmsg_msg(Socket, <<10, 11, 12, 13, 14>>),
     ?assertEqual(<<3, ?SN_CONNACK, 0>>, receive_response(Socket)),
@@ -939,7 +939,7 @@ will_test5(_Config) ->
     gen_udp:close(Socket).
 
 asleep_test01_timeout(_Config) ->
-    Qos = 1,
+    QoS = 1,
     Duration = 1,
     WillTopic = <<"dead">>,
     WillPayload = <<10, 11, 12, 13, 14>>,
@@ -948,7 +948,7 @@ asleep_test01_timeout(_Config) ->
     ClientId = <<"test">>,
     send_connect_msg_with_will(Socket, Duration, ClientId),
     ?assertEqual(<<2, ?SN_WILLTOPICREQ>>, receive_response(Socket)),
-    send_willtopic_msg(Socket, WillTopic, Qos),
+    send_willtopic_msg(Socket, WillTopic, QoS),
     ?assertEqual(<<2, ?SN_WILLMSGREQ>>, receive_response(Socket)),
     send_willmsg_msg(Socket, WillPayload),
     ?assertEqual(<<3, ?SN_CONNACK, 0>>, receive_response(Socket)),
@@ -962,7 +962,7 @@ asleep_test01_timeout(_Config) ->
     gen_udp:close(Socket).
 
 asleep_test02_to_awake_and_back(_Config) ->
-    Qos = 1,
+    QoS = 1,
     Keepalive_Duration = 1,
     SleepDuration = 5,
     WillTopic = <<"dead">>,
@@ -972,7 +972,7 @@ asleep_test02_to_awake_and_back(_Config) ->
     ClientId = <<"test">>,
     send_connect_msg_with_will(Socket, Keepalive_Duration, ClientId),
     ?assertEqual(<<2, ?SN_WILLTOPICREQ>>, receive_response(Socket)),
-    send_willtopic_msg(Socket, WillTopic, Qos),
+    send_willtopic_msg(Socket, WillTopic, QoS),
     ?assertEqual(<<2, ?SN_WILLMSGREQ>>, receive_response(Socket)),
     send_willmsg_msg(Socket, WillPayload),
     ?assertEqual(<<3, ?SN_CONNACK, 0>>, receive_response(Socket)),
@@ -1001,7 +1001,7 @@ asleep_test02_to_awake_and_back(_Config) ->
     gen_udp:close(Socket).
 
 asleep_test03_to_awake_qos1_dl_msg(_Config) ->
-    Qos = 1,
+    QoS = 1,
     Duration = 1,
     WillTopic = <<"dead">>,
     WillPayload = <<10, 11, 12, 13, 14>>,
@@ -1010,7 +1010,7 @@ asleep_test03_to_awake_qos1_dl_msg(_Config) ->
     ClientId = <<"test">>,
     send_connect_msg_with_will(Socket, Duration, ClientId),
     ?assertEqual(<<2, ?SN_WILLTOPICREQ>>, receive_response(Socket)),
-    send_willtopic_msg(Socket, WillTopic, Qos),
+    send_willtopic_msg(Socket, WillTopic, QoS),
     ?assertEqual(<<2, ?SN_WILLMSGREQ>>, receive_response(Socket)),
     send_willmsg_msg(Socket, WillPayload),
     ?assertEqual(<<3, ?SN_CONNACK, 0>>, receive_response(Socket)),
@@ -1029,8 +1029,8 @@ asleep_test03_to_awake_qos1_dl_msg(_Config) ->
 
     send_register_msg(Socket, TopicName1, MsgId1),
     ?assertEqual(<<7, ?SN_REGACK, TopicId1:16, MsgId1:16, 0:8>>, receive_response(Socket)),
-    send_subscribe_msg_predefined_topic(Socket, Qos, TopicId1, MsgId),
-    ?assertEqual(<<8, ?SN_SUBACK, Dup:1, Qos:2, Retain:1, WillBit:1, CleanSession:1, ?SN_NORMAL_TOPIC:2, TopicId1:16, MsgId:16, ReturnCode>>,
+    send_subscribe_msg_predefined_topic(Socket, QoS, TopicId1, MsgId),
+    ?assertEqual(<<8, ?SN_SUBACK, Dup:1, QoS:2, Retain:1, WillBit:1, CleanSession:1, ?SN_NORMAL_TOPIC:2, TopicId1:16, MsgId:16, ReturnCode>>,
         receive_response(Socket)),
 
 
@@ -1043,13 +1043,13 @@ asleep_test03_to_awake_qos1_dl_msg(_Config) ->
     %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
     %% send downlink data in asleep state. This message should be send to device once it wake up
     %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-    send_publish_msg_predefined_topic(Socket, Qos, MsgId2, TopicId1, Payload1),
+    send_publish_msg_predefined_topic(Socket, QoS, MsgId2, TopicId1, Payload1),
 
     {ok, C, _} = emqx_client:start_link(),
-    {ok, _} = emqx_client:publish(C, TopicName1, Payload1, Qos),
+    {ok, _} = emqx_client:publish(C, TopicName1, Payload1, QoS),
     ok = emqx_client:disconnect(C),
 
-    timer:sleep(300),
+    timer:sleep(50),
 
     % goto awake state, receive downlink messages, and go back to asleep
     send_pingreq_msg(Socket, <<"test">>),
@@ -1060,7 +1060,7 @@ asleep_test03_to_awake_qos1_dl_msg(_Config) ->
     %% ct:log("ReceiveData 2: ~p", [receive_response(Socket)]),
     %% ct:log("ReceiveData 3: ~p", [receive_response(Socket)]),        
     UdpData = receive_response(Socket),
-    MsgId_udp = check_publish_msg_on_udp({Dup, Qos, Retain, WillBit, CleanSession, ?SN_NORMAL_TOPIC, TopicId1, Payload1}, UdpData),
+    MsgId_udp = check_publish_msg_on_udp({Dup, QoS, Retain, WillBit, CleanSession, ?SN_NORMAL_TOPIC, TopicId1, Payload1}, UdpData),
     send_puback_msg(Socket, TopicId1, MsgId_udp),
 
     ?assertEqual(<<2, ?SN_PINGRESP>>, receive_response(Socket)),
@@ -1068,7 +1068,7 @@ asleep_test03_to_awake_qos1_dl_msg(_Config) ->
     gen_udp:close(Socket).
 
 asleep_test04_to_awake_qos1_dl_msg(_Config) ->
-    Qos = 1,
+    QoS = 1,
     Duration = 1,
     WillTopic = <<"dead">>,
     WillPayload = <<10, 11, 12, 13, 14>>,
@@ -1076,7 +1076,7 @@ asleep_test04_to_awake_qos1_dl_msg(_Config) ->
     ClientId = <<"test">>,
     send_connect_msg_with_will(Socket, Duration, ClientId),
     ?assertEqual(<<2, ?SN_WILLTOPICREQ>>, receive_response(Socket)),
-    send_willtopic_msg(Socket, WillTopic, Qos),
+    send_willtopic_msg(Socket, WillTopic, QoS),
     ?assertEqual(<<2, ?SN_WILLMSGREQ>>, receive_response(Socket)),
     send_willmsg_msg(Socket, WillPayload),
     ?assertEqual(<<3, ?SN_CONNACK, 0>>, receive_response(Socket)),
@@ -1090,8 +1090,8 @@ asleep_test04_to_awake_qos1_dl_msg(_Config) ->
     Retain = 0,
     CleanSession = 0,
     ReturnCode = 0,
-    send_subscribe_msg_normal_topic(Socket, Qos, TopicName1, MsgId1),
-    ?assertEqual(<<8, ?SN_SUBACK, Dup:1, Qos:2, Retain:1, WillBit:1, CleanSession:1, ?SN_NORMAL_TOPIC:2, TopicId0:16, MsgId1:16, ReturnCode>>,
+    send_subscribe_msg_normal_topic(Socket, QoS, TopicName1, MsgId1),
+    ?assertEqual(<<8, ?SN_SUBACK, Dup:1, QoS:2, Retain:1, WillBit:1, CleanSession:1, ?SN_NORMAL_TOPIC:2, TopicId0:16, MsgId1:16, ReturnCode>>,
         receive_response(Socket)),
 
     % goto asleep state
@@ -1104,7 +1104,7 @@ asleep_test04_to_awake_qos1_dl_msg(_Config) ->
     Payload1 = <<55, 66, 77, 88, 99>>,
 
     {ok, C, _} = emqx_client:start_link(),
-    {ok, _} = emqx_client:publish(C, <<"a/b/c">>, Payload1, Qos),
+    {ok, _} = emqx_client:publish(C, <<"a/b/c">>, Payload1, QoS),
     ok = emqx_client:disconnect(C),
 
     timer:sleep(300),
@@ -1120,7 +1120,7 @@ asleep_test04_to_awake_qos1_dl_msg(_Config) ->
     send_regack_msg(Socket, TopicIdNew, MsgId3),
 
     UdpData = receive_response(Socket),
-    MsgId_udp = check_publish_msg_on_udp({Dup, Qos, Retain, WillBit, CleanSession, ?SN_NORMAL_TOPIC, TopicIdNew, Payload1}, UdpData),
+    MsgId_udp = check_publish_msg_on_udp({Dup, QoS, Retain, WillBit, CleanSession, ?SN_NORMAL_TOPIC, TopicIdNew, Payload1}, UdpData),
     send_puback_msg(Socket, TopicIdNew, MsgId_udp),
 
     ?assertEqual(<<2, ?SN_PINGRESP>>, receive_response(Socket)),
@@ -1128,7 +1128,7 @@ asleep_test04_to_awake_qos1_dl_msg(_Config) ->
     gen_udp:close(Socket).
 
 asleep_test05_to_awake_qos1_dl_msg(_Config) ->
-    Qos = 1,
+    QoS = 1,
     Duration = 1,
     WillTopic = <<"dead">>,
     WillPayload = <<10, 11, 12, 13, 14>>,
@@ -1136,7 +1136,7 @@ asleep_test05_to_awake_qos1_dl_msg(_Config) ->
     ClientId = <<"test">>,
     send_connect_msg_with_will(Socket, Duration, ClientId),
     ?assertEqual(<<2, ?SN_WILLTOPICREQ>>, receive_response(Socket)),
-    send_willtopic_msg(Socket, WillTopic, Qos),
+    send_willtopic_msg(Socket, WillTopic, QoS),
     ?assertEqual(<<2, ?SN_WILLMSGREQ>>, receive_response(Socket)),
     send_willmsg_msg(Socket, WillPayload),
     ?assertEqual(<<3, ?SN_CONNACK, 0>>, receive_response(Socket)),
@@ -1150,8 +1150,8 @@ asleep_test05_to_awake_qos1_dl_msg(_Config) ->
     Retain = 0,
     CleanSession = 0,
     ReturnCode = 0,
-    send_subscribe_msg_normal_topic(Socket, Qos, TopicName1, MsgId1),
-    ?assertEqual(<<8, ?SN_SUBACK, Dup:1, Qos:2, Retain:1, WillBit:1, CleanSession:1, ?SN_NORMAL_TOPIC:2, TopicId0:16, MsgId1:16, ReturnCode>>,
+    send_subscribe_msg_normal_topic(Socket, QoS, TopicName1, MsgId1),
+    ?assertEqual(<<8, ?SN_SUBACK, Dup:1, QoS:2, Retain:1, WillBit:1, CleanSession:1, ?SN_NORMAL_TOPIC:2, TopicId0:16, MsgId1:16, ReturnCode>>,
         receive_response(Socket)),
 
     % goto asleep state
@@ -1167,9 +1167,9 @@ asleep_test05_to_awake_qos1_dl_msg(_Config) ->
     Payload4 = <<100, 101, 102, 103, 104, 105, 106, 107>>,
     TopicName_test5 = <<"u/v/w">>,
     {ok, C, _} = emqx_client:start_link(),
-    {ok, _} = emqx_client:publish(C, TopicName_test5, Payload2, Qos),
-    {ok, _} = emqx_client:publish(C, TopicName_test5, Payload3, Qos),
-    {ok, _} = emqx_client:publish(C, TopicName_test5, Payload4, Qos),
+    {ok, _} = emqx_client:publish(C, TopicName_test5, Payload2, QoS),
+    {ok, _} = emqx_client:publish(C, TopicName_test5, Payload3, QoS),
+    {ok, _} = emqx_client:publish(C, TopicName_test5, Payload4, QoS),
     ok = emqx_client:disconnect(C),
     timer:sleep(300),
 
@@ -1181,17 +1181,17 @@ asleep_test05_to_awake_qos1_dl_msg(_Config) ->
     send_regack_msg(Socket, TopicIdNew, MsgId_reg),
 
     UdpData2 = receive_response(Socket),
-    MsgId2 = check_publish_msg_on_udp({Dup, Qos, Retain, WillBit, CleanSession, ?SN_NORMAL_TOPIC, TopicIdNew, Payload2}, UdpData2),
+    MsgId2 = check_publish_msg_on_udp({Dup, QoS, Retain, WillBit, CleanSession, ?SN_NORMAL_TOPIC, TopicIdNew, Payload2}, UdpData2),
     send_puback_msg(Socket, TopicIdNew, MsgId2),
     timer:sleep(50),
 
     UdpData3 = receive_response(Socket),
-    MsgId3 = check_publish_msg_on_udp({Dup, Qos, Retain, WillBit, CleanSession, ?SN_NORMAL_TOPIC, TopicIdNew, Payload3}, UdpData3),
+    MsgId3 = check_publish_msg_on_udp({Dup, QoS, Retain, WillBit, CleanSession, ?SN_NORMAL_TOPIC, TopicIdNew, Payload3}, UdpData3),
     send_puback_msg(Socket, TopicIdNew, MsgId3),
     timer:sleep(50),
 
     UdpData4 = receive_response(Socket),
-    MsgId4 = check_publish_msg_on_udp({Dup, Qos, Retain, WillBit, CleanSession, ?SN_NORMAL_TOPIC, TopicIdNew, Payload4}, UdpData4),
+    MsgId4 = check_publish_msg_on_udp({Dup, QoS, Retain, WillBit, CleanSession, ?SN_NORMAL_TOPIC, TopicIdNew, Payload4}, UdpData4),
     send_puback_msg(Socket, TopicIdNew, MsgId4),
     timer:sleep(50),
 
@@ -1200,7 +1200,7 @@ asleep_test05_to_awake_qos1_dl_msg(_Config) ->
     gen_udp:close(Socket).
 
 asleep_test06_to_awake_qos2_dl_msg(_Config) ->
-    Qos = 2,
+    QoS = 2,
     Duration = 1,
     WillTopic = <<"dead">>,
     WillPayload = <<10, 11, 12, 13, 14>>,
@@ -1208,7 +1208,7 @@ asleep_test06_to_awake_qos2_dl_msg(_Config) ->
     ClientId = <<"test">>,
     send_connect_msg_with_will(Socket, Duration, ClientId),
     ?assertEqual(<<2, ?SN_WILLTOPICREQ>>, receive_response(Socket)),
-    send_willtopic_msg(Socket, WillTopic, Qos),
+    send_willtopic_msg(Socket, WillTopic, QoS),
     ?assertEqual(<<2, ?SN_WILLMSGREQ>>, receive_response(Socket)),
     send_willmsg_msg(Socket, WillPayload),
     ?assertEqual(<<3, ?SN_CONNACK, 0>>, receive_response(Socket)),
@@ -1223,8 +1223,8 @@ asleep_test06_to_awake_qos2_dl_msg(_Config) ->
     ReturnCode = 0,
     send_register_msg(Socket, TopicName_tom, MsgId1),
     TopicId_tom = check_regack_msg_on_udp(MsgId1, receive_response(Socket)),
-    send_subscribe_msg_predefined_topic(Socket, Qos, TopicId_tom, MsgId1),
-    ?assertEqual(<<8, ?SN_SUBACK, Dup:1, Qos:2, Retain:1, WillBit:1, CleanSession:1,
+    send_subscribe_msg_predefined_topic(Socket, QoS, TopicId_tom, MsgId1),
+    ?assertEqual(<<8, ?SN_SUBACK, Dup:1, QoS:2, Retain:1, WillBit:1, CleanSession:1,
                    ?SN_NORMAL_TOPIC:2, TopicId_tom:16, MsgId1:16, ReturnCode>>,
                  receive_response(Socket)),
 
@@ -1240,7 +1240,7 @@ asleep_test06_to_awake_qos2_dl_msg(_Config) ->
     %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
     Payload1 = <<55, 66, 77, 88, 99>>,
     {ok, C, _} = emqx_client:start_link(),
-    {ok, _} = emqx_client:publish(C, TopicName_tom, Payload1, Qos),
+    {ok, _} = emqx_client:publish(C, TopicName_tom, Payload1, QoS),
     ok = emqx_client:disconnect(C),
     timer:sleep(300),
 
@@ -1248,7 +1248,7 @@ asleep_test06_to_awake_qos2_dl_msg(_Config) ->
     send_pingreq_msg(Socket, <<"test">>),
 
     UdpData = receive_response(Socket),
-    MsgId_udp = check_publish_msg_on_udp({Dup, Qos, Retain, WillBit, CleanSession, ?SN_NORMAL_TOPIC, TopicId_tom, Payload1}, UdpData),
+    MsgId_udp = check_publish_msg_on_udp({Dup, QoS, Retain, WillBit, CleanSession, ?SN_NORMAL_TOPIC, TopicId_tom, Payload1}, UdpData),
     send_pubrec_msg(Socket, MsgId_udp),
 
     timer:sleep(300),
@@ -1258,7 +1258,7 @@ asleep_test06_to_awake_qos2_dl_msg(_Config) ->
     gen_udp:close(Socket).
 
 asleep_test07_to_connected(_Config) ->
-    Qos = 1,
+    QoS = 1,
     Keepalive_Duration = 3,
     SleepDuration = 1,
     WillTopic = <<"dead">>,
@@ -1267,7 +1267,7 @@ asleep_test07_to_connected(_Config) ->
     ClientId = <<"test">>,
     send_connect_msg_with_will(Socket, Keepalive_Duration, ClientId),
     ?assertEqual(<<2, ?SN_WILLTOPICREQ>>, receive_response(Socket)),
-    send_willtopic_msg(Socket, WillTopic, Qos),
+    send_willtopic_msg(Socket, WillTopic, QoS),
     ?assertEqual(<<2, ?SN_WILLMSGREQ>>, receive_response(Socket)),
     send_willmsg_msg(Socket, WillPayload),
     ?assertEqual(<<3, ?SN_CONNACK, 0>>, receive_response(Socket)),
@@ -1282,8 +1282,8 @@ asleep_test07_to_connected(_Config) ->
     ReturnCode = 0,
     send_register_msg(Socket, TopicName_tom, MsgId1),
     TopicId_tom = check_regack_msg_on_udp(MsgId1, receive_response(Socket)),
-    send_subscribe_msg_predefined_topic(Socket, Qos, TopicId_tom, MsgId1),
-    ?assertEqual(<<8, ?SN_SUBACK, Dup:1, Qos:2, Retain:1, WillBit:1, CleanSession:1, ?SN_NORMAL_TOPIC:2, TopicId_tom:16, MsgId1:16, ReturnCode>>,
+    send_subscribe_msg_predefined_topic(Socket, QoS, TopicId_tom, MsgId1),
+    ?assertEqual(<<8, ?SN_SUBACK, Dup:1, QoS:2, Retain:1, WillBit:1, CleanSession:1, ?SN_NORMAL_TOPIC:2, TopicId_tom:16, MsgId1:16, ReturnCode>>,
         receive_response(Socket)),
 
     % goto asleep state
@@ -1307,7 +1307,7 @@ asleep_test07_to_connected(_Config) ->
     gen_udp:close(Socket).
 
 asleep_test08_to_disconnected(_Config) ->
-    Qos = 1,
+    QoS = 1,
     Keepalive_Duration = 3,
     SleepDuration = 1,
     WillTopic = <<"dead">>,
@@ -1316,7 +1316,7 @@ asleep_test08_to_disconnected(_Config) ->
     ClientId = <<"test">>,
     send_connect_msg_with_will(Socket, Keepalive_Duration, ClientId),
     ?assertEqual(<<2, ?SN_WILLTOPICREQ>>, receive_response(Socket)),
-    send_willtopic_msg(Socket, WillTopic, Qos),
+    send_willtopic_msg(Socket, WillTopic, QoS),
     ?assertEqual(<<2, ?SN_WILLMSGREQ>>, receive_response(Socket)),
     send_willmsg_msg(Socket, WillPayload),
     ?assertEqual(<<3, ?SN_CONNACK, 0>>, receive_response(Socket)),
@@ -1339,7 +1339,7 @@ asleep_test08_to_disconnected(_Config) ->
     gen_udp:close(Socket).
 
 asleep_test09_to_awake_again_qos1_dl_msg(_Config) ->
-    Qos = 1,
+    QoS = 1,
     Duration = 1,
     WillTopic = <<"dead">>,
     WillPayload = <<10, 11, 12, 13, 14>>,
@@ -1347,7 +1347,7 @@ asleep_test09_to_awake_again_qos1_dl_msg(_Config) ->
     ClientId = <<"test">>,
     send_connect_msg_with_will(Socket, Duration, ClientId),
     ?assertEqual(<<2, ?SN_WILLTOPICREQ>>, receive_response(Socket)),
-    send_willtopic_msg(Socket, WillTopic, Qos),
+    send_willtopic_msg(Socket, WillTopic, QoS),
     ?assertEqual(<<2, ?SN_WILLMSGREQ>>, receive_response(Socket)),
     send_willmsg_msg(Socket, WillPayload),
     ?assertEqual(<<3, ?SN_CONNACK, 0>>, receive_response(Socket)),
@@ -1361,8 +1361,8 @@ asleep_test09_to_awake_again_qos1_dl_msg(_Config) ->
     Retain = 0,
     CleanSession = 0,
     ReturnCode = 0,
-    send_subscribe_msg_normal_topic(Socket, Qos, TopicName1, MsgId1),
-    ?assertEqual(<<8, ?SN_SUBACK, Dup:1, Qos:2, Retain:1, WillBit:1, CleanSession:1, ?SN_NORMAL_TOPIC:2, TopicId0:16, MsgId1:16, ReturnCode>>,
+    send_subscribe_msg_normal_topic(Socket, QoS, TopicName1, MsgId1),
+    ?assertEqual(<<8, ?SN_SUBACK, Dup:1, QoS:2, Retain:1, WillBit:1, CleanSession:1, ?SN_NORMAL_TOPIC:2, TopicId0:16, MsgId1:16, ReturnCode>>,
         receive_response(Socket)),
 
     % goto asleep state
@@ -1378,9 +1378,9 @@ asleep_test09_to_awake_again_qos1_dl_msg(_Config) ->
     Payload4 = <<100, 101, 102, 103, 104, 105, 106, 107>>,
     TopicName_test9 = <<"u/v/w">>,
      {ok, C, _} = emqx_client:start_link(),
-    {ok, _} = emqx_client:publish(C, TopicName_test9, Payload2, Qos),
-    {ok, _} = emqx_client:publish(C, TopicName_test9, Payload3, Qos),
-    {ok, _} = emqx_client:publish(C, TopicName_test9, Payload4, Qos),
+    {ok, _} = emqx_client:publish(C, TopicName_test9, Payload2, QoS),
+    {ok, _} = emqx_client:publish(C, TopicName_test9, Payload3, QoS),
+    {ok, _} = emqx_client:publish(C, TopicName_test9, Payload4, QoS),
     ok = emqx_client:disconnect(C),
     timer:sleep(300),
 
@@ -1392,19 +1392,19 @@ asleep_test09_to_awake_again_qos1_dl_msg(_Config) ->
     send_regack_msg(Socket, TopicIdNew, MsgId_reg),
 
     UdpData2 = receive_response(Socket),
-    MsgId2 = check_publish_msg_on_udp({Dup, Qos, Retain, WillBit, CleanSession, ?SN_NORMAL_TOPIC, TopicIdNew, Payload2}, UdpData2),
+    MsgId2 = check_publish_msg_on_udp({Dup, QoS, Retain, WillBit, CleanSession, ?SN_NORMAL_TOPIC, TopicIdNew, Payload2}, UdpData2),
     send_puback_msg(Socket, TopicIdNew, MsgId2),
-    timer:sleep(100),
+    timer:sleep(50),
 
     UdpData3 = receive_response(Socket),
-    MsgId3 = check_publish_msg_on_udp({Dup, Qos, Retain, WillBit, CleanSession, ?SN_NORMAL_TOPIC, TopicIdNew, Payload3}, UdpData3),
+    MsgId3 = check_publish_msg_on_udp({Dup, QoS, Retain, WillBit, CleanSession, ?SN_NORMAL_TOPIC, TopicIdNew, Payload3}, UdpData3),
     send_puback_msg(Socket, TopicIdNew, MsgId3),
-    timer:sleep(100),
+    timer:sleep(50),
 
     UdpData4 = receive_response(Socket),
-    MsgId4 = check_publish_msg_on_udp({Dup, Qos, Retain, WillBit, CleanSession, ?SN_NORMAL_TOPIC, TopicIdNew, Payload4}, UdpData4),
+    MsgId4 = check_publish_msg_on_udp({Dup, QoS, Retain, WillBit, CleanSession, ?SN_NORMAL_TOPIC, TopicIdNew, Payload4}, UdpData4),
     send_puback_msg(Socket, TopicIdNew, MsgId4),
-    timer:sleep(100),
+    timer:sleep(50),
 
     ?assertEqual(<<2, ?SN_PINGRESP>>, receive_response(Socket)),
 
@@ -1416,7 +1416,7 @@ asleep_test09_to_awake_again_qos1_dl_msg(_Config) ->
     gen_udp:close(Socket).
 
 awake_test01_to_connected(_Config) ->
-    Qos = 1,
+    QoS = 1,
     Keepalive_Duration = 3,
     SleepDuration = 1,
     WillTopic = <<"dead">>,
@@ -1425,7 +1425,7 @@ awake_test01_to_connected(_Config) ->
     ClientId = <<"test">>,
     send_connect_msg_with_will(Socket, Keepalive_Duration, ClientId),
     ?assertEqual(<<2, ?SN_WILLTOPICREQ>>, receive_response(Socket)),
-    send_willtopic_msg(Socket, WillTopic, Qos),
+    send_willtopic_msg(Socket, WillTopic, QoS),
     ?assertEqual(<<2, ?SN_WILLMSGREQ>>, receive_response(Socket)),
     send_willmsg_msg(Socket, WillPayload),
     ?assertEqual(<<3, ?SN_CONNACK, 0>>, receive_response(Socket)),
@@ -1450,7 +1450,7 @@ awake_test01_to_connected(_Config) ->
     gen_udp:close(Socket).
 
 awake_test02_to_disconnected(_Config) ->
-    Qos = 1,
+    QoS = 1,
     Keepalive_Duration = 3,
     SleepDuration = 1,
     WillTopic = <<"dead">>,
@@ -1459,7 +1459,7 @@ awake_test02_to_disconnected(_Config) ->
     ClientId = <<"test">>,
     send_connect_msg_with_will(Socket, Keepalive_Duration, ClientId),
     ?assertEqual(<<2, ?SN_WILLTOPICREQ>>, receive_response(Socket)),
-    send_willtopic_msg(Socket, WillTopic, Qos),
+    send_willtopic_msg(Socket, WillTopic, QoS),
     ?assertEqual(<<2, ?SN_WILLMSGREQ>>, receive_response(Socket)),
     send_willmsg_msg(Socket, WillPayload),
     ?assertEqual(<<3, ?SN_CONNACK, 0>>, receive_response(Socket)),
@@ -1499,14 +1499,14 @@ send_connect_msg(Socket, ClientId) ->
     Length = 6 + byte_size(ClientId),
     MsgType = ?SN_CONNECT,
     Dup = 0,
-    Qos = 0,
+    QoS = 0,
     Retain = 0,
     Will = 0,
     CleanSession = 1,
     TopicIdType = 0,
     ProtocolId = 1,
     Duration = 10,
-    Packet = <<Length:8, MsgType:8, Dup:1, Qos:2, Retain:1, Will:1, CleanSession:1,
+    Packet = <<Length:8, MsgType:8, Dup:1, QoS:2, Retain:1, Will:1, CleanSession:1,
                TopicIdType:2, ProtocolId:8, Duration:16, ClientId/binary>>,
     ok = gen_udp:send(Socket, ?HOST, ?PORT, Packet).
 
@@ -1519,11 +1519,11 @@ send_connect_msg_with_will(Socket, Duration, ClientId) ->
                       ?FNU:2, ProtocolId:8, Duration:16, ClientId/binary>>,
     ok = gen_udp:send(Socket, ?HOST, ?PORT, ConnectPacket).
 
-send_willtopic_msg(Socket, Topic, Qos) ->
+send_willtopic_msg(Socket, Topic, QoS) ->
     Length = 3+byte_size(Topic),
     MsgType = ?SN_WILLTOPIC,
     Retain = 0,
-    WillTopicPacket = <<Length:8, MsgType:8, ?FNU:1, Qos:2, Retain:1, ?FNU:4, Topic/binary>>,
+    WillTopicPacket = <<Length:8, MsgType:8, ?FNU:1, QoS:2, Retain:1, ?FNU:4, Topic/binary>>,
     ok = gen_udp:send(Socket, ?HOST, ?PORT, WillTopicPacket).
 
 send_willtopic_empty_msg(Socket) ->
@@ -1537,11 +1537,11 @@ send_willmsg_msg(Socket, Msg) ->
     WillMsgPacket = <<Length:8, ?SN_WILLMSG:8, Msg/binary>>,
     ok = gen_udp:send(Socket, ?HOST, ?PORT, WillMsgPacket).
 
-send_willtopicupd_msg(Socket, Topic, Qos) ->
+send_willtopicupd_msg(Socket, Topic, QoS) ->
     Length = 3+byte_size(Topic),
     MsgType = ?SN_WILLTOPICUPD,
     Retain = 0,
-    WillTopicPacket = <<Length:8, MsgType:8, ?FNU:1, Qos:2, Retain:1, ?FNU:4, Topic/binary>>,
+    WillTopicPacket = <<Length:8, MsgType:8, ?FNU:1, QoS:2, Retain:1, ?FNU:4, Topic/binary>>,
     ok = gen_udp:send(Socket, ?HOST, ?PORT, WillTopicPacket).
 
 send_willtopicupd_empty_msg(Socket) ->
@@ -1569,7 +1569,7 @@ send_regack_msg(Socket, TopicId, MsgId) ->
     Packet = <<Length:8, MsgType:8, TopicId:16, MsgId:16, ?SN_RC_ACCEPTED>>,
     ok = gen_udp:send(Socket, ?HOST, ?PORT, Packet).
 
-send_publish_msg_normal_topic(Socket, Qos, MsgId, TopicId, Data) ->
+send_publish_msg_normal_topic(Socket, QoS, MsgId, TopicId, Data) ->
     Length = 7 + byte_size(Data),
     MsgType = ?SN_PUBLISH,
     Dup = 0,
@@ -1577,12 +1577,12 @@ send_publish_msg_normal_topic(Socket, Qos, MsgId, TopicId, Data) ->
     Will = 0,
     CleanSession = 0,
     TopicIdType = ?SN_NORMAL_TOPIC,
-    PublishPacket = <<Length:8, MsgType:8, Dup:1, Qos:2, Retain:1, Will:1,
+    PublishPacket = <<Length:8, MsgType:8, Dup:1, QoS:2, Retain:1, Will:1,
         CleanSession:1, TopicIdType:2, TopicId:16, MsgId:16, Data/binary>>,
     ?LOG("send_publish_msg_normal_topic TopicId=~p, Data=~p", [TopicId, Data]),
     ok = gen_udp:send(Socket, ?HOST, ?PORT, PublishPacket).
 
-send_publish_msg_predefined_topic(Socket, Qos, MsgId, TopicId, Data) ->
+send_publish_msg_predefined_topic(Socket, QoS, MsgId, TopicId, Data) ->
     Length = 7 + byte_size(Data),
     MsgType = ?SN_PUBLISH,
     Dup = 0,
@@ -1590,12 +1590,12 @@ send_publish_msg_predefined_topic(Socket, Qos, MsgId, TopicId, Data) ->
     Will = 0,
     CleanSession = 0,
     TopicIdType = ?SN_PREDEFINED_TOPIC,
-    PublishPacket = <<Length:8, MsgType:8, Dup:1, Qos:2, Retain:1, Will:1,
+    PublishPacket = <<Length:8, MsgType:8, Dup:1, QoS:2, Retain:1, Will:1,
                       CleanSession:1, TopicIdType:2, TopicId:16, MsgId:16, Data/binary>>,
     ?LOG("send_publish_msg_predefined_topic TopicId=~p, Data=~p", [TopicId, Data]),
     ok = gen_udp:send(Socket, ?HOST, ?PORT, PublishPacket).
 
-send_publish_msg_short_topic(Socket, Qos, MsgId, TopicName, Data) ->
+send_publish_msg_short_topic(Socket, QoS, MsgId, TopicName, Data) ->
     Length = 7 + byte_size(Data),
     MsgType = ?SN_PUBLISH,
     Dup = 0,
@@ -1603,7 +1603,7 @@ send_publish_msg_short_topic(Socket, Qos, MsgId, TopicName, Data) ->
     Will = 0,
     CleanSession = 0,
     TopicIdType = 2,
-    PublishPacket = <<Length:8, MsgType:8, Dup:1, Qos:2, Retain:1, Will:1,
+    PublishPacket = <<Length:8, MsgType:8, Dup:1, QoS:2, Retain:1, Will:1,
                       CleanSession:1, TopicIdType:2, TopicName/binary, MsgId:16, Data/binary>>,
     ?LOG("send_publish_msg_short_topic TopicName=~p, Data=~p", [TopicName, Data]),
     ok = gen_udp:send(Socket, ?HOST, ?PORT, PublishPacket).
@@ -1636,7 +1636,7 @@ send_pubcomp_msg(Socket, MsgId) ->
     ?LOG("send_pubcomp_msg MsgId=~p", [MsgId]),
     ok = gen_udp:send(Socket, ?HOST, ?PORT, PubCompPacket).
 
-send_subscribe_msg_normal_topic(Socket, Qos, Topic, MsgId) ->
+send_subscribe_msg_normal_topic(Socket, QoS, Topic, MsgId) ->
     MsgType = ?SN_SUBSCRIBE,
     Dup = 0,
     Retain = 0,
@@ -1644,12 +1644,12 @@ send_subscribe_msg_normal_topic(Socket, Qos, Topic, MsgId) ->
     CleanSession = 0,
     TopicIdType = ?SN_NORMAL_TOPIC,
     Length = byte_size(Topic) + 5,
-    SubscribePacket = <<Length:8, MsgType:8, Dup:1, Qos:2, Retain:1, Will:1,
+    SubscribePacket = <<Length:8, MsgType:8, Dup:1, QoS:2, Retain:1, Will:1,
                         CleanSession:1, TopicIdType:2, MsgId:16, Topic/binary>>,
     ?LOG("send_subscribe_msg_normal_topic Topic=~p, MsgId=~p", [Topic, MsgId]),
     ok = gen_udp:send(Socket, ?HOST, ?PORT, SubscribePacket).
 
-send_subscribe_msg_predefined_topic(Socket, Qos, TopicId, MsgId) ->
+send_subscribe_msg_predefined_topic(Socket, QoS, TopicId, MsgId) ->
     Length = 7,
     MsgType = ?SN_SUBSCRIBE,
     Dup = 0,
@@ -1657,12 +1657,12 @@ send_subscribe_msg_predefined_topic(Socket, Qos, TopicId, MsgId) ->
     Will = 0,
     CleanSession = 0,
     TopicIdType = ?SN_PREDEFINED_TOPIC,
-    SubscribePacket = <<Length:8, MsgType:8, Dup:1, Qos:2, Retain:1, Will:1,
+    SubscribePacket = <<Length:8, MsgType:8, Dup:1, QoS:2, Retain:1, Will:1,
         CleanSession:1, TopicIdType:2, MsgId:16, TopicId:16>>,
     ?LOG("send_subscribe_msg_predefined_topic TopicId=~p, MsgId=~p", [TopicId, MsgId]),
     ok = gen_udp:send(Socket, ?HOST, ?PORT, SubscribePacket).
 
-send_subscribe_msg_short_topic(Socket, Qos, Topic, MsgId) ->
+send_subscribe_msg_short_topic(Socket, QoS, Topic, MsgId) ->
     Length = 7,
     MsgType = ?SN_SUBSCRIBE,
     Dup = 0,
@@ -1670,12 +1670,12 @@ send_subscribe_msg_short_topic(Socket, Qos, Topic, MsgId) ->
     Will = 0,
     CleanSession = 0,
     TopicIdType = ?SN_SHORT_TOPIC,
-    SubscribePacket = <<Length:8, MsgType:8, Dup:1, Qos:2, Retain:1, Will:1,
+    SubscribePacket = <<Length:8, MsgType:8, Dup:1, QoS:2, Retain:1, Will:1,
         CleanSession:1, TopicIdType:2, MsgId:16, Topic/binary>>,
     ?LOG("send_subscribe_msg_short_topic Topic=~p, MsgId=~p", [Topic, MsgId]),
     ok = gen_udp:send(Socket, ?HOST, ?PORT, SubscribePacket).
 
-send_subscribe_msg_reserved_topic(Socket, Qos, TopicId, MsgId) ->
+send_subscribe_msg_reserved_topic(Socket, QoS, TopicId, MsgId) ->
     Length = 7,
     MsgType = ?SN_SUBSCRIBE,
     Dup = 0,
@@ -1683,7 +1683,7 @@ send_subscribe_msg_reserved_topic(Socket, Qos, TopicId, MsgId) ->
     Will = 0,
     CleanSession = 0,
     TopicIdType = ?SN_RESERVED_TOPIC,
-    SubscribePacket = <<Length:8, MsgType:8, Dup:1, Qos:2, Retain:1, Will:1,
+    SubscribePacket = <<Length:8, MsgType:8, Dup:1, QoS:2, Retain:1, Will:1,
         CleanSession:1, TopicIdType:2, MsgId:16, TopicId:16>>,
     ?LOG("send_subscribe_msg_reserved_topic TopicId=~p, MsgId=~p", [TopicId, MsgId]),
     ok = gen_udp:send(Socket, ?HOST, ?PORT, SubscribePacket).
@@ -1704,13 +1704,13 @@ send_unsubscribe_msg_predefined_topic(Socket, TopicId, MsgId) ->
 send_unsubscribe_msg_normal_topic(Socket, TopicName, MsgId) ->
     MsgType = ?SN_UNSUBSCRIBE,
     Dup = 0,
-    Qos = 0,
+    QoS = 0,
     Retain = 0,
     Will = 0,
     CleanSession = 0,
     TopicIdType = ?SN_NORMAL_TOPIC,
     Length = 5 + byte_size(TopicName),
-    UnSubscribePacket = <<Length:8, MsgType:8, Dup:1, Qos:2, Retain:1, Will:1,
+    UnSubscribePacket = <<Length:8, MsgType:8, Dup:1, QoS:2, Retain:1, Will:1,
         CleanSession:1, TopicIdType:2, MsgId:16, TopicName/binary>>,
     ?LOG("send_unsubscribe_msg_normal_topic TopicName=~p, MsgId=~p", [TopicName, MsgId]),
     ok = gen_udp:send(Socket, ?HOST, ?PORT, UnSubscribePacket).
@@ -1723,7 +1723,7 @@ send_unsubscribe_msg_short_topic(Socket, TopicId, MsgId) ->
     Will = 0,
     CleanSession = 0,
     TopicIdType = ?SN_SHORT_TOPIC,
-    UnSubscribePacket = <<Length:8, MsgType:8, Dup:1, ?QOS0:2, Retain:1, Will:1,
+    UnSubscribePacket = <<Length:8, MsgType:8, Dup:1, ?QOS_0:2, Retain:1, Will:1,
         CleanSession:1, TopicIdType:2, MsgId:16, TopicId/binary>>,
     ?LOG("send_unsubscribe_msg_short_topic TopicId=~p, MsgId=~p", [TopicId, MsgId]),
     ok = gen_udp:send(Socket, ?HOST, ?PORT, UnSubscribePacket).
@@ -1778,13 +1778,13 @@ receive_emqttc_response() ->
         emqttc_receive_timeout
     end.
 
-check_dispatched_message(Dup, Qos, Retain, TopicIdType, TopicId, Payload, Socket) ->
+check_dispatched_message(Dup, QoS, Retain, TopicIdType, TopicId, Payload, Socket) ->
     PubMsg = receive_response(Socket),
     Length = 7 + byte_size(Payload),
     ?LOG("check_dispatched_message ~p~n", [PubMsg]),
-    ?LOG("expected ~p xx ~p~n", [<<Length, ?SN_PUBLISH, Dup:1, Qos:2, Retain:1, ?FNU:2, TopicIdType:2, TopicId:16>>, Payload]),
-    <<Length, ?SN_PUBLISH, Dup:1, Qos:2, Retain:1, ?FNU:2, TopicIdType:2, TopicId:16, MsgId:16, Payload/binary>> = PubMsg,
-    case Qos of
+    ?LOG("expected ~p xx ~p~n", [<<Length, ?SN_PUBLISH, Dup:1, QoS:2, Retain:1, ?FNU:2, TopicIdType:2, TopicId:16>>, Payload]),
+    <<Length, ?SN_PUBLISH, Dup:1, QoS:2, Retain:1, ?FNU:2, TopicIdType:2, TopicId:16, MsgId:16, Payload/binary>> = PubMsg,
+    case QoS of
         0 -> ok;
         1 -> send_puback_msg(Socket, TopicId, MsgId);
         2 -> send_pubrel_msg(Socket, MsgId),
@@ -1795,10 +1795,10 @@ check_dispatched_message(Dup, Qos, Retain, TopicIdType, TopicId, Payload, Socket
 get_udp_broadcast_address() ->
     "255.255.255.255".
 
-check_publish_msg_on_udp({Dup, Qos, Retain, WillBit, CleanSession, TopicType, TopicId, Payload}, UdpData) ->
+check_publish_msg_on_udp({Dup, QoS, Retain, WillBit, CleanSession, TopicType, TopicId, Payload}, UdpData) ->
     <<HeaderUdp:5/binary, MsgId:16, PayloadIn/binary>> = UdpData,
     Size9 = byte_size(Payload) + 7,
-    Eexp = <<Size9:8, ?SN_PUBLISH, Dup:1, Qos:2, Retain:1, WillBit:1, CleanSession:1, TopicType:2, TopicId:16>>,
+    Eexp = <<Size9:8, ?SN_PUBLISH, Dup:1, QoS:2, Retain:1, WillBit:1, CleanSession:1, TopicType:2, TopicId:16>>,
     ?assertEqual(Eexp, HeaderUdp),     % mqtt-sn header should be same
     ?assertEqual(Payload, PayloadIn),  % payload should be same
     MsgId.
