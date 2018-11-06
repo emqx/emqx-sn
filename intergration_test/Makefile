@@ -27,7 +27,7 @@ all:  clean_result $(RELX_CONF) $(PAHO_GIT) start_broker case1 case2 case3 case4
 clean_result:
 	-rm -f client/*_FAIL.txt
 	-rm -f client/*_PASS.txt
-	-rm -f emq-relx/_rel/emqttd/log/*
+	-rm -f emq-relx/_rel/emqx/log/*
 
 start_broker:
 	-emqx-rel/_rel/emqx/bin/emqx stop
@@ -93,7 +93,7 @@ case6:
 	client/case6_sleep.exe
 
 $(RELX_CONF):
-	git clone -b free https://github.com/emqx/emqx-rel.git
+	git clone -b emqx30 https://github.com/emqx/emqx-rel.git
 	git clone https://github.com/emqx/emqx-sn.git
 	@echo "update emqx-sn with this development code"
 	mv emqx-sn  emqx_sn

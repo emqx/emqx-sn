@@ -41,9 +41,9 @@ end_per_suite(_Config) ->
 
 init_per_testcase(_TestCase, Config) ->
     {ok, _Pid} = ?REGISTRY:start_link(),
-    Config;
+    Config.
 
-init_per_testcase(_TestCase, Config) ->
+end_per_testcase(_TestCase, Config) ->
     ?REGISTRY:stop(),
     Config.
 
