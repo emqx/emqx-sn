@@ -7,19 +7,15 @@ dep_esockd = git https://github.com/emqtt/esockd emqx30
 dep_clique = git https://github.com/emqtt/clique
 
 BUILD_DEPS = emqx cuttlefish
-dep_emqx = git git@github.com:emqtt/emqttd Fix-for-mqtt-sn
-dep_cuttlefish = git https://github.com/emqtt/cuttlefish emqx30
+dep_emqx = git https://github.com/emqx/emqx emqx30
+dep_cuttlefish = git https://github.com/emqx/cuttlefish emqx30
 
 NO_AUTOPATCH = cuttlefish
 
 ERLC_OPTS += +debug_info
 
-TEST_DEPS = meck emqx_ct_helpers
-# dep_meck = git https://github.com/eproxus/meck.git
-dep_emqx_ct_helpers = git https://github.com/emqx/emqx-ct-helpers
-
 TEST_ERLC_OPTS += +debug_info
-TEST_ERLC_OPTS += +'{parse_transform, emqx_ct_transform}'
+TEST_ERLC_OPTS += +'{parse_transform}'
 
 CT_SUITES = emqx_sn_protocol
 
