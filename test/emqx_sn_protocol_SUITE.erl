@@ -218,7 +218,6 @@ subscribe_test3(_Config) ->
     send_connect_msg(Socket, ClientId),
     ?assertEqual(<<3, ?SN_CONNACK, 0>>, receive_response(Socket)),
 
-    Topic1 = <<"te">>,
     send_subscribe_msg_short_topic(Socket, Qos, <<"te">>, MsgId),
     ?assertEqual(<<8, ?SN_SUBACK, Dup:1, Qos:2, Retain:1, Will:1, CleanSession:1,
                    ?SN_NORMAL_TOPIC:2, TopicId:16, MsgId:16, ReturnCode>>,
@@ -401,7 +400,6 @@ publish_negqos_test1(_Config) ->
                  receive_response(Socket)),
 
     MsgId1 = 3,
-    RetainFalse = false,
     Payload1 = <<20, 21, 22, 23>>,
     send_publish_msg_normal_topic(Socket, NegQos, MsgId1, TopicId1, Payload1),
     timer:sleep(100),
@@ -434,7 +432,6 @@ publish_qos0_test1(_Config) ->
                    MsgId:16, ?SN_RC_ACCEPTED>>,
                  receive_response(Socket)),
     MsgId1 = 3,
-    RetainFalse = false,
     Payload1 = <<20, 21, 22, 23>>,
     send_publish_msg_normal_topic(Socket, Qos, MsgId1, TopicId1, Payload1),
     timer:sleep(100),
@@ -459,13 +456,11 @@ publish_qos0_test2(_Config) ->
     send_connect_msg(Socket, <<"test">>),
     ?assertEqual(<<3, ?SN_CONNACK, 0>>, receive_response(Socket)),
 
-    Topic = ?PREDEF_TOPIC_NAME1,
     send_subscribe_msg_predefined_topic(Socket, Qos, PredefTopicId, MsgId),
     ?assertEqual(<<8, ?SN_SUBACK, Dup:1, Qos:2, Retain:1, Will:1, CleanSession:1, ?SN_NORMAL_TOPIC:2, PredefTopicId:16, MsgId:16, ?SN_RC_ACCEPTED>>,
         receive_response(Socket)),
 
     MsgId1 = 3,
-    RetainFalse = false,
     Payload1 = <<20, 21, 22, 23>>,
     send_publish_msg_predefined_topic(Socket, Qos, MsgId1, PredefTopicId, Payload1),
     timer:sleep(100),
@@ -496,7 +491,6 @@ publish_qos0_test3(_Config) ->
         receive_response(Socket)),
 
     MsgId1 = 3,
-    RetainFalse = false,
     Payload1 = <<20, 21, 22, 23>>,
     send_publish_msg_predefined_topic(Socket, Qos, MsgId1, TopicId, Payload1),
     timer:sleep(100),
@@ -526,7 +520,6 @@ publish_qos0_test4(_Config) ->
         receive_response(Socket)),
 
     MsgId1 = 2,
-    RetainFalse = false,
     Payload1 = <<20, 21, 22, 23>>,
     Topic = <<"TR">>,
     send_publish_msg_short_topic(Socket, Qos, MsgId1, Topic, Payload1),
@@ -546,10 +539,8 @@ publish_qos0_test5(_Config) ->
     Retain = 0,
     Will = 0,
     CleanSession = 0,
-    MsgId0 = 0,
     MsgId = 1,
     TopicId0 = 0,
-    TopicId1 = ?MAX_PRED_TOPIC_ID + 1,
     {ok, Socket} = gen_udp:open(0, [binary]),
     send_connect_msg(Socket, <<"test">>),
     ?assertEqual(<<3, ?SN_CONNACK, 0>>, receive_response(Socket)),
@@ -580,7 +571,6 @@ publish_qos0_test6(_Config) ->
         receive_response(Socket)),
 
     MsgId1 = 3,
-    RetainFalse = false,
     Payload1 = <<20, 21, 22, 23>>,
     send_publish_msg_normal_topic(Socket, Qos, MsgId1, TopicId1, Payload1),
     timer:sleep(100),
@@ -610,9 +600,7 @@ publish_qos1_test1(_Config) ->
                    ?SN_NORMAL_TOPIC:2, TopicId1:16, MsgId:16, ?SN_RC_ACCEPTED>>,
                  receive_response(Socket)),
 
-    RetainFalse = false,
     Payload1 = <<20, 21, 22, 23>>,
-    MsgId1 = 5,
     send_publish_msg_normal_topic(Socket, Qos, MsgId, TopicId1, Payload1),
     ?assertEqual(<<7, ?SN_PUBACK, TopicId1:16, MsgId:16, ?SN_RC_ACCEPTED>>, receive_response(Socket)),
     timer:sleep(100),
@@ -630,7 +618,6 @@ publish_qos1_test2(_Config) ->
     CleanSession = 0,
     MsgId = 1,
     PredefTopicId = ?PREDEF_TOPIC_ID1,
-    PredefTopic = ?PREDEF_TOPIC_NAME1,
     {ok, Socket} = gen_udp:open(0, [binary]),
     send_connect_msg(Socket, <<"test">>),
     ?assertEqual(<<3, ?SN_CONNACK, 0>>, receive_response(Socket)),
@@ -639,9 +626,7 @@ publish_qos1_test2(_Config) ->
     ?assertEqual(<<8, ?SN_SUBACK, Dup:1, Qos:2, Retain:1, Will:1, CleanSession:1, ?SN_NORMAL_TOPIC:2, PredefTopicId:16, MsgId:16, ?SN_RC_ACCEPTED>>,
         receive_response(Socket)),
 
-    RetainFalse = false,
     Payload1 = <<20, 21, 22, 23>>,
-    MsgId1 = 5,
     send_publish_msg_predefined_topic(Socket, Qos, MsgId, PredefTopicId, Payload1),
     ?assertEqual(<<7, ?SN_PUBACK, PredefTopicId:16, MsgId:16, ?SN_RC_ACCEPTED>>, receive_response(Socket)),
     timer:sleep(100),
@@ -680,7 +665,6 @@ publish_qos1_test4(_Config) ->
                  receive_response(Socket)),
 
     Topic = <<"ab">>,
-    RetainFalse = false,
     Payload1 = <<20, 21, 22, 23>>,
     send_publish_msg_short_topic(Socket, Qos, MsgId, Topic, Payload1),
     <<TopicIdShort:16>> = Topic,
@@ -784,7 +768,6 @@ publish_qos2_test2(_Config) ->
     ?assertEqual(<<8, ?SN_SUBACK, ?FNU:1, Qos:2, ?FNU:5, PredefTopicId:16, MsgId:16, ?SN_RC_ACCEPTED>>,
         receive_response(Socket)),
 
-    RetainFalse = false,
     Payload1 = <<20, 21, 22, 23>>,
     send_publish_msg_predefined_topic(Socket, Qos, MsgId, PredefTopicId, Payload1),
     ?assertEqual(<<4, ?SN_PUBREC, MsgId:16>>, receive_response(Socket)),
@@ -815,7 +798,6 @@ publish_qos2_test3(_Config) ->
     ?assertEqual(<<8, ?SN_SUBACK, ?FNU:1, Qos:2, ?FNU:5, TopicId0:16, MsgId:16, ?SN_RC_ACCEPTED>>,
         receive_response(Socket)),
 
-    RetainFalse = false,
     Payload1 = <<20, 21, 22, 23>>,
     send_publish_msg_short_topic(Socket, Qos, MsgId, <<"/a">>, Payload1),
     ?assertEqual(<<4, ?SN_PUBREC, MsgId:16>>, receive_response(Socket)),
@@ -823,7 +805,6 @@ publish_qos2_test3(_Config) ->
 
     ?assertEqual(<<11, ?SN_PUBLISH, Dup:1, Qos:2, Retain:1, Will:1, CleanSession:1, ?SN_SHORT_TOPIC :2, <<"/a">>/binary, 1:16, <<20, 21, 22, 23>>/binary>>, receive_response(Socket)),
     ?assertEqual(<<4, ?SN_PUBCOMP, MsgId:16>>, receive_response(Socket)),
-    <<TopicIdShort:16>> = <<"/a">>,
     timer:sleep(100),
 
     send_disconnect_msg(Socket, undefined),
@@ -925,8 +906,6 @@ will_test4(_Config) ->
     timer:sleep(10000),
 
     receive_response(Socket), % ignore PUBACK
-    RetainFalse = false,
-    MsgId = 1000,
 
     send_disconnect_msg(Socket, undefined),
     ?assertEqual(udp_receive_timeout, receive_response(Socket)),
@@ -964,8 +943,6 @@ asleep_test01_timeout(_Config) ->
     Duration = 1,
     WillTopic = <<"dead">>,
     WillPayload = <<10, 11, 12, 13, 14>>,
-    WillRetain = false,
-    MsgId = 1000,
     {ok, Socket} = gen_udp:open(0, [binary]),
 
     ClientId = <<"test">>,
@@ -990,8 +967,6 @@ asleep_test02_to_awake_and_back(_Config) ->
     SleepDuration = 5,
     WillTopic = <<"dead">>,
     WillPayload = <<10, 11, 12, 13, 14>>,
-    WillRetain = false,
-    MsgId = 1000,
     {ok, Socket} = gen_udp:open(0, [binary]),
 
     ClientId = <<"test">>,
@@ -1049,7 +1024,6 @@ asleep_test03_to_awake_qos1_dl_msg(_Config) ->
     Retain = 0,
     CleanSession = 0,
     ReturnCode = 0,
-    RetainFalse = false,
     Payload1 = <<55, 66, 77, 88, 99>>,
     MsgId2 = 87,
 
@@ -1098,7 +1072,6 @@ asleep_test04_to_awake_qos1_dl_msg(_Config) ->
     Duration = 1,
     WillTopic = <<"dead">>,
     WillPayload = <<10, 11, 12, 13, 14>>,
-    WillRetain = false,
     {ok, Socket} = gen_udp:open(0, [binary]),
     ClientId = <<"test">>,
     send_connect_msg_with_will(Socket, Duration, ClientId),
@@ -1112,7 +1085,6 @@ asleep_test04_to_awake_qos1_dl_msg(_Config) ->
     TopicName1 = <<"a/+/c">>,
     MsgId1 = 25,
     TopicId0 = 0,
-    TopicId1 = 1,
     WillBit = 0,
     Dup = 0,
     Retain = 0,
@@ -1129,9 +1101,7 @@ asleep_test04_to_awake_qos1_dl_msg(_Config) ->
     timer:sleep(300),
 
     %% send downlink data in asleep state. This message should be send to device once it wake up
-    RetainFalse = false,
     Payload1 = <<55, 66, 77, 88, 99>>,
-    MsgId2 = 87,
 
     {ok, C, _} = emqx_client:start_link(),
     {ok, _} = emqx_client:publish(C, <<"a/b/c">>, Payload1, Qos),
@@ -1175,7 +1145,6 @@ asleep_test05_to_awake_qos1_dl_msg(_Config) ->
     TopicName1 = <<"u/+/w">>,
     MsgId1 = 25,
     TopicId0 = 0,
-    TopicId1 = 1,
     WillBit = 0,
     Dup = 0,
     Retain = 0,
@@ -1193,7 +1162,6 @@ asleep_test05_to_awake_qos1_dl_msg(_Config) ->
     timer:sleep(300),
 
     %% send downlink data in asleep state. This message should be send to device once it wake up
-    RetainFalse = false,
     Payload2 = <<55, 66, 77, 88, 99>>,
     Payload3 = <<61, 71, 81>>,
     Payload4 = <<100, 101, 102, 103, 104, 105, 106, 107>>,
@@ -1236,8 +1204,6 @@ asleep_test06_to_awake_qos2_dl_msg(_Config) ->
     Duration = 1,
     WillTopic = <<"dead">>,
     WillPayload = <<10, 11, 12, 13, 14>>,
-    WillRetain = false,
-    MsgId = 1000,
     {ok, Socket} = gen_udp:open(0, [binary]),
     ClientId = <<"test">>,
     send_connect_msg_with_will(Socket, Duration, ClientId),
@@ -1272,9 +1238,7 @@ asleep_test06_to_awake_qos2_dl_msg(_Config) ->
     %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
     %% send downlink data in asleep state. This message should be send to device once it wake up
     %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-    RetainFalse = false,
     Payload1 = <<55, 66, 77, 88, 99>>,
-    MsgId2 = 87,
     {ok, C, _} = emqx_client:start_link(),
     {ok, _} = emqx_client:publish(C, TopicName_tom, Payload1, Qos),
     ok = emqx_client:disconnect(C),
@@ -1299,8 +1263,6 @@ asleep_test07_to_connected(_Config) ->
     SleepDuration = 1,
     WillTopic = <<"dead">>,
     WillPayload = <<10, 11, 12, 13, 14>>,
-    WillRetain = false,
-    MsgId = 1000,
     {ok, Socket} = gen_udp:open(0, [binary]),
     ClientId = <<"test">>,
     send_connect_msg_with_will(Socket, Keepalive_Duration, ClientId),
@@ -1350,8 +1312,6 @@ asleep_test08_to_disconnected(_Config) ->
     SleepDuration = 1,
     WillTopic = <<"dead">>,
     WillPayload = <<10, 11, 12, 13, 14>>,
-    WillRetain = false,
-    MsgId = 1000,
     {ok, Socket} = gen_udp:open(0, [binary]),
     ClientId = <<"test">>,
     send_connect_msg_with_will(Socket, Keepalive_Duration, ClientId),
@@ -1383,7 +1343,6 @@ asleep_test09_to_awake_again_qos1_dl_msg(_Config) ->
     Duration = 1,
     WillTopic = <<"dead">>,
     WillPayload = <<10, 11, 12, 13, 14>>,
-    WillRetain = false,
     {ok, Socket} = gen_udp:open(0, [binary]),
     ClientId = <<"test">>,
     send_connect_msg_with_will(Socket, Duration, ClientId),
@@ -1397,7 +1356,6 @@ asleep_test09_to_awake_again_qos1_dl_msg(_Config) ->
     TopicName1 = <<"u/+/w">>,
     MsgId1 = 25,
     TopicId0 = 0,
-    TopicId1 = 1,
     WillBit = 0,
     Dup = 0,
     Retain = 0,
@@ -1415,7 +1373,6 @@ asleep_test09_to_awake_again_qos1_dl_msg(_Config) ->
     timer:sleep(300),
 
     %% send downlink data in asleep state. This message should be send to device once it wake up
-    RetainFalse = false,
     Payload2 = <<55, 66, 77, 88, 99>>,
     Payload3 = <<61, 71, 81>>,
     Payload4 = <<100, 101, 102, 103, 104, 105, 106, 107>>,
@@ -1464,8 +1421,6 @@ awake_test01_to_connected(_Config) ->
     SleepDuration = 1,
     WillTopic = <<"dead">>,
     WillPayload = <<10, 11, 12, 13, 14>>,
-    WillRetain = false,
-    MsgId = 1000,
     {ok, Socket} = gen_udp:open(0, [binary]),
     ClientId = <<"test">>,
     send_connect_msg_with_will(Socket, Keepalive_Duration, ClientId),
@@ -1500,8 +1455,6 @@ awake_test02_to_disconnected(_Config) ->
     SleepDuration = 1,
     WillTopic = <<"dead">>,
     WillPayload = <<10, 11, 12, 13, 14>>,
-    WillRetain = false,
-    MsgId = 1000,
     {ok, Socket} = gen_udp:open(0, [binary]),
     ClientId = <<"test">>,
     send_connect_msg_with_will(Socket, Keepalive_Duration, ClientId),

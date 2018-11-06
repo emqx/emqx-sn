@@ -2,7 +2,7 @@
               [{description, "EMQ X MQTT SN Plugin"},
                {vsn, "3.0"},
                {modules, []},
-               {registered, [emqx_sup]},
+               {registered, []},
                {applications, [kernel, stdlib, 
                                esockd, clique,
                                emqx]},
