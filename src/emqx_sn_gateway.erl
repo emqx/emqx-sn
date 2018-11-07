@@ -348,15 +348,14 @@ handle_event(info, {datagram, SockPid, Data}, StateName,
     StateData1 = ensure_stats_timer(StateData),
     try emqx_sn_frame:parse(Data) of
         {ok, Msg} -> 
-            io:format("~n SockMsg: ~p ~n", [Msg]),
             gen_statem:cast(self(), Msg),
             ?LOG(info, "RECV ~s at state ~s", [emqx_sn_frame:format(Msg), StateName], StateData),
             SockStats1 = maps:update_with(recv_oct, fun(V) -> V + iolist_size(Data) end,
                                           maps:update_with(recv_cnt, fun(V) -> V + 1 end, SockStats)),
             {keep_state, StateData1#state{sock_stats = SockStats1}}
     catch
-        error : Error ->
-            ?LOG(info, "Parse frame error: ~p at state ~s", [Error, StateName], StateData1),
+        error : Error : Stacktrace ->
+            ?LOG(info, "Parse frame error: ~p at state ~s, Stacktrace: ~p", [Error, StateName, Stacktrace], StateData1),
             shutdown(frame_error, StateData1)
     end;
 
@@ -510,7 +509,6 @@ transform(?PUBLISH_PACKET(QoS, Topic, PacketId, Payload), _FuncMsgIdToTopicId) -
                                           {?SN_SHORT_TOPIC, Topic}
                                   end,
     Flags = #mqtt_sn_flags{qos = QoS, topic_id_type = TopicIdType},
-    io:format("~n Topic type: ~p Topic Content: ~p ~n", [TopicIdType, TopicContent]),
     ?SN_PUBLISH_MSG(Flags, TopicContent, NewPacketId, Payload);
 
 transform(?PUBACK_PACKET(MsgId, _ReasonCode), FuncMsgIdToTopicId) ->
@@ -554,7 +552,6 @@ send_connack(StateData) ->
 
 send_message(Msg, StateData = #state{sockpid = SockPid, peer = Peer}) ->
     ?LOG(debug, "SEND ~s~n", [emqx_sn_frame:format(Msg)], StateData),
-    io:format("~n Msg: ~p ~n", [Msg]),
     SockPid ! {datagram, Peer, emqx_sn_frame:serialize(Msg)},
     ok.
 
