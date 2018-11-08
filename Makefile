@@ -4,7 +4,7 @@ PROJECT_VERSION = 3.0
 
 DEPS = esockd clique
 dep_esockd = git https://github.com/emqtt/esockd emqx30
-dep_clique = git https://github.com/emqtt/clique
+dep_clique = git https://github.com/emqtt/clique develop
 
 BUILD_DEPS = emqx cuttlefish
 dep_emqx = git https://github.com/emqx/emqx emqx30
@@ -84,6 +84,7 @@ dep-vsn-check:
 	$(verbose) erl -noshell -eval \
 		"MkVsns = lists:sort(lists:flatten($(dep-versions))), \
 		{ok, Conf} = file:consult('rebar.config'), \
+		{_, Deps1} = lists:keyfind(deps, 1, Conf), \
 		{_, Deps2} = lists:keyfind(github_emqx_deps, 1, Conf), \
 		F = fun({N, V}) when is_list(V) -> {N, V}; ({N, {git, _, {branch, V}}}) -> {N, V} end, \
 		RebarVsns = lists:sort(lists:map(F, Deps1 ++ Deps2)), \
