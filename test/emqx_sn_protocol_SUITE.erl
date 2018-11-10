@@ -1045,7 +1045,8 @@ asleep_test03_to_awake_qos1_dl_msg(_Config) ->
     %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
     send_publish_msg_predefined_topic(Socket, QoS, MsgId2, TopicId1, Payload1),
 
-    {ok, C, _} = emqx_client:start_link(),
+    {ok, C} = emqx_client:start_link(),
+    {ok, _} = emqx_client:connect(C),
     {ok, _} = emqx_client:publish(C, TopicName1, Payload1, QoS),
     ok = emqx_client:disconnect(C),
 
@@ -1103,7 +1104,8 @@ asleep_test04_to_awake_qos1_dl_msg(_Config) ->
     %% send downlink data in asleep state. This message should be send to device once it wake up
     Payload1 = <<55, 66, 77, 88, 99>>,
 
-    {ok, C, _} = emqx_client:start_link(),
+    {ok, C} = emqx_client:start_link(),
+    {ok, _} = emqx_client:connect(C),
     {ok, _} = emqx_client:publish(C, <<"a/b/c">>, Payload1, QoS),
     ok = emqx_client:disconnect(C),
 
@@ -1166,12 +1168,13 @@ asleep_test05_to_awake_qos1_dl_msg(_Config) ->
     Payload3 = <<61, 71, 81>>,
     Payload4 = <<100, 101, 102, 103, 104, 105, 106, 107>>,
     TopicName_test5 = <<"u/v/w">>,
-    {ok, C, _} = emqx_client:start_link(),
+    {ok, C} = emqx_client:start_link(),
+    {ok, _} = emqx_client:connect(C),
     {ok, _} = emqx_client:publish(C, TopicName_test5, Payload2, QoS),
     {ok, _} = emqx_client:publish(C, TopicName_test5, Payload3, QoS),
     {ok, _} = emqx_client:publish(C, TopicName_test5, Payload4, QoS),
     ok = emqx_client:disconnect(C),
-    timer:sleep(300),
+    timer:sleep(50),
 
     % goto awake state, receive downlink messages, and go back to asleep
     send_pingreq_msg(Socket, <<"test">>),
@@ -1239,7 +1242,8 @@ asleep_test06_to_awake_qos2_dl_msg(_Config) ->
     %% send downlink data in asleep state. This message should be send to device once it wake up
     %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
     Payload1 = <<55, 66, 77, 88, 99>>,
-    {ok, C, _} = emqx_client:start_link(),
+    {ok, C} = emqx_client:start_link(),
+    {ok, _} = emqx_client:connect(C),
     {ok, _} = emqx_client:publish(C, TopicName_tom, Payload1, QoS),
     ok = emqx_client:disconnect(C),
     timer:sleep(300),
@@ -1377,7 +1381,8 @@ asleep_test09_to_awake_again_qos1_dl_msg(_Config) ->
     Payload3 = <<61, 71, 81>>,
     Payload4 = <<100, 101, 102, 103, 104, 105, 106, 107>>,
     TopicName_test9 = <<"u/v/w">>,
-     {ok, C, _} = emqx_client:start_link(),
+    {ok, C} = emqx_client:start_link(),
+    {ok, _} = emqx_client:connect(C),
     {ok, _} = emqx_client:publish(C, TopicName_test9, Payload2, QoS),
     {ok, _} = emqx_client:publish(C, TopicName_test9, Payload3, QoS),
     {ok, _} = emqx_client:publish(C, TopicName_test9, Payload4, QoS),
