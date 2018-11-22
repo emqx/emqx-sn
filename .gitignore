@@ -30,3 +30,7 @@ intergration_test/paho.mqtt-sn.embedded-c/
 intergration_test/client/*.exe
 intergration_test/client/*.txt
 .DS_Store
+cover/
+ct.coverdata
+eunit.coverdata
+test/ct.cover.spec

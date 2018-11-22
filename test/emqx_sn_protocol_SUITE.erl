@@ -76,7 +76,13 @@ all() -> [
 ].
 
 init_per_testcase(_TestCase, Config) ->
-    [run_setup_steps(App) || App <- [emqx, emqx_sn]],
+    %% [run_setup_steps(App) || App <- [emqx, emqx_sn]],
+    [start_apps(App, SchemaFile, ConfigFile) ||
+        {App, SchemaFile, ConfigFile}
+            <- [{emqx, deps_path(emqx, "priv/emqx.schema"),
+                       deps_path(emqx, "etc/emqx.conf")},
+                {emqx_sn, local_path("priv/emqx_sn.schema"),
+                          local_path("etc/emqx_sn.conf")}]],
     application:set_env(emqx_sn, enable_qos3, ?ENABLE_QOS3),
     application:set_env(emqx_sn, enable_stats, true),
     application:set_env(emqx_sn, username, <<"user1">>),
@@ -1818,67 +1824,35 @@ check_register_msg_on_udp(TopicName, UdpData) ->
 check_regack_msg_on_udp(MsgId, UdpData) ->
     <<7, ?SN_REGACK, TopicId:16, MsgId:16, 0:8>> = UdpData,
     TopicId.
-run_setup_steps(App) ->
-    NewConfig = generate_config(App),
-    lists:foreach(fun set_app_env/1, NewConfig),
+
+start_apps(App, SchemaFile, ConfigFile) ->
+    read_schema_configs(App, SchemaFile, ConfigFile),
+    set_special_configs(App),
     application:ensure_all_started(App).
 
-generate_config(emqx) ->
-    Schema = cuttlefish_schema:files([local_path(["emqx", "priv", "emqx.schema"])]),
-    Conf = conf_parse:file([local_path(["emqx", "etc", "gen.emqx.conf"])]),
-    cuttlefish_generator:map(Schema, Conf);
+read_schema_configs(App, SchemaFile, ConfigFile) ->
+    ct:pal("Read configs - SchemaFile: ~p, ConfigFile: ~p", [SchemaFile, ConfigFile]),
+    Schema = cuttlefish_schema:files([SchemaFile]),
+    Conf = conf_parse:file(ConfigFile),
+    NewConfig = cuttlefish_generator:map(Schema, Conf),
+    Vals = proplists:get_value(App, NewConfig, []),
+    [application:set_env(App, Par, Value) || {Par, Value} <- Vals].
 
-generate_config(emqx_sn) ->
-    Schema = cuttlefish_schema:files([local_path(["emqx_sn", "priv", "emqx_sn.schema"])]),
-    Conf = conf_parse:file([local_path(["emqx_sn", "etc", "emqx_sn.conf"])]),
-    cuttlefish_generator:map(Schema, Conf).
+set_special_configs(emqx) ->
+    application:set_env(emqx, plugins_loaded_file,
+                        deps_path(emqx, "test/emqx_SUITE_data/loaded_plugins"));
+set_special_configs(_App) ->
+    ok.
 
-get_base_dir(Module) ->
-    {file, Here} = code:is_loaded(Module),
-    find_base_dir(Here).
+deps_path(App, RelativePath) ->
+    %% Note: not lib_dir because etc dir is not sym-link-ed to _build dir
+    %% but priv dir is
+    Path0 = code:priv_dir(App),
+    Path = case file:read_link(Path0) of
+               {ok, Resolved} -> Resolved;
+               {error, _} -> Path0
+           end,
+    filename:join([Path, "..", RelativePath]).
 
-find_base_dir(Here) ->
-    CurrentPath = filename:dirname(filename:dirname(Here)),
-    {ok, SubDirs} = file:list_dir(CurrentPath),
-    filename:dirname(CurrentPath),
-    case lists:member("deps", SubDirs) of
-        true ->
-            filename:join([CurrentPath, "deps"]);
-        false ->
-            filename:dirname(CurrentPath)
-    end.
-
-get_base_dir() ->
-    get_base_dir(?MODULE).
-
-local_path(Components, Module) ->
-    filename:join([get_base_dir(Module) | Components]).
-
-priv_path(Path, 0) ->
-    Path;
-priv_path(Path, Depth) ->
-    priv_path(filename:dirname(Path), Depth - 1).
-
-local_path(["emqx_sn"| RestComponents]) ->
-    {file, Here} = code:is_loaded(?MODULE),
-    CurrentPath = filename:dirname(filename:dirname(Here)),
-    {ok, SubDirs} = file:list_dir(CurrentPath),
-    DestPath = case lists:member("etc", SubDirs) of
-                   true ->
-                       CurrentPath;
-                   false ->
-                       priv_path(CurrentPath, 4)
-               end,
-        filename:join([DestPath | RestComponents]);
-local_path(Components) ->
-    local_path(Components, ?MODULE).
-
-set_app_env({App, Lists}) ->
-    lists:foreach(fun({acl_file, _Var}) -> 
-                          application:set_env(App, acl_file, local_path(["emqx", "etc", "acl.conf"]));
-                     ({plugins_loaded_file, _Var}) ->
-                          application:set_env(App, plugins_loaded_file, 
-                                              local_path(["emqx", "test", "emqx_SUITE_data", "loaded_plugins"]));
-                     ({Par, Var}) ->
-                          application:set_env(App, Par, Var)
-                  end, Lists).
+local_path(RelativePath) ->
+    deps_path(emqx_sn, RelativePath).
