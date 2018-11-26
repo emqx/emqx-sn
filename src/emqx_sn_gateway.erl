@@ -690,7 +690,7 @@ do_2nd_connect(Flags, Duration, ClientId, StateData = #state{client_id = OldClie
 update_2nd_connect_params(Flags, StateData = #state{client_id = ClientId}) ->
     % we don't know this 2nd CONNECT is from a rebooted device or not,
     % it is safe to clean all registered topics
-    emq_sn_topic_manager:unregister_topic(ClientId),
+    emqx_sn_topic_manager:unregister_topic(ClientId),
     
     #mqtt_sn_flags{will = Will} = Flags,
     case Will of
