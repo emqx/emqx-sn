@@ -3,12 +3,12 @@ PROJECT_DESCRIPTION = EMQ X MQTT-SN Gateway
 PROJECT_VERSION = 3.0
 
 DEPS = esockd clique
-dep_esockd = git-emqx https://github.com/emqx/esockd emqx30
-dep_clique = git-emqx https://github.com/emqx/clique develop
+dep_esockd = git-emqx https://github.com/emqx/esockd v5.4.3
+dep_clique = git-emqx https://github.com/emqx/clique v0.3.11
 
 BUILD_DEPS = emqx cuttlefish
 dep_emqx = git-emqx https://github.com/emqx/emqx emqx30
-dep_cuttlefish = git-emqx https://github.com/emqx/cuttlefish emqx30
+dep_cuttlefish = git-emqx https://github.com/emqx/cuttlefish v2.1.1
 
 NO_AUTOPATCH = cuttlefish
 
@@ -24,11 +24,7 @@ CT_OPTS = -cover test/ct.cover.spec -erl_args -name $(CT_NODE_NAME)
 
 COVER = true
 
-define dep_fetch_git-emqx
-	git clone -q --depth 1 -b $(call dep_commit,$(1)) -- $(call dep_repo,$(1)) $(DEPS_DIR)/$(call dep_name,$(1)) > /dev/null 2>&1; \
-	cd $(DEPS_DIR)/$(call dep_name,$(1));
-endef
-
+$(shell [ -f erlang.mk ] || curl -s -o erlang.mk https://raw.githubusercontent.com/emqx/erlmk/master/erlang.mk)
 include erlang.mk
 
 CUTTLEFISH_SCRIPT = _build/default/lib/cuttlefish/cuttlefish
