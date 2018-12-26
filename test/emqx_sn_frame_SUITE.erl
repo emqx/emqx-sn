@@ -1,45 +1,40 @@
-%%%-------------------------------------------------------------------
-%%% Copyright (c) 2013-2018 EMQ Enterprise, Inc. (http://emqtt.io)
-%%%
-%%% Licensed under the Apache License, Version 2.0 (the "License");
-%%% you may not use this file except in compliance with the License.
-%%% You may obtain a copy of the License at
-%%%
-%%%     http://www.apache.org/licenses/LICENSE-2.0
-%%%
-%%% Unless required by applicable law or agreed to in writing, software
-%%% distributed under the License is distributed on an "AS IS" BASIS,
-%%% WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-%%% See the License for the specific language governing permissions and
-%%% limitations under the License.
-%%%-------------------------------------------------------------------
+%% Copyright (c) 2018 EMQ Technologies Co., Ltd. All Rights Reserved.
+%%
+%% Licensed under the Apache License, Version 2.0 (the "License");
+%% you may not use this file except in compliance with the License.
+%% You may obtain a copy of the License at
+%%
+%%     http://www.apache.org/licenses/LICENSE-2.0
+%%
+%% Unless required by applicable law or agreed to in writing, software
+%% distributed under the License is distributed on an "AS IS" BASIS,
+%% WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+%% See the License for the specific language governing permissions and
+%% limitations under the License.
 
--module(emq_sn_message_SUITE).
+-module(emqx_sn_frame_SUITE).
 
+-include("emqx_sn.hrl").
 -include_lib("eunit/include/eunit.hrl").
--include("emq_sn.hrl").
 
--import(emq_sn_message, [parse/1, serialize/1]).
+-import(emqx_sn_frame, [parse/1, serialize/1]).
 
 -compile(export_all).
+-compile(nowarn_export_all).
 
-all() -> [advertise_test, searchgw_test, gwinfo_test, connect_test, connack_test, willtopicreq_test, willtopic_test,
-    willmsgreq_test, willmsg_test, register_test, regack_test, publish_test, puback_test, pubrec_test, pubrel_test,
-    pubcomp_test, subscribe_test, suback_test, unsubscribe_test, unsuback_test, pingreq_test, pingresp_test,
-    disconnect_test, willtopicupd_test, willmsgupd_test, willmsgresp_test,
-    random_test].
-
+all() ->
+    [advertise_test, searchgw_test, gwinfo_test, connect_test, connack_test,
+     willtopicreq_test, willtopic_test, willmsgreq_test, willmsg_test,
+     register_test, regack_test, publish_test, puback_test, pubrec_test, pubrel_test,
+     pubcomp_test, subscribe_test, suback_test, unsubscribe_test, unsuback_test,
+     pingreq_test, pingresp_test, disconnect_test, willtopicupd_test, willmsgupd_test,
+     willmsgresp_test, random_test].
 
 init_per_suite(Config) ->
-    lager_common_test_backend:bounce(debug),
     Config.
 
 end_per_suite(_Config) ->
     ok.
-
-
-
-
 
 advertise_test(_Config) ->
     Adv = ?SN_ADVERTISE_MSG(1, 100),
@@ -54,7 +49,7 @@ gwinfo_test(_Config) ->
     ?assertEqual({ok, GwInfo}, parse(serialize(GwInfo))).
 
 connect_test(_Config) ->
-    Flags = #mqtt_sn_flags{will = true, clean_session = true},
+    Flags = #mqtt_sn_flags{will = true, clean_start = true},
     Conn = #mqtt_sn_message{type = ?SN_CONNECT, variable = {Flags, 4, 300, <<"ClientId">>}},
     ?assertEqual({ok, Conn}, parse(serialize(Conn))).
 
@@ -154,7 +149,6 @@ willmsgresp_test(_Config) ->
     UpdResp = #mqtt_sn_message{type = ?SN_WILLMSGRESP, variable = 0},
     ?assertEqual({ok, UpdResp}, parse(serialize(UpdResp))).
 
-
 random_test(_Config) ->
     random_test_body(),
     random_test_body(),
@@ -169,7 +163,6 @@ random_test_body() ->
         {ok, _Msg} -> ok;
         {'EXIT',{format_error,_Stack}} -> ok
     end.
-
 
 generate_random_binary() ->
     Len = rand:uniform(300),

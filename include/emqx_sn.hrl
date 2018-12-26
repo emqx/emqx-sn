@@ -1,22 +1,19 @@
-%%%-------------------------------------------------------------------
-%%% Copyright (c) 2013-2018 EMQ Enterprise, Inc. (http://emqtt.io)
-%%%
-%%% Licensed under the Apache License, Version 2.0 (the "License");
-%%% you may not use this file except in compliance with the License.
-%%% You may obtain a copy of the License at
-%%%
-%%%     http://www.apache.org/licenses/LICENSE-2.0
-%%%
-%%% Unless required by applicable law or agreed to in writing, software
-%%% distributed under the License is distributed on an "AS IS" BASIS,
-%%% WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-%%% See the License for the specific language governing permissions and
-%%% limitations under the License.
-%%%-------------------------------------------------------------------
-
+%% Copyright (c) 2018 EMQ Technologies Co., Ltd. All Rights Reserved.
+%%
+%% Licensed under the Apache License, Version 2.0 (the "License");
+%% you may not use this file except in compliance with the License.
+%% You may obtain a copy of the License at
+%%
+%%     http://www.apache.org/licenses/LICENSE-2.0
+%%
+%% Unless required by applicable law or agreed to in writing, software
+%% distributed under the License is distributed on an "AS IS" BASIS,
+%% WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+%% See the License for the specific language governing permissions and
+%% limitations under the License.
 
 %%--------------------------------------------------------------------
-%% MQTT-SN MsgTypes
+%% MQTT-SN Types
 %%--------------------------------------------------------------------
 
 -define(SN_ADVERTISE,     16#00).
@@ -49,22 +46,20 @@
 
 -type(mqtt_sn_type() :: ?SN_ADVERTISE..?SN_WILLMSGRESP).
 
--define(SN_RC_ACCECPTED,        16#00).
+-define(SN_RC_ACCEPTED,        16#00).
 -define(SN_RC_CONGESTION,       16#01).
 -define(SN_RC_INVALID_TOPIC_ID, 16#02).
 -define(SN_RC_NOT_SUPPORTED,    16#03).
 
--define(SN_RC_MQTT_FAILURE,     16#80).
-
 -define(QOS_NEG1, 3).
 
--type(mqtt_sn_return_code() :: ?SN_RC_ACCECPTED .. ?SN_RC_NOT_SUPPORTED).
+-type(mqtt_sn_return_code() :: ?SN_RC_ACCEPTED .. ?SN_RC_NOT_SUPPORTED).
 
 %%--------------------------------------------------------------------
 %% MQTT-SN Message
 %%--------------------------------------------------------------------
 
--record(mqtt_sn_flags, {dup, qos, retain, will, clean_session, topic_id_type}).
+-record(mqtt_sn_flags, {dup, qos, retain, will, clean_start, topic_id_type}).
 
 -type(mqtt_sn_flags() :: #mqtt_sn_flags{}).
 
@@ -102,13 +97,13 @@
                          variable = {Flags, Topic}}).
 
 -define(SN_WILLTOPIC_EMPTY_MSG,
-    #mqtt_sn_message{type     = ?SN_WILLTOPIC,
-        variable = undefined}).
+        #mqtt_sn_message{type     = ?SN_WILLTOPIC,
+                         variable = undefined}).
 
 -define(SN_WILLMSGREQ_MSG(),
         #mqtt_sn_message{type = ?SN_WILLMSGREQ}).
 
--define(SN_WILLMSG_MSG(Msg), 
+-define(SN_WILLMSG_MSG(Msg),
         #mqtt_sn_message{type = ?SN_WILLMSG, variable = Msg}).
 
 -define(SN_REGISTER_MSG(TopicId, MsgId, TopicName),
@@ -128,7 +123,7 @@
                         variable = {TopicId, MsgId, ReturnCode}}).
 
 -define(SN_PUBREC_MSG(Type, MsgId),
-        #mqtt_sn_message{type     = Type, 
+        #mqtt_sn_message{type     = Type,
                          variable = MsgId}).
 
 -define(SN_SUBSCRIBE_MSG(Flags, Msgid, Topic),

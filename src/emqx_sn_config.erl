@@ -1,5 +1,4 @@
-%%--------------------------------------------------------------------
-%% Copyright (c) 2013-2018 EMQ Enterprise, Inc. (http://emqtt.io)
+%% Copyright (c) 2018 EMQ Technologies Co., Ltd. All Rights Reserved.
 %%
 %% Licensed under the Apache License, Version 2.0 (the "License");
 %% you may not use this file except in compliance with the License.
@@ -12,12 +11,18 @@
 %% WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 %% See the License for the specific language governing permissions and
 %% limitations under the License.
-%%--------------------------------------------------------------------
--module (emq_sn_config).
 
--define(APP, emq_sn).
+-module(emqx_sn_config).
 
--export ([register/0, unregister/0]).
+-export([get_env/1, get_env/2, register/0, unregister/0]).
+
+-define(APP, emqx_sn).
+
+get_env(Par) ->
+    application:get_env(?APP, Par).
+
+get_env(Par, Default) ->
+    application:get_env(?APP, Par, Default).
 
 register() ->
     clique_config:load_schema([code:priv_dir(?APP)], ?APP),
@@ -48,10 +53,11 @@ unregister_config() ->
     clique:unregister_config_whitelist(Keys, ?APP).
 
 keys() ->
-    ["mqtt.sn.port", 
-     "mqtt.sn.advertise_duration", 
+    ["mqtt.sn.port",
+     "mqtt.sn.advertise_duration",
      "mqtt.sn.gateway_id",
      "mqtt.sn.enable_stats",
      "mqtt.sn.enable_qos3",
      "mqtt.sn.username",
      "mqtt.sn.password"].
+

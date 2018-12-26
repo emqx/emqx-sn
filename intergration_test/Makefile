@@ -1,7 +1,6 @@
-
 .PHONY: clean, clean_result, start_broker  stop_broker  case1
 
-RELX_CONF = emq-relx/relx.config
+RELX_CONF = emqx-rel/relx.config
 PAHO_GIT  = paho.mqtt-sn.embedded-c/README.md
 
 PAHO_SRC  = paho.mqtt-sn.embedded-c/MQTTSNPacket/src/MQTTSNConnectClient.c        \
@@ -19,27 +18,26 @@ PAHO_SRC  = paho.mqtt-sn.embedded-c/MQTTSNPacket/src/MQTTSNConnectClient.c      
 			client/int_test_result.c
 
 INCLUDE_PATH = -Ipaho.mqtt-sn.embedded-c/MQTTSNPacket/src -Ipaho.mqtt-sn.embedded-c/MQTTSNPacket/samples -Iclient
-			
 
 all:  clean_result $(RELX_CONF) $(PAHO_GIT) start_broker case1 case2 case3 case4 case5 case6 case7 case8 stop_broker disable_qos3
 	@echo "  "
 	@echo "  test complete"
 	@echo "  "
-	
+
 clean_result:
 	-rm -f client/*_FAIL.txt
 	-rm -f client/*_PASS.txt
-	-rm -f emq-relx/_rel/emqttd/log/*
-	
+	-rm -f emq-relx/_rel/emqx/log/*
+
 start_broker:
-	-emq-relx/_rel/emqttd/bin/emqttd stop
+	-emqx-rel/_rel/emqx/bin/emqx stop
 	sleep 3
-	emq-relx/_rel/emqttd/bin/emqttd start
+	emqx-rel/_rel/emqx/bin/emqx start
 	sleep 5
-	emq-relx/_rel/emqttd/bin/emqttd_ctl plugins load emq_sn
-	
+	emqx-rel/_rel/emqx/bin/emqx_ctl plugins load emqx_sn
+
 stop_broker:
-	emq-relx/_rel/emqttd/bin/emqttd stop
+	emqx-rel/_rel/emqx/bin/emqx stop
 
 disable_qos3:
 	python ./disable_qos3.py
@@ -88,77 +86,76 @@ case5:
 	client/case5_qos3sub.exe &
 	sleep 1
 	client/case5_qos3pub.exe
-	
+
 case6:
 	-ps aux|grep case6_sleep|awk '{print $$2}'|xargs kill -9
 	gcc client/case6_sleep.c $(PAHO_SRC) $(INCLUDE_PATH) -o client/case6_sleep.exe
 	client/case6_sleep.exe
 
-case7:
-	-ps aux|grep case7_double_connect|awk '{print $$2}'|xargs kill -9
-	gcc client/case7_double_connect.c $(PAHO_SRC) $(INCLUDE_PATH) -o client/case7_double_connect.exe
-	client/case7_double_connect.exe
-
-case8:
-	-ps aux|grep case8_2nd_connect_clean_topics|awk '{print $$2}'|xargs kill -9
-	gcc client/case8_2nd_connect_clean_topics.c $(PAHO_SRC) $(INCLUDE_PATH) -o client/case8_2nd_connect_clean_topics.exe
-	client/case8_2nd_connect_clean_topics.exe
-	
-	
 $(RELX_CONF):
-	git clone https://github.com/emqtt/emq-relx.git
-	git clone https://github.com/emqtt/emq-sn.git
-	@echo "update emq-sn with this development code"
-	mv emq-sn  emq_sn
-	-rm -rf emq_sn/etc
-	-rm -rf emq_sn/include
-	-rm -rf emq_sn/priv
-	-rm -rf emq_sn/src
-	-rm -rf emq_sn/Makefile
-	cp -rf ../etc      emq_sn/
-	cp -rf ../include  emq_sn/
-	cp -rf ../priv     emq_sn/
-	cp -rf ../src      emq_sn/
-	cp -rf ../Makefile emq_sn/Makefile
-	-mkdir emq-relx/deps
-	mv emq_sn  emq-relx/deps/
+	git clone -b emqx30 https://github.com/emqx/emqx-rel.git
+	git clone https://github.com/emqx/emqx-sn.git
+	@echo "update emqx-sn with this development code"
+	mv emqx-sn  emqx_sn
+	-rm -rf emqx_sn/etc
+	-rm -rf emqx_sn/include
+	-rm -rf emqx_sn/priv
+	-rm -rf emqx_sn/src
+	-rm -rf emqx_sn/Makefile
+	cp -rf ../etc      emqx_sn/
+	cp -rf ../include  emqx_sn/
+	cp -rf ../priv     emqx_sn/
+	cp -rf ../src      emqx_sn/
+	cp -rf ../Makefile emqx_sn/Makefile
+	-mkdir emqx-rel/deps
+	mv emqx_sn  emqx-rel/deps/
 	python ./enable_qos3.py
 	@echo "start building ..."
-	make -C emq-relx -f Makefile
-	
+	make -C emqx-rel -f Makefile
+
+paho:
+	make $(PAHO_GIT)
+
 paho: $(PAHO_GIT)
 	@echo "clone paho"
 
 $(PAHO_GIT):
 	git clone https://github.com/eclipse/paho.mqtt-sn.embedded-c/
-	
+
 r: rebuild_emq
 	# short for rebuild_emq
 	@echo "rebuild complete"
-	
+
 rebuild_emq:
-	-rm -rf emq-relx/deps/emq_sn/etc
-	-rm -rf emq-relx/deps/emq_sn/include
-	-rm -rf emq-relx/deps/emq_sn/priv
-	-rm -rf emq-relx/deps/emq_sn/src
-	-rm -rf emq-relx/deps/emq_sn/Makefile
-	cp -rf ../etc      emq-relx/deps/emq_sn/
-	cp -rf ../include  emq-relx/deps/emq_sn/
-	cp -rf ../priv     emq-relx/deps/emq_sn/
-	cp -rf ../src      emq-relx/deps/emq_sn/
-	cp -rf ../Makefile emq-relx/deps/emq_sn/Makefile
+	-rm -rf emqx-rel/deps/emqx_sn/etc
+	-rm -rf emqx-rel/deps/emqx_sn/include
+	-rm -rf emqx-rel/deps/emqx_sn/priv
+	-rm -rf emqx-rel/deps/emqx_sn/src
+	-rm -rf emqx-rel/deps/emqx_sn/Makefile
+	-rm -f  emqx-rel/_rel/emqx/log/*
+	cp -rf ../etc      emqx-rel/deps/emqx_sn/
+	cp -rf ../include  emqx-rel/deps/emqx_sn/
+	cp -rf ../priv     emqx-rel/deps/emqx_sn/
+	cp -rf ../src      emqx-rel/deps/emqx_sn/
+	cp -rf ../Makefile emqx-rel/deps/emqx_sn/Makefile
 	python ./enable_qos3.py
-	make -C emq-relx -f Makefile
-	
-	
+	make -C emqx-rel -f Makefile
+
 clean: clean_result
 	-rm -f client/*.exe
 	-rm -f client/*.o
-	-rm -rf emq-relx
+	-rm -rf emqx-rel
 	-rm -rf paho.mqtt-sn.embedded-c
+<<<<<<< HEAD
 	
 	
 lazy: clean_result start_broker case1 case2 case3 case4 case5 case6 case7 case8 stop_broker
 	@echo "lazy mode"
 	
 	
+=======
+
+lazy:  clean_result start_broker case1 case2 case3 case4 case5 stop_broker disable_qos3
+	@echo "lazy work"
+
+>>>>>>> emqx30

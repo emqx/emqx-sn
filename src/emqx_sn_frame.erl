@@ -1,24 +1,21 @@
-%%%-------------------------------------------------------------------
-%%% Copyright (c) 2013-2018 EMQ Enterprise, Inc. (http://emqtt.io)
-%%%
-%%% Licensed under the Apache License, Version 2.0 (the "License");
-%%% you may not use this file except in compliance with the License.
-%%% You may obtain a copy of the License at
-%%%
-%%%     http://www.apache.org/licenses/LICENSE-2.0
-%%%
-%%% Unless required by applicable law or agreed to in writing, software
-%%% distributed under the License is distributed on an "AS IS" BASIS,
-%%% WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-%%% See the License for the specific language governing permissions and
-%%% limitations under the License.
-%%%-------------------------------------------------------------------
+%% Copyright (c) 2018 EMQ Technologies Co., Ltd. All Rights Reserved.
+%%
+%%
+%% Licensed under the Apache License, Version 2.0 (the "License");
+%% you may not use this file except in compliance with the License.
+%% You may obtain a copy of the License at
+%%
+%%     http://www.apache.org/licenses/LICENSE-2.0
+%%
+%% Unless required by applicable law or agreed to in writing, software
+%% distributed under the License is distributed on an "AS IS" BASIS,
+%% WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+%% See the License for the specific language governing permissions and
+%% limitations under the License.
 
--module(emq_sn_message).
+-module(emqx_sn_frame).
 
--author("Feng Lee <feng@emqtt.io>").
-
--include("emq_sn.hrl").
+-include("emqx_sn.hrl").
 
 -export([parse/1, serialize/1, message_type/1, format/1]).
 
@@ -27,7 +24,7 @@
 -define(short, 16/big-integer).
 
 -define(LOG(Level, Format, Args),
-    lager:Level("MQTT-SN(message): " ++ Format, Args)).
+        emqx_logger:Level("MQTT-SN(Frame): " ++ Format, Args)).
 
 %%--------------------------------------------------------------------
 %% Parse MQTT-SN Message
@@ -101,20 +98,20 @@ parse_var(?SN_WILLMSGRESP, <<ReturnCode:?byte>>) ->
     ReturnCode;
 parse_var(_Type, _Var) ->
     error(format_error).
- 
-parse_flags(?SN_CONNECT, <<_D:1, _Q:2, _R:1, Will:1, CleanSession:1, _IdType:2>>) ->
-    #mqtt_sn_flags{will = bool(Will), clean_session = bool(CleanSession)};
-parse_flags(?SN_WILLTOPIC, <<_D:1, Qos:2, Retain:1, _Will:1, _C:1, _:2>>) ->
-    #mqtt_sn_flags{qos = Qos, retain = bool(Retain)};
-parse_flags(?SN_PUBLISH, <<Dup:1, Qos:2, Retain:1, _Will:1, _C:1, IdType:2>>) ->
-    #mqtt_sn_flags{dup = bool(Dup), qos = Qos, retain = bool(Retain), topic_id_type = IdType};
-parse_flags(Sub, <<Dup:1, Qos:2, _R:1, _Will:1, _C:1, IdType:2>>)
+
+parse_flags(?SN_CONNECT, <<_D:1, _Q:2, _R:1, Will:1, CleanStart:1, _IdType:2>>) ->
+    #mqtt_sn_flags{will = bool(Will), clean_start = bool(CleanStart)};
+parse_flags(?SN_WILLTOPIC, <<_D:1, QoS:2, Retain:1, _Will:1, _C:1, _:2>>) ->
+    #mqtt_sn_flags{qos = QoS, retain = bool(Retain)};
+parse_flags(?SN_PUBLISH, <<Dup:1, QoS:2, Retain:1, _Will:1, _C:1, IdType:2>>) ->
+    #mqtt_sn_flags{dup = bool(Dup), qos = QoS, retain = bool(Retain), topic_id_type = IdType};
+parse_flags(Sub, <<Dup:1, QoS:2, _R:1, _Will:1, _C:1, IdType:2>>)
     when Sub == ?SN_SUBSCRIBE; Sub == ?SN_UNSUBSCRIBE ->
-    #mqtt_sn_flags{dup = bool(Dup), qos = Qos, topic_id_type = IdType};
-parse_flags(?SN_SUBACK, <<_D:1, Qos:2, _R:1, _W:1, _C:1, _Id:2>>) ->
-    #mqtt_sn_flags{qos = Qos};
-parse_flags(?SN_WILLTOPICUPD, <<_D:1, Qos:2, Retain:1, _W:1, _C:1, _Id:2>>) ->
-    #mqtt_sn_flags{qos = Qos, retain = bool(Retain)};
+    #mqtt_sn_flags{dup = bool(Dup), qos = QoS, topic_id_type = IdType};
+parse_flags(?SN_SUBACK, <<_D:1, QoS:2, _R:1, _W:1, _C:1, _Id:2>>) ->
+    #mqtt_sn_flags{qos = QoS};
+parse_flags(?SN_WILLTOPICUPD, <<_D:1, QoS:2, Retain:1, _W:1, _C:1, _Id:2>>) ->
+    #mqtt_sn_flags{qos = QoS, retain = bool(Retain)};
 parse_flags(_Type, _) ->
     error(format_error).
 
@@ -192,15 +189,14 @@ serialize(?SN_DISCONNECT, undefined) ->
 serialize(?SN_DISCONNECT, Duration) ->
     <<Duration:?short>>.
 
-serialize_flags(#mqtt_sn_flags{dup = Dup, qos = Qos, retain = Retain, will = Will,
-                               clean_session = CleanSession, topic_id_type = IdType}) ->
-    <<(bool(Dup)):1, (i(Qos)):2, (bool(Retain)):1, (bool(Will)):1, (bool(CleanSession)):1, (i(IdType)):2>>.
+serialize_flags(#mqtt_sn_flags{dup = Dup, qos = QoS, retain = Retain, will = Will,
+                               clean_start = CleanStart, topic_id_type = IdType}) ->
+    <<(bool(Dup)):1, (i(QoS)):2, (bool(Retain)):1, (bool(Will)):1, (bool(CleanStart)):1, (i(IdType)):2>>.
 
 serialize_topic(2#00, Topic) -> Topic;
 serialize_topic(2#01, Id)    -> <<Id:?short>>;
 serialize_topic(2#10, Topic) -> Topic;
 serialize_topic(2#11, Topic) -> Topic.
-
 
 bool(0) -> false;
 bool(1) -> true;
@@ -210,8 +206,6 @@ bool(undefined) -> 0.
 
 i(undefined) -> 0;
 i(I) when is_integer(I) -> I.
-
-
 
 message_type(16#00) ->
     "SN_ADVERTISE";
@@ -270,47 +264,40 @@ message_type(16#1d) ->
 message_type(Type) ->
     io_lib:format("Unknown Type ~p", [Type]).
 
-
-
-
-
-
 format(?SN_PUBLISH_MSG(Flags, TopicId, MsgId, Data)) ->
-    lists:flatten(io_lib:format("mqtt_sn_message SN_PUBLISH, ~p, TopicId=~w, MsgId=~w, Payload=~w",
-        [format_flag(Flags), TopicId, MsgId, Data]));
+    io_lib:format("mqtt_sn_message SN_PUBLISH, ~p, TopicId=~w, MsgId=~w, Payload=~w",
+                  [format_flag(Flags), TopicId, MsgId, Data]);
 format(?SN_PUBACK_MSG(Flags, MsgId, ReturnCode)) ->
-    lists:flatten(io_lib:format("mqtt_sn_message SN_PUBACK, ~p, MsgId=~w, ReturnCode=~w",
-        [format_flag(Flags), MsgId, ReturnCode]));
+    io_lib:format("mqtt_sn_message SN_PUBACK, ~p, MsgId=~w, ReturnCode=~w",
+                  [format_flag(Flags), MsgId, ReturnCode]);
 format(?SN_PUBREC_MSG(?SN_PUBCOMP, MsgId)) ->
-    lists:flatten(io_lib:format("mqtt_sn_message SN_PUBCOMP, MsgId=~w", [MsgId]));
+    io_lib:format("mqtt_sn_message SN_PUBCOMP, MsgId=~w", [MsgId]);
 format(?SN_PUBREC_MSG(?SN_PUBREC, MsgId)) ->
-    lists:flatten(io_lib:format("mqtt_sn_message SN_PUBREC, MsgId=~w", [MsgId]));
+    io_lib:format("mqtt_sn_message SN_PUBREC, MsgId=~w", [MsgId]);
 format(?SN_PUBREC_MSG(?SN_PUBREL, MsgId)) ->
-    lists:flatten(io_lib:format("mqtt_sn_message SN_PUBREL, MsgId=~w", [MsgId]));
+    io_lib:format("mqtt_sn_message SN_PUBREL, MsgId=~w", [MsgId]);
 format(?SN_SUBSCRIBE_MSG(Flags, Msgid, Topic)) ->
-    lists:flatten(io_lib:format("mqtt_sn_message SN_SUBSCRIBE, ~p, MsgId=~w, TopicId=~w",
-        [format_flag(Flags), Msgid, Topic]));
+    io_lib:format("mqtt_sn_message SN_SUBSCRIBE, ~p, MsgId=~w, TopicId=~w",
+                  [format_flag(Flags), Msgid, Topic]);
 format(?SN_SUBACK_MSG(Flags, TopicId, MsgId, ReturnCode)) ->
-    lists:flatten(io_lib:format("mqtt_sn_message SN_SUBACK, ~p, MsgId=~w, TopicId=~w, ReturnCode=~w",
-        [format_flag(Flags), MsgId, TopicId, ReturnCode]));
+    io_lib:format("mqtt_sn_message SN_SUBACK, ~p, MsgId=~w, TopicId=~w, ReturnCode=~w",
+                  [format_flag(Flags), MsgId, TopicId, ReturnCode]);
 format(?SN_UNSUBSCRIBE_MSG(Flags, Msgid, Topic)) ->
-    lists:flatten(io_lib:format("mqtt_sn_message SN_UNSUBSCRIBE, ~p, MsgId=~w, TopicId=~w",
-        [format_flag(Flags), Msgid, Topic]));
+    io_lib:format("mqtt_sn_message SN_UNSUBSCRIBE, ~p, MsgId=~w, TopicId=~w",
+                  [format_flag(Flags), Msgid, Topic]);
 format(?SN_UNSUBACK_MSG(MsgId)) ->
-    lists:flatten(io_lib:format("mqtt_sn_message SN_UNSUBACK, MsgId=~w", [MsgId]));
+    io_lib:format("mqtt_sn_message SN_UNSUBACK, MsgId=~w", [MsgId]);
 format(?SN_REGISTER_MSG(TopicId, MsgId, TopicName)) ->
-    lists:flatten(io_lib:format("mqtt_sn_message SN_REGISTER, TopicId=~w, MsgId=~w, TopicName=~w",
-        [TopicId, MsgId, TopicName]));
+    io_lib:format("mqtt_sn_message SN_REGISTER, TopicId=~w, MsgId=~w, TopicName=~w",
+                  [TopicId, MsgId, TopicName]);
 format(?SN_REGACK_MSG(TopicId, MsgId, ReturnCode)) ->
-    lists:flatten(io_lib:format("mqtt_sn_message SN_REGACK, TopicId=~w, MsgId=~w, ReturnCode=~w",
-        [TopicId, MsgId, ReturnCode]));
+    io_lib:format("mqtt_sn_message SN_REGACK, TopicId=~w, MsgId=~w, ReturnCode=~w",
+                  [TopicId, MsgId, ReturnCode]);
 format(#mqtt_sn_message{type = Type, variable = Var}) ->
-    lists:flatten(io_lib:format("mqtt_sn_message type=~s, Var=~w", [emq_sn_message:message_type(Type), Var])).
+    io_lib:format("mqtt_sn_message type=~s, Var=~w", [emqx_sn_frame:message_type(Type), Var]).
 
-
-format_flag(#mqtt_sn_flags{dup = Dup, qos = Qos, retain = Retain, will = Will, clean_session = CleanSession, topic_id_type = TopicType}) ->
-    lists:flatten(io_lib:format("mqtt_sn_flags{dup=~p, qos=~p, retain=~p, will=~p, clean_session=~p, topic_id_type=~p}", [Dup, Qos, Retain, Will, CleanSession, TopicType]));
+format_flag(#mqtt_sn_flags{dup = Dup, qos = QoS, retain = Retain, will = Will, clean_start = CleanStart, topic_id_type = TopicType}) ->
+    io_lib:format("mqtt_sn_flags{dup=~p, qos=~p, retain=~p, will=~p, clean_session=~p, topic_id_type=~p}",
+                  [Dup, QoS, Retain, Will, CleanStart, TopicType]);
 format_flag(_Flag) ->
     "invalid flag".
-
-
