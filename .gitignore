@@ -34,3 +34,4 @@ cover/
 ct.coverdata
 eunit.coverdata
 test/ct.cover.spec
+erlang.mk
