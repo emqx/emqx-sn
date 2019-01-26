@@ -1211,13 +1211,15 @@ asleep_test05_to_awake_qos1_dl_msg(_Config) ->
     send_puback_msg(Socket, TopicIdNew, MsgId3),
     timer:sleep(50),
 
-    UdpData4 = receive_response(Socket),
-    MsgId4 = check_publish_msg_on_udp({Dup, QoS, Retain, WillBit, CleanSession, ?SN_NORMAL_TOPIC, TopicIdNew, Payload4}, UdpData4),
-    send_puback_msg(Socket, TopicIdNew, MsgId4),
+    case receive_response(Socket) of
+        <<2,23>> -> ok;
+        UdpData4 ->
+            MsgId4 = check_publish_msg_on_udp({Dup, QoS, Retain, WillBit,
+                                               CleanSession, ?SN_NORMAL_TOPIC,
+                                               TopicIdNew, Payload4}, UdpData4),
+            send_puback_msg(Socket, TopicIdNew, MsgId4)
+    end,
     timer:sleep(50),
-
-    ?assertEqual(<<2, ?SN_PINGRESP>>, receive_response(Socket)),
-
     gen_udp:close(Socket).
 
 asleep_test06_to_awake_qos2_dl_msg(_Config) ->
@@ -1424,9 +1426,14 @@ asleep_test09_to_awake_again_qos1_dl_msg(_Config) ->
     send_puback_msg(Socket, TopicIdNew, MsgId3),
     timer:sleep(50),
 
-    UdpData4 = receive_response(Socket),
-    MsgId4 = check_publish_msg_on_udp({Dup, QoS, Retain, WillBit, CleanSession, ?SN_NORMAL_TOPIC, TopicIdNew, Payload4}, UdpData4),
-    send_puback_msg(Socket, TopicIdNew, MsgId4),
+    case receive_response(Socket) of
+        <<2,23>> -> ok;
+        UdpData4 ->
+            MsgId4 = check_publish_msg_on_udp({Dup, QoS, Retain, WillBit,
+                                               CleanSession, ?SN_NORMAL_TOPIC,
+                                               TopicIdNew, Payload4}, UdpData4),
+            send_puback_msg(Socket, TopicIdNew, MsgId4)
+    end,
     timer:sleep(50),
 
     ?assertEqual(<<2, ?SN_PINGRESP>>, receive_response(Socket)),
@@ -1785,7 +1792,9 @@ receive_response(Socket) ->
         {mqttc, From, Data2} ->
             ?LOG("receive_response() ignore mqttc From=~p, Data2=~p~n", [From, Data2]),
             receive_response(Socket);
-        Other -> {unexpected_udp_data, Other}
+        Other ->
+            {unexpected_udp_data, Other},
+            receive_response(Socket)
     after 2000 ->
         udp_receive_timeout
     end.
