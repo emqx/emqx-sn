@@ -7,7 +7,7 @@ dep_esockd = git-emqx https://github.com/emqx/esockd v5.4.3
 dep_clique = git-emqx https://github.com/emqx/clique v0.3.11
 
 BUILD_DEPS = emqx cuttlefish
-dep_emqx = git-emqx https://github.com/emqx/emqx develop
+dep_emqx = git-emqx https://github.com/emqx/emqx release-3.1
 dep_cuttlefish = git-emqx https://github.com/emqx/cuttlefish v2.2.1
 
 NO_AUTOPATCH = cuttlefish
