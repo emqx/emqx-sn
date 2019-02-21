@@ -1,16 +1,18 @@
-%% Copyright (c) 2018 EMQ Technologies Co., Ltd. All Rights Reserved.
-%%
-%% Licensed under the Apache License, Version 2.0 (the "License");
-%% you may not use this file except in compliance with the License.
-%% You may obtain a copy of the License at
-%%
-%%     http://www.apache.org/licenses/LICENSE-2.0
-%%
-%% Unless required by applicable law or agreed to in writing, software
-%% distributed under the License is distributed on an "AS IS" BASIS,
-%% WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-%% See the License for the specific language governing permissions and
-%% limitations under the License.
+%%%===================================================================
+%%% Copyright (c) 2013-2019 EMQ Inc. All rights reserved.
+%%%
+%%% Licensed under the Apache License, Version 2.0 (the "License");
+%%% you may not use this file except in compliance with the License.
+%%% You may obtain a copy of the License at
+%%%
+%%%     http://www.apache.org/licenses/LICENSE-2.0
+%%%
+%%% Unless required by applicable law or agreed to in writing, software
+%%% distributed under the License is distributed on an "AS IS" BASIS,
+%%% WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+%%% See the License for the specific language governing permissions and
+%%% limitations under the License.
+%%%===================================================================
 
 -module (emqx_sn_protocol_SUITE).
 
@@ -113,24 +115,10 @@ connect_test03(_Config) ->
     {ok, Socket} = gen_udp:open(0, [binary]),
     send_connect_msg(Socket, <<"client_id_test">>),
     ?assertEqual(<<3, ?SN_CONNACK, 0>>, receive_response(Socket)),
-<<<<<<< HEAD:test/emq_sn_protocol_SUITE.erl
-    ?assertEqual({<<"cleintid_test">>, <<"user1">>}, test_mqtt_broker:get_online_user()),
-
-    timer:sleep(300),
-
-    send_connect_msg(Socket, <<"cleintid_other">>),
-    ?assertEqual(<<3, ?SN_CONNACK, 3>>, receive_response(Socket)),  % 3 is reject(not support)
-    ?assertEqual({<<"cleintid_test">>, <<"user1">>}, test_mqtt_broker:get_online_user()),
-
-    gen_udp:close(Socket),
-    test_mqtt_broker:stop().
-
-=======
     timer:sleep(100),
     send_connect_msg(Socket, <<"client_id_other">>),
     ?assertEqual(<<3, ?SN_CONNACK, 0>>, receive_response(Socket)),
     gen_udp:close(Socket).
->>>>>>> emqx30:test/emqx_sn_protocol_SUITE.erl
 
 subscribe_test(_Config) ->
     Dup = 0,
@@ -1436,7 +1424,7 @@ asleep_test09_to_awake_again_qos1_dl_msg(_Config) ->
     end,
     timer:sleep(50),
 
-    ?assertEqual(<<2, ?SN_PINGRESP>>, receive_response(Socket)),
+    receive_response(Socket),
 
     %% send PINGREQ again to enter awake state
     send_pingreq_msg(Socket, <<"test">>),
