@@ -93,7 +93,7 @@ case6:
 	client/case6_sleep.exe
 
 $(RELX_CONF):
-	git clone -b emqx30 https://github.com/emqx/emqx-rel.git
+	git clone -b master https://github.com/emqx/emqx-rel.git
 	git clone https://github.com/emqx/emqx-sn.git
 	@echo "update emqx-sn with this development code"
 	mv emqx-sn  emqx_sn
