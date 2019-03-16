@@ -475,9 +475,9 @@ terminate(Reason, _StateName, #state{client_id = ClientId,
     case {Proto, Reason} of
         {undefined, _} -> ok;
         {_, {shutdown, Error}} ->
-            emqx_protocol:shutdown(Error, Proto);
+            emqx_protocol:terminate(Error, Proto);
         {_, Reason} ->
-            emqx_protocol:shutdown(Reason, Proto)
+            emqx_protocol:terminate(Reason, Proto)
     end.
 
 code_change(_Vsn, StateName, StateData, _Extra) ->
@@ -552,8 +552,9 @@ send_connack(StateData) ->
 
 send_message(Msg, StateData = #state{sockpid = SockPid, peer = Peer}) ->
     ?LOG(debug, "SEND ~s~n", [emqx_sn_frame:format(Msg)], StateData),
-    SockPid ! {datagram, Peer, emqx_sn_frame:serialize(Msg)},
-    ok.
+    Data = emqx_sn_frame:serialize(Msg),
+    SockPid ! {datagram, Peer, Data},
+    {ok, Data}.
 
 goto_asleep_state(StateData=#state{asleep_timer = AsleepTimer}, Duration) ->
     ?LOG(debug, "goto_asleep_state Duration=~p", [Duration], StateData),
@@ -604,7 +605,7 @@ do_connect(ClientId, CleanStart, WillFlag, Duration, StateData = #state{protocol
     end.
 
 do_2nd_connect(Flags, Duration, ClientId, StateData = #state{client_id = OldClientId, protocol = Proto}) ->
-    emqx_protocol:shutdown(normal, Proto),
+    emqx_protocol:terminate(normal, Proto),
     emqx_sn_registry:unregister_topic(OldClientId),
     NewProto = proto_init(StateData),
     #mqtt_sn_flags{will = Will, clean_start = CleanStart} = Flags,
@@ -738,10 +739,10 @@ do_pubrec(PubRec, MsgId, StateData = #state{protocol = Proto}) ->
 
 proto_init(StateData = #state{peer = Peername}) ->
     SendFun = fun(Packet, _Options) ->
-                  send_message(transform(Packet, fun(Type, MsgId) ->
-                                                     dequeue_msgid(Type, MsgId)
-                                                 end), StateData)
-                  %% ok
+                      send_message(
+                        transform(Packet, fun(Type, MsgId) ->
+                                                  dequeue_msgid(Type, MsgId)
+                                          end), StateData)
               end,
     emqx_protocol:init(#{peername => Peername, 
                          peercert => ?NO_PEERCERT,
@@ -793,6 +794,11 @@ find_suback_topicid(MsgId, [{MsgId, TopicId}|_Rest]) ->
 find_suback_topicid(MsgId, [{_, _}|Rest]) ->
     find_suback_topicid(MsgId, Rest).
 
+send_message_to_device([], _ClientId, #state{protocol = ProtoState}) ->
+    {ok, ProtoState};
+send_message_to_device([PubMsg | LeftMsgs], ClientId, StateData) ->
+    send_message_to_device(PubMsg, ClientId, StateData),
+    send_message_to_device(LeftMsgs, ClientId, StateData);
 send_message_to_device({suback, PacketId, ReasonCodes}, _ClientId, StateData = #state{protocol = ProtoState}) ->
     ?LOG(debug, "[suback] msgid: ~p, reason codes: ~p", [PacketId, ReasonCodes], StateData),
     emqx_protocol:send(

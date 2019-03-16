@@ -47,9 +47,9 @@
 -define(FNU, 0).
 
 all() -> [
-    connect_test01, connect_test02, connect_test03,
-    subscribe_test, subscribe_test1, subscribe_test2, 
+    connect_test01,connect_test02,connect_test03,
 
+    subscribe_test, subscribe_test1, subscribe_test2, 
     subscribe_test3, subscribe_test4, subscribe_test5, 
     subscribe_test6, subscribe_test7, subscribe_test8,
 
@@ -76,7 +76,6 @@ all() -> [
 ].
 
 init_per_testcase(_TestCase, Config) ->
-    %% [run_setup_steps(App) || App <- [emqx, emqx_sn]],
     [start_apps(App, SchemaFile, ConfigFile) ||
         {App, SchemaFile, ConfigFile}
             <- [{emqx, deps_path(emqx, "priv/emqx.schema"),
