@@ -24,15 +24,28 @@
 -export([start_link/3]).
 
 %% SUB/UNSUB Asynchronously, called by plugins.
--export([subscribe/2, unsubscribe/2]).
+-export([ subscribe/2
+        , unsubscribe/2
+        ]).
+
 -export([kick/1]).
 
 %% state functions
--export([idle/3, wait_for_will_topic/3, wait_for_will_msg/3, connected/3,
-         asleep/3, awake/3]).
+-export([ idle/3
+        , wait_for_will_topic/3
+        , wait_for_will_msg/3
+        , connected/3
+        , asleep/3
+        , awake/3
+        ]).
 
 %% gen_statem callbacks
--export([init/1, callback_mode/0, handle_event/4, terminate/3, code_change/4]).
+-export([ init/1
+        , callback_mode/0
+        , handle_event/4
+        , terminate/3
+        , code_change/4
+        ]).
 
 -record(will_msg, {retain = false  :: boolean(),
                    qos    = ?QOS_0 :: emqx_mqtt_types:qos(),

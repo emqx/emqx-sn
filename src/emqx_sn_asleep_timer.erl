@@ -14,7 +14,10 @@
 
 -module(emqx_sn_asleep_timer).
 
--export([init/0, start/2, timeout/3]).
+-export([ init/0
+        , start/2
+        , timeout/3
+        ]).
 
 -record(asleep_state, {duration :: integer(), timer_on :: boolean(), ref :: integer()}).
 
