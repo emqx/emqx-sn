@@ -21,13 +21,26 @@
 -define(LOG(Level, Format, Args),
         emqx_logger:Level("MQTT-SN(registry): " ++ Format, Args)).
 
--export([start_link/0, stop/0]).
--export([register_topic/2, unregister_topic/1]).
--export([lookup_topic/2, lookup_topic_id/2]).
+-export([ start_link/0
+        , stop/0
+        ]).
+
+-export([ register_topic/2
+        , unregister_topic/1
+        ]).
+
+-export([ lookup_topic/2
+        , lookup_topic_id/2
+        ]).
 
 %% gen_server callbacks
--export([init/1, handle_call/3, handle_cast/2, handle_info/2, terminate/2,
-         code_change/3]).
+-export([ init/1
+        , handle_call/3
+        , handle_cast/2
+        , handle_info/2
+        , terminate/2
+        , code_change/3
+        ]).
 
 -define(TAB, ?MODULE).
 

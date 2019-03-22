@@ -14,7 +14,11 @@
 
 -module(emqx_sn_config).
 
--export([get_env/1, get_env/2, register/0, unregister/0]).
+-export([ get_env/1
+        , get_env/2
+        , register/0
+        , unregister/0
+        ]).
 
 -define(APP, emqx_sn).
 

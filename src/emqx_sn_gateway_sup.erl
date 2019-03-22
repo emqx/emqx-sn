@@ -16,7 +16,10 @@
 
 -behaviour(supervisor).
 
--export([start_link/1, start_gateway/2, init/1]).
+-export([ start_link/1
+        , start_gateway/2
+        , init/1
+        ]).
 
 -spec(start_link(pos_integer()) -> {ok, pid()}).
 start_link(GwId) ->

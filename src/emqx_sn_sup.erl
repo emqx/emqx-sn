@@ -16,7 +16,9 @@
 
 -behaviour(supervisor).
 
--export([start_link/2, init/1]).
+-export([ start_link/2
+        , init/1
+        ]).
 
 start_link(Port, GwId) ->
     supervisor:start_link({local, ?MODULE}, ?MODULE, [Port, GwId]).
