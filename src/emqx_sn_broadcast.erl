@@ -18,7 +18,9 @@
 
 -include("emqx_sn.hrl").
 
--export([start_link/2, stop/0]).
+-export([ start_link/2
+        , stop/0
+        ]).
 
 %% gen_server
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2,

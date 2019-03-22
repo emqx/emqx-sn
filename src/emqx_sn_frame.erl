@@ -17,7 +17,11 @@
 
 -include("emqx_sn.hrl").
 
--export([parse/1, serialize/1, message_type/1, format/1]).
+-export([ parse/1
+        , serialize/1
+        , message_type/1
+        , format/1
+        ]).
 
 -define(flag,  1/binary).
 -define(byte,  8/big-integer).
