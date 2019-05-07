@@ -76,23 +76,11 @@ all() -> [
 ].
 
 init_per_testcase(_TestCase, Config) ->
-    [start_apps(App, SchemaFile, ConfigFile) ||
-        {App, SchemaFile, ConfigFile}
-            <- [{emqx, deps_path(emqx, "priv/emqx.schema"),
-                       deps_path(emqx, "etc/emqx.conf")},
-                {emqx_sn, local_path("priv/emqx_sn.schema"),
-                          local_path("etc/emqx_sn.conf")}]],
-    application:set_env(emqx_sn, enable_qos3, ?ENABLE_QOS3),
-    application:set_env(emqx_sn, enable_stats, true),
-    application:set_env(emqx_sn, username, <<"user1">>),
-    application:set_env(emqx_sn, password, <<"pw123">>),
-    application:set_env(emqx_sn, predefined,
-                        [{?PREDEF_TOPIC_ID1, ?PREDEF_TOPIC_NAME1},
-                         {?PREDEF_TOPIC_ID2, ?PREDEF_TOPIC_NAME2}]),
+    emqx_ct_helpers:start_apps([emqx, emqx_sn], fun set_special_configs/1),
     Config.
 
 end_per_testcase(_TestCase, _Config) ->
-    [application:stop(App) || App <- [emqx_sn, emqx]].
+    emqx_ct_helpers:stop_apps([emqx_sn, emqx]).
 
 connect_test01(_Config) ->
     {ok, Socket} = gen_udp:open(0, [binary]),
@@ -1833,34 +1821,16 @@ check_regack_msg_on_udp(MsgId, UdpData) ->
     <<7, ?SN_REGACK, TopicId:16, MsgId:16, 0:8>> = UdpData,
     TopicId.
 
-start_apps(App, SchemaFile, ConfigFile) ->
-    read_schema_configs(App, SchemaFile, ConfigFile),
-    set_special_configs(App),
-    application:ensure_all_started(App).
-
-read_schema_configs(App, SchemaFile, ConfigFile) ->
-    ct:pal("Read configs - SchemaFile: ~p, ConfigFile: ~p", [SchemaFile, ConfigFile]),
-    Schema = cuttlefish_schema:files([SchemaFile]),
-    Conf = conf_parse:file(ConfigFile),
-    NewConfig = cuttlefish_generator:map(Schema, Conf),
-    Vals = proplists:get_value(App, NewConfig, []),
-    [application:set_env(App, Par, Value) || {Par, Value} <- Vals].
-
 set_special_configs(emqx) ->
     application:set_env(emqx, plugins_loaded_file,
-                        deps_path(emqx, "test/emqx_SUITE_data/loaded_plugins"));
+                        emqx_ct_helpers:deps_path(emqx, "test/emqx_SUITE_data/loaded_plugins"));
+set_special_configs(emqx_sn) ->
+    application:set_env(emqx_sn, enable_qos3, ?ENABLE_QOS3),
+    application:set_env(emqx_sn, enable_stats, true),
+    application:set_env(emqx_sn, username, <<"user1">>),
+    application:set_env(emqx_sn, password, <<"pw123">>),
+    application:set_env(emqx_sn, predefined,
+                        [{?PREDEF_TOPIC_ID1, ?PREDEF_TOPIC_NAME1},
+                         {?PREDEF_TOPIC_ID2, ?PREDEF_TOPIC_NAME2}]);
 set_special_configs(_App) ->
     ok.
-
-deps_path(App, RelativePath) ->
-    %% Note: not lib_dir because etc dir is not sym-link-ed to _build dir
-    %% but priv dir is
-    Path0 = code:priv_dir(App),
-    Path = case file:read_link(Path0) of
-               {ok, Resolved} -> Resolved;
-               {error, _} -> Path0
-           end,
-    filename:join([Path, "..", RelativePath]).
-
-local_path(RelativePath) ->
-    deps_path(emqx_sn, RelativePath).
