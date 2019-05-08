@@ -22,6 +22,5 @@ xref:
 	$(REBAR) xref
 
 distclean:
-	rm -rf _build
-	rm -f data/app.*.config
-	rm -f data/vm.*.args
+	@rm -rf _build
+	@rm -f data/app.*.config data/vm.*.args rebar.lock
