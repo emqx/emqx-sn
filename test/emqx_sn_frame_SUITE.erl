@@ -16,7 +16,7 @@
 
 -module(emqx_sn_frame_SUITE).
 
--include("emqx_sn.hrl").
+-include_lib("emqx_sn/include/emqx_sn.hrl").
 -include_lib("eunit/include/eunit.hrl").
 
 -import(emqx_sn_frame, [parse/1, serialize/1]).
