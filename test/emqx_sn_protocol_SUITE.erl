@@ -16,7 +16,7 @@
 
 -module (emqx_sn_protocol_SUITE).
 
--include("emqx_sn.hrl").
+-include_lib("emqx_sn/include/emqx_sn.hrl").
 
 -include_lib("eunit/include/eunit.hrl").
 -include_lib("common_test/include/ct.hrl").

@@ -16,7 +16,7 @@
 
 -module(emqx_sn_registry_SUITE).
 
--include("emqx_sn.hrl").
+-include_lib("emqx_sn/include/emqx_sn.hrl").
 -include_lib("eunit/include/eunit.hrl").
 
 -compile(export_all).
