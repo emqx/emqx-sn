@@ -757,7 +757,8 @@ proto_init(StateData = #state{peer = Peername}) ->
                                                   dequeue_msgid(Type, MsgId)
                                           end), StateData)
               end,
-    emqx_protocol:init(#{peername => Peername, 
+    emqx_protocol:init(#{sockname => element(1, hd(element(2, inet:getif()))),
+                         peername => Peername, 
                          peercert => ?NO_PEERCERT,
                          sendfun => SendFun}, ?DEFAULT_PROTO_OPTIONS).
 
