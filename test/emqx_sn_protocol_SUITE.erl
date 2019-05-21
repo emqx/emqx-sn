@@ -1124,7 +1124,7 @@ asleep_test04_to_awake_qos1_dl_msg(_Config) ->
 
 asleep_test05_to_awake_qos1_dl_msg(_Config) ->
     QoS = 1,
-    Duration = 5,
+    Duration = 10,
     WillTopic = <<"dead">>,
     WillPayload = <<10, 11, 12, 13, 14>>,
     {ok, Socket} = gen_udp:open(0, [binary]),
@@ -1339,7 +1339,7 @@ asleep_test08_to_disconnected(_Config) ->
 
 asleep_test09_to_awake_again_qos1_dl_msg(_Config) ->
     QoS = 1,
-    Duration = 5,
+    Duration = 20,
     WillTopic = <<"dead">>,
     WillPayload = <<10, 11, 12, 13, 14>>,
     {ok, Socket} = gen_udp:open(0, [binary]),
