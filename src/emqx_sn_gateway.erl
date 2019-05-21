@@ -70,7 +70,6 @@
                 stats_timer          :: reference(),
                 idle_timeout         :: integer(),
                 enable_qos3 = false  :: boolean(),
-                send_fun             :: function(),
                 sock_stats           :: sock_stats()}).
 
 -define(SOCK_STATS, [recv_oct, recv_cnt, send_oct, send_cnt]).
