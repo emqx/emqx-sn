@@ -70,7 +70,6 @@
                 stats_timer          :: reference(),
                 idle_timeout         :: integer(),
                 enable_qos3 = false  :: boolean(),
-                send_fun             :: function(),
                 sock_stats           :: sock_stats()}).
 
 -define(SOCK_STATS, [recv_oct, recv_cnt, send_oct, send_cnt]).
@@ -567,7 +566,7 @@ send_message(Msg, StateData = #state{sockpid = SockPid, peer = Peer}) ->
     ?LOG(debug, "SEND ~s~n", [emqx_sn_frame:format(Msg)], StateData),
     Data = emqx_sn_frame:serialize(Msg),
     SockPid ! {datagram, Peer, Data},
-    {ok, Data}.
+    ok.
 
 goto_asleep_state(StateData=#state{asleep_timer = AsleepTimer}, Duration) ->
     ?LOG(debug, "goto_asleep_state Duration=~p", [Duration], StateData),
@@ -757,7 +756,8 @@ proto_init(StateData = #state{peer = Peername}) ->
                                                   dequeue_msgid(Type, MsgId)
                                           end), StateData)
               end,
-    emqx_protocol:init(#{peername => Peername, 
+    emqx_protocol:init(#{sockname => element(1, hd(element(2, inet:getif()))),
+                         peername => Peername, 
                          peercert => ?NO_PEERCERT,
                          sendfun => SendFun}, ?DEFAULT_PROTO_OPTIONS).
 
