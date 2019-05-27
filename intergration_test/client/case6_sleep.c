@@ -54,7 +54,7 @@ int main(int argc, char** argv)
     char *host = "127.0.0.1";
     int port = 1884;
     int i = 0;
-    MQTTSNString msstr;
+    MQTTSNString msstr = {0};
     MQTTSNPacket_connectData options = MQTTSNPacket_connectData_initializer;
 
     mysock = transport_open();
