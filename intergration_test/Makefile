@@ -146,16 +146,6 @@ clean: clean_result
 	-rm -f client/*.o
 	-rm -rf emqx-rel
 	-rm -rf paho.mqtt-sn.embedded-c
-<<<<<<< HEAD
-	
-	
-lazy: clean_result start_broker case1 case2 case3 case4 case5 case6 case7 case8 stop_broker
-	@echo "lazy mode"
-	
-	
-=======
 
 lazy:  clean_result start_broker case1 case2 case3 case4 case5 stop_broker disable_qos3
 	@echo "lazy work"
-
->>>>>>> emqx30
