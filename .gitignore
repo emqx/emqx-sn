@@ -36,3 +36,4 @@ eunit.coverdata
 test/ct.cover.spec
 erlang.mk
 etc/emqx_sn.conf.rendered
+.rebar3/
