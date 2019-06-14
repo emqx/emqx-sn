@@ -1258,7 +1258,7 @@ asleep_test06_to_awake_qos2_dl_msg(_Config) ->
 
 asleep_test07_to_connected(_Config) ->
     QoS = 1,
-    Keepalive_Duration = 3,
+    Keepalive_Duration = 10,
     SleepDuration = 1,
     WillTopic = <<"dead">>,
     WillPayload = <<10, 11, 12, 13, 14>>,
