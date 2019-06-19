@@ -73,7 +73,8 @@
                 sock_stats           :: sock_stats()}).
 
 -define(SOCK_STATS, [recv_oct, recv_cnt, send_oct, send_cnt]).
--define(IDLE_TIMEOUT, 10000).
+-define(STAT_TIMEOUT, 10000).
+-define(IDLE_TIMEOUT, 30000).
 -define(DEFAULT_PROTO_OPTIONS, [{max_packet_size, 256}, {zone, external}]).
 -define(LOG(Level, Format, Args, State),
         emqx_logger:Level("MQTT-SN(~s): " ++ Format, [esockd_net:format(State#state.peer) | Args])).
@@ -114,7 +115,7 @@ init([GwId, {_, SockPid, _Sock}, Peer]) ->
                    asleep_timer     = emqx_sn_asleep_timer:init(),
                    asleep_msg_queue = queue:new(),
                    enable_stats     = emqx_sn_config:get_env(enable_stats, false),
-                   idle_timeout     = emqx_sn_config:get_env(idle_timeout, 30000),
+                   idle_timeout     = emqx_sn_config:get_env(idle_timeout, ?IDLE_TIMEOUT),
                    enable_qos3      = emqx_sn_config:get_env(enable_qos3, false),
                    sock_stats       = SockStats},
     {ok, idle, State#state{protocol = proto_init(State)}}.
@@ -123,7 +124,7 @@ callback_mode() -> state_functions.
 
 idle(cast, ?SN_SEARCHGW_MSG(_Radius), StateData = #state{gwid = GwId}) ->
     send_message(?SN_GWINFO_MSG(GwId, <<>>), StateData),
-    {keep_state, StateData, ?IDLE_TIMEOUT};
+    {keep_state, StateData, StateData#state.idle_timeout};
 
 idle(cast, ?SN_CONNECT_MSG(Flags, _ProtoId, Duration, ClientId), StateData) ->
     #mqtt_sn_flags{will = Will, clean_start = CleanStart} = Flags,
@@ -131,15 +132,15 @@ idle(cast, ?SN_CONNECT_MSG(Flags, _ProtoId, Duration, ClientId), StateData) ->
 
 idle(cast, ?SN_ADVERTISE_MSG(_GwId, _Radius), StateData) ->
     % ignore
-    {keep_state, StateData, ?IDLE_TIMEOUT};
+    {keep_state, StateData, StateData#state.idle_timeout};
 
 idle(cast, ?SN_DISCONNECT_MSG(_Duration), StateData) ->
     % ignore
-    {keep_state, StateData, ?IDLE_TIMEOUT};
+    {keep_state, StateData, StateData#state.idle_timeout};
 
 idle(cast, ?SN_PUBLISH_MSG(_Flag, _TopicId, _MsgId, _Data), StateData = #state{enable_qos3 = false}) ->
     ?LOG(debug, "The enable_qos3 is false, ignore the received publish with QoS=-1 in idle mode!", [], StateData),
-    {keep_state_and_data, ?IDLE_TIMEOUT};
+    {keep_state_and_data, StateData#state.idle_timeout};
 
 idle(cast, ?SN_PUBLISH_MSG(#mqtt_sn_flags{qos = ?QOS_NEG1, topic_id_type = TopicIdType},
                            TopicId, _MsgId, Data), StateData = #state{client_id = ClientId}) ->
@@ -152,10 +153,10 @@ idle(cast, ?SN_PUBLISH_MSG(#mqtt_sn_flags{qos = ?QOS_NEG1, topic_id_type = Topic
                             ?QOS_0, TopicName, Data),
     (TopicName =/= undefined) andalso emqx_broker:publish(Msg),
     ?LOG(debug, "Client id=~p receives a publish with QoS=-1 in idle mode!", [ClientId], StateData),
-    {keep_state_and_data, ?IDLE_TIMEOUT};
+    {keep_state_and_data, StateData#state.idle_timeout};
 
 idle(timeout, _Timeout, StateData) ->
-    shutdown(idle_timeout, StateData);
+    stop(idle_timeout, StateData);
 
 idle(EventType, EventContent, State) ->
     handle_event(EventType, EventContent, idle, State).
@@ -883,9 +884,8 @@ process_awake_jobs(ClientId, StateData) ->
     NewStateData.
 
 ensure_stats_timer(State = #state{enable_stats = true,
-                                  stats_timer  = undefined,
-                                  idle_timeout = IdleTimeout}) ->
-    State#state{stats_timer = emqx_misc:start_timer(IdleTimeout, emit_stats)};
+                                  stats_timer  = undefined}) ->
+    State#state{stats_timer = emqx_misc:start_timer(?STAT_TIMEOUT, emit_stats)};
 ensure_stats_timer(State) -> State.
 
 enqueue_msgid(suback, MsgId, TopicId) ->
