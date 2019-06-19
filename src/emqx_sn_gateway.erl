@@ -52,8 +52,6 @@
                    topic           :: binary() | undefined,
                    payload         :: binary() | undefined}).
 
--type(sock_stats() :: #{recv_oct => integer(), recv_cnt => integer(), send_oct => integer(), send_cnt => integer()}).
-
 -record(state, {gwid                 :: integer(),
                 sockpid              :: pid(),
                 peer                 :: {inet:ip_address(), inet:port()},
@@ -69,8 +67,7 @@
                 enable_stats         :: boolean(),
                 stats_timer          :: reference(),
                 idle_timeout         :: integer(),
-                enable_qos3 = false  :: boolean(),
-                sock_stats           :: sock_stats()}).
+                enable_qos3 = false  :: boolean()}).
 
 -define(SOCK_STATS, [recv_oct, recv_cnt, send_oct, send_cnt]).
 -define(STAT_TIMEOUT, 10000).
@@ -78,8 +75,6 @@
 -define(DEFAULT_PROTO_OPTIONS, [{max_packet_size, 256}, {zone, external}]).
 -define(LOG(Level, Format, Args, State),
         emqx_logger:Level("MQTT-SN(~s): " ++ Format, [esockd_net:format(State#state.peer) | Args])).
-
--define(SET_CLIENT_STATS(A,B),          emqx_stats:set_client_stats(A,B)).
 
 -define(NEG_QOS_CLIENT_ID, <<"NegQoS-Client">>).
 
@@ -108,16 +103,14 @@ kick(GwPid) ->
 %%--------------------------------------------------------------------
 
 init([GwId, {_, SockPid, _Sock}, Peer]) ->
-    SockStats = #{recv_oct => 0, recv_cnt => 0, send_oct => 0, send_cnt => 0},
     State = #state{gwid             = GwId,
                    sockpid          = SockPid,
                    peer             = Peer,
                    asleep_timer     = emqx_sn_asleep_timer:init(),
                    asleep_msg_queue = queue:new(),
                    enable_stats     = emqx_sn_config:get_env(enable_stats, false),
-                   idle_timeout     = emqx_sn_config:get_env(idle_timeout, ?IDLE_TIMEOUT),
-                   enable_qos3      = emqx_sn_config:get_env(enable_qos3, false),
-                   sock_stats       = SockStats},
+                   idle_timeout     = emqx_sn_config:get_env(idle_timeout, 30000),
+                   enable_qos3      = emqx_sn_config:get_env(enable_qos3, false)},
     {ok, idle, State#state{protocol = proto_init(State)}}.
 
 callback_mode() -> state_functions.
@@ -355,17 +348,15 @@ awake(cast, ?SN_REGACK_MSG(TopicId, MsgId, ReturnCode), StateData) ->
 awake(EventType, EventContent, StateData) ->
     handle_event(EventType, EventContent, awake, StateData).
 
-handle_event(info, {datagram, SockPid, Data}, StateName, 
-             StateData = #state{sockpid = SockPid, 
-                                sock_stats = SockStats}) ->
+handle_event(info, {datagram, SockPid, Data}, StateName, StateData = #state{sockpid = SockPid}) ->
     StateData1 = ensure_stats_timer(StateData),
     try emqx_sn_frame:parse(Data) of
         {ok, Msg} -> 
             gen_statem:cast(self(), Msg),
-            ?LOG(info, "RECV ~s at state ~s", [emqx_sn_frame:format(Msg), StateName], StateData),
-            SockStats1 = maps:update_with(recv_oct, fun(V) -> V + iolist_size(Data) end,
-                                          maps:update_with(recv_cnt, fun(V) -> V + 1 end, SockStats)),
-            {keep_state, StateData1#state{sock_stats = SockStats1}}
+            ?LOG(info, "RECV ~s at state ~s", [emqx_sn_frame:format(Msg), StateName], StateData1),
+            emqx_pd:update_counter(recv_oct, iolist_size(Data)),
+            emqx_pd:update_counter(recv_cnt, 1),
+            {keep_state, StateData1}
     catch
         error : Error : Stacktrace ->
             ?LOG(info, "Parse frame error: ~p at state ~s, Stacktrace: ~p", [Error, StateName, Stacktrace], StateData1),
@@ -396,16 +387,9 @@ handle_event(info, {redeliver, {?PUBREL, MsgId}}, _StateName, StateData) ->
     {keep_state, StateData};
 
 handle_event(info, {keepalive, start, Interval}, _StateName,
-             StateData = #state{keepalive = undefined, sock_stats = SockStats}) ->
+             StateData = #state{keepalive = undefined}) ->
     ?LOG(debug, "Keepalive at the interval of ~p seconds", [Interval], StateData),
-    StatFun = fun() -> 
-                  case maps:get(recv_oct, SockStats, undefined) of
-                      undefined ->
-                          {error, undefined};
-                      StatVal ->
-                          {ok, StatVal}
-                  end
-              end,
+    StatFun = fun() -> {ok, emqx_pd:get_counter(recv_oct)} end,
     case emqx_keepalive:start(StatFun, Interval, {keepalive, check}) of
         {ok, KeepAlive} ->
             {keep_state, StateData#state{keepalive = KeepAlive}};
@@ -421,8 +405,8 @@ handle_event(info, {keepalive, start, _Interval}, _StateName, StateData) ->
 handle_event(info, {keepalive, check}, StateName, StateData = #state{keepalive = KeepAlive}) ->
     case emqx_keepalive:check(KeepAlive) of
         {ok, KeepAlive1} ->
-            ?LOG(debug, "Keepalive check ok StateName=~p, KeepAlive=~p",
-                 [StateName, KeepAlive], StateData),
+            ?LOG(debug, "Keepalive check ok StateName=~p, KeepAlive=~p, KeepAlive1=~p",
+                 [StateName, KeepAlive, KeepAlive1], StateData),
             {keep_state, StateData#state{keepalive = KeepAlive1}};
         {error, timeout} ->
             case StateName of
@@ -512,7 +496,6 @@ transform(?PUBLISH_PACKET(QoS, Topic, PacketId, Payload), _FuncMsgIdToTopicId) -
                       true           -> PacketId
                   end,
     ClientId = get(client_id),
-    io:format("~n ClientId : ~p ~n", [ClientId]),
     {TopicIdType, TopicContent} = case emqx_sn_registry:lookup_topic_id(ClientId, Topic) of
                                       {predef, PredefTopicId} ->
                                           {?SN_PREDEFINED_TOPIC, PredefTopicId};
@@ -793,7 +776,7 @@ proto_publish(TopicName, Data, Dup, QoS, Retain, MsgId, TopicId,
     Publish = #mqtt_packet{header   = #mqtt_packet_header{type = ?PUBLISH, dup = Dup, qos = QoS, retain = Retain},
                            variable = #mqtt_packet_publish{topic_name = TopicName, packet_id = MsgId},
                            payload  = Data},
-    io:format("~n QoS2 Msg: ~p~n", [Publish]),
+    ?LOG(debug, "[publish] Msg: ~p~n", [Publish], StateData),
     case emqx_protocol:received(Publish, Proto) of
         {ok, Proto1}           -> {keep_state, StateData#state{protocol = Proto1}};
         {error, Error}         -> shutdown(Error, StateData);
