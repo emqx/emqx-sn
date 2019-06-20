@@ -167,7 +167,8 @@ random_test_body() ->
     end.
 
 generate_random_binary() ->
-    Len = rand:uniform(300),
+    % The min packet length is 2
+    Len = rand:uniform(299) + 1,
     gen_next(Len, <<>>).
 
 gen_next(0, Acc) ->
