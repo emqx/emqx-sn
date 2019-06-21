@@ -1183,7 +1183,7 @@ asleep_test05_to_awake_qos1_dl_msg(_Config) ->
     send_puback_msg(Socket, TopicIdNew, MsgId2),
     timer:sleep(50),
 
-    UdpData3 = receive_response(Socket),
+    UdpData3 = wrap_receive_response(Socket),
     MsgId3 = check_publish_msg_on_udp({Dup, QoS, Retain, WillBit, CleanSession, ?SN_NORMAL_TOPIC, TopicIdNew, Payload3}, UdpData3),
     send_puback_msg(Socket, TopicIdNew, MsgId3),
     timer:sleep(50),
@@ -1393,22 +1393,33 @@ asleep_test09_to_awake_again_qos1_dl_msg(_Config) ->
     {TopicIdNew, MsgId_reg} = check_register_msg_on_udp(TopicName_test9, UdpData_reg),
     send_regack_msg(Socket, TopicIdNew, MsgId_reg),
 
-    UdpData2 = receive_response(Socket),
-    MsgId2 = check_publish_msg_on_udp({Dup, QoS, Retain, WillBit, CleanSession, ?SN_NORMAL_TOPIC, TopicIdNew, Payload2}, UdpData2),
-    send_puback_msg(Socket, TopicIdNew, MsgId2),
+    case wrap_receive_response(Socket) of
+        udp_receive_timeout -> 
+            ok;
+        UdpData2 ->
+            MsgId2 = check_publish_msg_on_udp({Dup, QoS, Retain, WillBit, CleanSession, ?SN_NORMAL_TOPIC, TopicIdNew, Payload2}, UdpData2),
+            send_puback_msg(Socket, TopicIdNew, MsgId2)
+    end,
     timer:sleep(100),
 
-    UdpData3 = wrap_receive_response(Socket),
-    MsgId3 = check_publish_msg_on_udp({Dup, QoS, Retain, WillBit, CleanSession, ?SN_NORMAL_TOPIC, TopicIdNew, Payload3}, UdpData3),
-    send_puback_msg(Socket, TopicIdNew, MsgId3),
+    case wrap_receive_response(Socket) of
+        udp_receive_timeout -> 
+            ok;
+        UdpData3 ->
+            MsgId3 = check_publish_msg_on_udp({Dup, QoS, Retain, WillBit, CleanSession, ?SN_NORMAL_TOPIC, TopicIdNew, Payload3}, UdpData3),
+            send_puback_msg(Socket, TopicIdNew, MsgId3)
+    end,
     timer:sleep(100),
 
-    UdpData4 = wrap_receive_response(Socket),
-
-    MsgId4 = check_publish_msg_on_udp({Dup, QoS, Retain, WillBit,
+    case wrap_receive_response(Socket) of
+        udp_receive_timeout -> 
+            ok;
+        UdpData4 ->
+            MsgId4 = check_publish_msg_on_udp({Dup, QoS, Retain, WillBit,
                                        CleanSession, ?SN_NORMAL_TOPIC,
                                        TopicIdNew, Payload4}, UdpData4),
-    send_puback_msg(Socket, TopicIdNew, MsgId4),
+            send_puback_msg(Socket, TopicIdNew, MsgId4)
+    end,
     timer:sleep(100),
 
     receive_response(Socket),
@@ -1762,9 +1773,11 @@ tid(Id) -> Id.
 %% filter <<2, 23>> pingresp packet
 wrap_receive_response(Socket) ->
     case receive_response(Socket) of
-        <<2, 23>> ->
+        <<2,23>> ->
+            ct:log("PingResp"),
             wrap_receive_response(Socket);
         Other ->
+            ct:log("Other: ~p", [Other]),
             Other
     end.
 
@@ -1777,9 +1790,9 @@ receive_response(Socket) ->
             ?LOG("receive_response() ignore mqttc From=~p, Data2=~p~n", [From, Data2]),
             receive_response(Socket);
         Other ->
-            {unexpected_udp_data, Other},
+            ?LOG("receive_response() Other message: ~p", [{unexpected_udp_data, Other}]),
             receive_response(Socket)
-    after 2000 ->
+    after 5000 ->
         udp_receive_timeout
     end.
 
