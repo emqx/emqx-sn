@@ -47,6 +47,11 @@
         , code_change/4
         ]).
 
+-ifdef(TEST).
+-compile(export_all).
+-compile(nowarn_export_all).
+-endif.
+
 -record(will_msg, {retain = false  :: boolean(),
                    qos    = ?QOS_0 :: emqx_mqtt_types:qos(),
                    topic           :: binary() | undefined,
@@ -226,6 +231,7 @@ connected(cast, ?SN_PUBLISH_MSG(Flags, TopicId, MsgId, Data),
             ?LOG(debug, "The enable_qos3 is false, ignore the received publish with QoS=-1 in connected mode!", [], StateData),
             {keep_state, StateData};
         false ->
+            io:format("Flags: ~p, TopicId: ~p, MsgId: ~p, Data: ~p ~n~n", [Flags, TopicId, MsgId, Data]),
             do_publish(TopicIdType, TopicId, Data, Flags, MsgId, StateData)
     end;
 
@@ -348,6 +354,7 @@ handle_event(info, {datagram, SockPid, Data}, StateName, StateData = #state{sock
     StateData1 = ensure_stats_timer(StateData),
     try emqx_sn_frame:parse(Data) of
         {ok, Msg} ->
+            io:format("Msg: ~p~n,  Data: ~p~n", [Msg, Data]),
             gen_statem:cast(self(), Msg),
             ?LOG(info, "RECV ~s at state ~s", [emqx_sn_frame:format(Msg), StateName], StateData1),
             emqx_pd:update_counter(recv_oct, iolist_size(Data)),
@@ -503,7 +510,10 @@ transform(?PUBLISH_PACKET(QoS, Topic, PacketId, Payload), _FuncMsgIdToTopicId) -
                                       undefined ->
                                           {?SN_SHORT_TOPIC, Topic}
                                   end,
+
     Flags = #mqtt_sn_flags{qos = QoS, topic_id_type = TopicIdType},
+    io:format("~n Flags: ~p TopicContent: ~p, NewPacketId: ~p, Payload: ~p ~n~n",
+              [Flags, TopicContent, NewPacketId, Payload]),
     ?SN_PUBLISH_MSG(Flags, TopicContent, NewPacketId, Payload);
 
 transform(?PUBACK_PACKET(MsgId, _ReasonCode), FuncMsgIdToTopicId) ->
@@ -593,7 +603,12 @@ do_connect(ClientId, CleanStart, WillFlag, Duration, StateData) ->
             send_message(?SN_WILLTOPICREQ_MSG(), StateData),
             {next_state, wait_for_will_topic, StateData#state{connpkt = ConnPkt, client_id = ClientId, keepalive_interval = Duration}};
         false ->
-            SuccFun = fun(NStateData) -> {next_state, connected, NStateData} end,
+            SuccFun = fun(NStateData) ->
+                              NStateData1 =
+                                  NStateData#state{client_id = ClientId,
+                                                   keepalive_interval = Duration},
+                              {next_state, connected, NStateData1}
+                      end,
             handle_incoming(?CONNECT_PACKET(ConnPkt), SuccFun, StateData)
     end.
 

@@ -59,7 +59,12 @@
 %% MQTT-SN Message
 %%--------------------------------------------------------------------
 
--record(mqtt_sn_flags, {dup, qos, retain, will, clean_start, topic_id_type}).
+-record(mqtt_sn_flags, {dup = false,
+                        qos,
+                        retain = false,
+                        will,
+                        clean_start,
+                        topic_id_type}).
 
 -type(mqtt_sn_flags() :: #mqtt_sn_flags{}).
 

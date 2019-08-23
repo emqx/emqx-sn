@@ -51,19 +51,23 @@ all() -> [{group, protocol}].
 groups() ->
     [{protocol, [non_parallel_tests],
       [connect_test01,connect_test02,connect_test03,
-
        subscribe_test, subscribe_test1, subscribe_test2, 
        subscribe_test3, subscribe_test4, subscribe_test5, 
        subscribe_test6, subscribe_test7, subscribe_test8,
 
-       publish_negqos_test1, publish_qos0_test1, publish_qos0_test2,
-       publish_qos0_test3, publish_qos0_test4, publish_qos0_test5,
+       publish_negqos_test1,
+       publish_qos0_test1,
+       publish_qos0_test2,
+       publish_qos0_test3,
+       publish_qos0_test4, publish_qos0_test5,
        publish_qos0_test6,
 
-       publish_qos1_test1, publish_qos1_test2, publish_qos1_test3,
+       publish_qos1_test1,
+       publish_qos1_test2, publish_qos1_test3,
        publish_qos1_test4, publish_qos1_test5, publish_qos1_test6,
 
-       publish_qos2_test1, publish_qos2_test2, publish_qos2_test3,
+       publish_qos2_test1,
+       publish_qos2_test2, publish_qos2_test3,
 
        will_test1, will_test2, will_test3, will_test4, will_test5,
        broadcast_test1,
@@ -75,7 +79,8 @@ groups() ->
        asleep_test07_to_connected,
        asleep_test08_to_disconnected,
        asleep_test09_to_awake_again_qos1_dl_msg,
-       awake_test01_to_connected, awake_test02_to_disconnected]}].
+       awake_test01_to_connected, awake_test02_to_disconnected
+      ]}].
 
 init_per_testcase(_TestCase, Config) ->
     emqx_ct_helpers:start_apps([emqx, emqx_sn], fun set_special_configs/1),
@@ -390,12 +395,17 @@ publish_negqos_test1(_Config) ->
     ?assertEqual(<<3, ?SN_CONNACK, 0>>, receive_response(Socket)),
 
     Topic = <<"abc">>,
+    dbg:start(), dbg:tracer(), dbg:p(all, c),
+    dbg:tpl(emqx_sn_registry, register_topic, x),
     send_subscribe_msg_normal_topic(Socket, QoS, Topic, MsgId),
     ?assertEqual(<<8, ?SN_SUBACK, Dup:1, QoS:2, Retain:1, Will:1, CleanSession:1, ?SN_NORMAL_TOPIC:2, TopicId1:16, MsgId:16, ?SN_RC_ACCEPTED>>,
                  receive_response(Socket)),
-
+    dbg:ctp(emqx_sn_registry, register_topic),
     MsgId1 = 3,
     Payload1 = <<20, 21, 22, 23>>,
+    dbg:tpl(emqx_sn_gateway, proto_publish, x),
+    dbg:tpl(emqx_sn_registry, lookup_topic_id, x),
+    dbg:tpl(emqx_sn_gateway, send_message, x),
     send_publish_msg_normal_topic(Socket, NegQoS, MsgId1, TopicId1, Payload1),
     timer:sleep(100),
     case ?ENABLE_QOS3 of
@@ -404,6 +414,9 @@ publish_negqos_test1(_Config) ->
             What = receive_response(Socket),
             ?assertEqual(Eexp, What)
     end,
+    dbg:ctp(emqx_sn_registry, lookup_topic_id),
+    dbg:ctp(emqx_sn_gateway, send_message),
+    dbg:ctp(emqx_sn_gateway, proto_publish),
     send_disconnect_msg(Socket, undefined),
     ?assertEqual(<<2, ?SN_DISCONNECT>>, receive_response(Socket)),
     gen_udp:close(Socket).
