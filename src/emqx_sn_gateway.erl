@@ -469,18 +469,18 @@ handle_event(EventType, EventContent, StateName, StateData) ->
 
 terminate(Reason, _StateName, #state{client_id = ClientId,
                                      keepalive = Keepalive,
-                                     chan_state  = Proto}) ->
+                                     chan_state  = ChanState}) ->
     if
         Keepalive =:= undefined -> ok;
         true -> emqx_keepalive:cancel(Keepalive)
     end,
     emqx_sn_registry:unregister_topic(ClientId),
-    case {Proto, Reason} of
+    case {ChanState, Reason} of
         {undefined, _} -> ok;
         {_, {shutdown, Error}} ->
-            emqx_channel:terminate(Error, Proto);
+            emqx_channel:terminate(Error, ChanState);
         {_, Reason} ->
-            emqx_channel:terminate(Reason, Proto)
+            emqx_channel:terminate(Reason, ChanState)
     end.
 
 code_change(_Vsn, StateName, StateData, _Extra) ->
@@ -603,10 +603,11 @@ do_connect(ClientId, CleanStart, WillFlag, Duration, StateData) ->
             send_message(?SN_WILLTOPICREQ_MSG(), StateData),
             {next_state, wait_for_will_topic, StateData#state{connpkt = ConnPkt, client_id = ClientId, keepalive_interval = Duration}};
         false ->
-            SuccFun = fun(NStateData) ->
+            SuccFun = fun(NStateData = #state{chan_state = NChanState}) ->
                               NStateData1 =
                                   NStateData#state{client_id = ClientId,
-                                                   keepalive_interval = Duration},
+                                                   keepalive_interval = Duration,
+                                                   chan_state = NChanState},
                               {next_state, connected, NStateData1}
                       end,
             handle_incoming(?CONNECT_PACKET(ConnPkt), SuccFun, StateData)
@@ -775,8 +776,9 @@ send_message_to_device([], _ClientId, #state{chan_state = ChanState}) ->
 send_message_to_device([PubMsg | LeftMsgs], ClientId, StateData) ->
     send_message_to_device(PubMsg, ClientId, StateData),
     send_message_to_device(LeftMsgs, ClientId, StateData);
-send_message_to_device(Deliver = {deliver, _Topic, _Msg}, _ClientId, StateData = #state{chan_state = ChanState}) ->
-    case emqx_channel:handle_out(Deliver, ChanState) of
+send_message_to_device(Deliver = {deliver, _Topic, _Msgs}, _ClientId, StateData = #state{chan_state = ChanState}) ->
+    io:format("Deliver : ~p ~n ~n", [Deliver]),
+    case emqx_channel:handle_out(emqx_misc:drain_deliver([Deliver]), ChanState) of
         {ok, NChanState} ->
             keep_state(StateData#state{chan_state = NChanState});
         {ok, Packets, NChanState} ->
