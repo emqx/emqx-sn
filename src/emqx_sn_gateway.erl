@@ -64,7 +64,7 @@
                 client_id            :: binary(),
                 will_msg             :: #will_msg{},
                 keepalive_interval   :: integer(),
-                keepalive            :: emqx_keepalive:keepalive() | undefined,
+                keepalive            :: emqx_sn_keepalive:keepalive() | undefined,
                 connpkt              :: term(),
                 awaiting_suback = [] :: list(),
                 asleep_timer         :: tuple(),
@@ -263,7 +263,7 @@ connected(cast, ?SN_DISCONNECT_MSG(Duration), StateData) ->
     ok = send_message(?SN_DISCONNECT_MSG(undefined), StateData),
     case Duration of
         undefined ->
-            emqx_channel:handle_in(?DISCONNECT_PACKET(), fun keep_state/1, StateData);
+            handle_incoming(?DISCONNECT_PACKET(), fun keep_state/1, StateData);
         Other ->
             goto_asleep_state(StateData, Other)
     end;
@@ -381,7 +381,7 @@ handle_event(info, Deliver = {deliver, _Topic, _Msg}, _StateName,
 handle_event(info, {timeout, Timer, emit_stats}, _StateName,
              StateData = #state{stats_timer = Timer,
                                 chan_state    = ChanState}) ->
-    emqx_cm:set_conn_stats(emqx_channel:info(client_id, ChanState), stats(StateData)),
+    emqx_cm:set_chan_stats(emqx_channel:info(client_id, ChanState), stats(StateData)),
     {keep_state, StateData#state{stats_timer = undefined}};
     
 handle_event(info, {redeliver, {?PUBREL, MsgId}}, _StateName, StateData) ->
@@ -392,7 +392,7 @@ handle_event(info, {keepalive, start, Interval}, _StateName,
              StateData = #state{keepalive = undefined}) ->
     ?LOG(debug, "Keepalive at the interval of ~p seconds", [Interval], StateData),
     StatFun = fun() -> {ok, emqx_pd:get_counter(recv_oct)} end,
-    case emqx_keepalive:start(StatFun, Interval, {keepalive, check}) of
+    case emqx_sn_keepalive:start(StatFun, Interval, {keepalive, check}) of
         {ok, KeepAlive} ->
             {keep_state, StateData#state{keepalive = KeepAlive}};
         {error, Reason} ->
@@ -405,7 +405,7 @@ handle_event(info, {keepalive, start, _Interval}, _StateName, StateData) ->
     {keep_state, StateData};
 
 handle_event(info, {keepalive, check}, StateName, StateData = #state{keepalive = KeepAlive}) ->
-    case emqx_keepalive:check(KeepAlive) of
+    case emqx_sn_keepalive:check(KeepAlive) of
         {ok, KeepAlive1} ->
             ?LOG(debug, "Keepalive check ok StateName=~p, KeepAlive=~p, KeepAlive1=~p",
                  [StateName, KeepAlive, KeepAlive1], StateData),
@@ -472,7 +472,7 @@ terminate(Reason, _StateName, #state{client_id = ClientId,
                                      chan_state  = ChanState}) ->
     if
         Keepalive =:= undefined -> ok;
-        true -> emqx_keepalive:cancel(Keepalive)
+        true -> emqx_sn_keepalive:cancel(Keepalive)
     end,
     emqx_sn_registry:unregister_topic(ClientId),
     case {ChanState, Reason} of
@@ -814,6 +814,7 @@ send_message_to_device({publish, PubPkt}, ClientId, StateData) ->
     end.
 
 publish_asleep_messages_to_device(ClientId, StateData = #state{asleep_msg_queue = AsleepMsgQueue}, QoS2Count) ->
+
     case queue:is_empty(AsleepMsgQueue) of
         false ->
             Msg = queue:get(AsleepMsgQueue),
