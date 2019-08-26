@@ -50,7 +50,8 @@ all() -> [{group, protocol}].
 
 groups() ->
     [{protocol, [non_parallel_tests],
-      [connect_test01,connect_test02,connect_test03,
+      [
+       connect_test01,connect_test02,connect_test03,
        subscribe_test, subscribe_test1, subscribe_test2, 
        subscribe_test3, subscribe_test4, subscribe_test5, 
        subscribe_test6, subscribe_test7, subscribe_test8,
@@ -395,17 +396,13 @@ publish_negqos_test1(_Config) ->
     ?assertEqual(<<3, ?SN_CONNACK, 0>>, receive_response(Socket)),
 
     Topic = <<"abc">>,
-    %% dbg:start(), dbg:tracer(), dbg:p(all, c),
-    %% dbg:tpl(emqx_sn_registry, register_topic, x),
+
+
     send_subscribe_msg_normal_topic(Socket, QoS, Topic, MsgId),
     ?assertEqual(<<8, ?SN_SUBACK, Dup:1, QoS:2, Retain:1, Will:1, CleanSession:1, ?SN_NORMAL_TOPIC:2, TopicId1:16, MsgId:16, ?SN_RC_ACCEPTED>>,
                  receive_response(Socket)),
-    %% dbg:ctp(emqx_sn_registry, register_topic),
     MsgId1 = 3,
     Payload1 = <<20, 21, 22, 23>>,
-    %% dbg:tpl(emqx_sn_gateway, proto_publish, x),
-    %% dbg:tpl(emqx_sn_registry, lookup_topic_id, x),
-    %% dbg:tpl(emqx_sn_gateway, send_message, x),
     send_publish_msg_normal_topic(Socket, NegQoS, MsgId1, TopicId1, Payload1),
     timer:sleep(100),
     case ?ENABLE_QOS3 of
@@ -414,9 +411,9 @@ publish_negqos_test1(_Config) ->
             What = receive_response(Socket),
             ?assertEqual(Eexp, What)
     end,
-    %% dbg:ctp(emqx_sn_registry, lookup_topic_id),
-    %% dbg:ctp(emqx_sn_gateway, send_message),
-    %% dbg:ctp(emqx_sn_gateway, proto_publish),
+    %% dbg:start(), dbg:tracer(), dbg:p(all, c),
+    %% dbg:tpl(emqx_sn_gateway, send_message, x),
+
     send_disconnect_msg(Socket, undefined),
     ?assertEqual(<<2, ?SN_DISCONNECT>>, receive_response(Socket)),
     gen_udp:close(Socket).
@@ -1010,7 +1007,7 @@ asleep_test02_to_awake_and_back(_Config) ->
 
 asleep_test03_to_awake_qos1_dl_msg(_Config) ->
     QoS = 1,
-    Duration = 1,
+    Duration = 5,
     WillTopic = <<"dead">>,
     WillPayload = <<10, 11, 12, 13, 14>>,
     MsgId = 1000,
@@ -1038,9 +1035,7 @@ asleep_test03_to_awake_qos1_dl_msg(_Config) ->
     send_register_msg(Socket, TopicName1, MsgId1),
     ?assertEqual(<<7, ?SN_REGACK, TopicId1:16, MsgId1:16, 0:8>>, receive_response(Socket)),
     send_subscribe_msg_predefined_topic(Socket, QoS, TopicId1, MsgId),
-    ?assertEqual(<<8, ?SN_SUBACK, Dup:1, QoS:2, Retain:1, WillBit:1, CleanSession:1, ?SN_NORMAL_TOPIC:2, TopicId1:16, MsgId:16, ReturnCode>>,
-        receive_response(Socket)),
-
+    ?assertEqual(<<8, ?SN_SUBACK, Dup:1, QoS:2, Retain:1, WillBit:1, CleanSession:1, ?SN_NORMAL_TOPIC:2, TopicId1:16, MsgId:16, ReturnCode>>, receive_response(Socket)),
 
     % goto asleep state
     send_disconnect_msg(Socket, 1),
@@ -1056,6 +1051,7 @@ asleep_test03_to_awake_qos1_dl_msg(_Config) ->
     {ok, C} = emqtt:start_link(),
     {ok, _} = emqtt:connect(C),
     {ok, _} = emqtt:publish(C, TopicName1, Payload1, QoS),
+    timer:sleep(500),
     ok = emqtt:disconnect(C),
 
     timer:sleep(50),
@@ -1065,9 +1061,6 @@ asleep_test03_to_awake_qos1_dl_msg(_Config) ->
     
     %% {unexpected_udp_data, _} = receive_response(Socket),
 
-    %% ct:log("Response Data: ~p", [receive_response(Socket)]),
-    %% ct:log("ReceiveData 2: ~p", [receive_response(Socket)]),
-    %% ct:log("ReceiveData 3: ~p", [receive_response(Socket)]),        
     UdpData = receive_response(Socket),
     MsgId_udp = check_publish_msg_on_udp({Dup, QoS, Retain, WillBit, CleanSession, ?SN_NORMAL_TOPIC, TopicId1, Payload1}, UdpData),
     send_puback_msg(Socket, TopicId1, MsgId_udp),
@@ -1078,7 +1071,7 @@ asleep_test03_to_awake_qos1_dl_msg(_Config) ->
 
 asleep_test04_to_awake_qos1_dl_msg(_Config) ->
     QoS = 1,
-    Duration = 1,
+    Duration = 5,
     WillTopic = <<"dead">>,
     WillPayload = <<10, 11, 12, 13, 14>>,
     {ok, Socket} = gen_udp:open(0, [binary]),
@@ -1115,6 +1108,7 @@ asleep_test04_to_awake_qos1_dl_msg(_Config) ->
     {ok, C} = emqtt:start_link(),
     {ok, _} = emqtt:connect(C),
     {ok, _} = emqtt:publish(C, <<"a/b/c">>, Payload1, QoS),
+    timer:sleep(100),
     ok = emqtt:disconnect(C),
 
     timer:sleep(300),
@@ -1139,7 +1133,7 @@ asleep_test04_to_awake_qos1_dl_msg(_Config) ->
 
 asleep_test05_to_awake_qos1_dl_msg(_Config) ->
     QoS = 1,
-    Duration = 10,
+    Duration = 5,
     WillTopic = <<"dead">>,
     WillPayload = <<10, 11, 12, 13, 14>>,
     {ok, Socket} = gen_udp:open(0, [binary]),
@@ -1179,8 +1173,11 @@ asleep_test05_to_awake_qos1_dl_msg(_Config) ->
     {ok, C} = emqtt:start_link(),
     {ok, _} = emqtt:connect(C),
     {ok, _} = emqtt:publish(C, TopicName_test5, Payload2, QoS),
+    timer:sleep(100),
     {ok, _} = emqtt:publish(C, TopicName_test5, Payload3, QoS),
+    timer:sleep(100),
     {ok, _} = emqtt:publish(C, TopicName_test5, Payload4, QoS),
+    timer:sleep(200),
     ok = emqtt:disconnect(C),
     timer:sleep(50),
 
@@ -1255,6 +1252,7 @@ asleep_test06_to_awake_qos2_dl_msg(_Config) ->
     {ok, C} = emqtt:start_link(),
     {ok, _} = emqtt:connect(C),
     {ok, _} = emqtt:publish(C, TopicName_tom, Payload1, QoS),
+    timer:sleep(100),
     ok = emqtt:disconnect(C),
     timer:sleep(300),
 
@@ -1354,7 +1352,7 @@ asleep_test08_to_disconnected(_Config) ->
 
 asleep_test09_to_awake_again_qos1_dl_msg(_Config) ->
     QoS = 1,
-    Duration = 30,
+    Duration = 5,
     WillTopic = <<"dead">>,
     WillPayload = <<10, 11, 12, 13, 14>>,
     {ok, Socket} = gen_udp:open(0, [binary]),
@@ -1378,13 +1376,13 @@ asleep_test09_to_awake_again_qos1_dl_msg(_Config) ->
     send_subscribe_msg_normal_topic(Socket, QoS, TopicName1, MsgId1),
     ?assertEqual(<<8, ?SN_SUBACK, Dup:1, QoS:2, Retain:1, WillBit:1, CleanSession:1, ?SN_NORMAL_TOPIC:2, TopicId0:16, MsgId1:16, ReturnCode>>,
     receive_response(Socket)),
-
     % goto asleep state
     SleepDuration = 30,
     send_disconnect_msg(Socket, SleepDuration),
     ?assertEqual(<<2, ?SN_DISCONNECT>>, receive_response(Socket)),
 
-    timer:sleep(300),
+    timer:sleep(1000),
+
 
     %% send downlink data in asleep state. This message should be send to device once it wake up
     Payload2 = <<55, 66, 77, 88, 99>>,
@@ -1394,10 +1392,12 @@ asleep_test09_to_awake_again_qos1_dl_msg(_Config) ->
     {ok, C} = emqtt:start_link(),
     {ok, _} = emqtt:connect(C),
     {ok, _} = emqtt:publish(C, TopicName_test9, Payload2, QoS),
+    timer:sleep(100),
     {ok, _} = emqtt:publish(C, TopicName_test9, Payload3, QoS),
+    timer:sleep(100),
     {ok, _} = emqtt:publish(C, TopicName_test9, Payload4, QoS),
+    timer:sleep(1000),
     ok = emqtt:disconnect(C),
-    timer:sleep(300),
 
     % goto awake state, receive downlink messages, and go back to asleep
     send_pingreq_msg(Socket, <<"test">>),
@@ -1838,6 +1838,7 @@ get_udp_broadcast_address() ->
     "255.255.255.255".
 
 check_publish_msg_on_udp({Dup, QoS, Retain, WillBit, CleanSession, TopicType, TopicId, Payload}, UdpData) ->
+    ct:pal("UdpData: ~p, Payload: ~p", [UdpData, Payload]),
     <<HeaderUdp:5/binary, MsgId:16, PayloadIn/binary>> = UdpData,
     Size9 = byte_size(Payload) + 7,
     Eexp = <<Size9:8, ?SN_PUBLISH, Dup:1, QoS:2, Retain:1, WillBit:1, CleanSession:1, TopicType:2, TopicId:16>>,
@@ -1846,6 +1847,7 @@ check_publish_msg_on_udp({Dup, QoS, Retain, WillBit, CleanSession, TopicType, To
     MsgId.
 
 check_register_msg_on_udp(TopicName, UdpData) ->
+    ct:log("UdpData: ~p~n", [UdpData]),
     <<HeaderUdp:2/binary, TopicId:16, MsgId:16, PayloadIn/binary>> = UdpData,
     Size = byte_size(TopicName) + 6,
     ?assertEqual(<<Size:8, ?SN_REGISTER>>, HeaderUdp),

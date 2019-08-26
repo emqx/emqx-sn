@@ -231,7 +231,6 @@ connected(cast, ?SN_PUBLISH_MSG(Flags, TopicId, MsgId, Data),
             ?LOG(debug, "The enable_qos3 is false, ignore the received publish with QoS=-1 in connected mode!", [], StateData),
             {keep_state, StateData};
         false ->
-            io:format("Flags: ~p, TopicId: ~p, MsgId: ~p, Data: ~p ~n~n", [Flags, TopicId, MsgId, Data]),
             do_publish(TopicIdType, TopicId, Data, Flags, MsgId, StateData)
     end;
 
@@ -261,7 +260,7 @@ connected(cast, ?SN_REGACK_MSG(TopicId, MsgId, ReturnCode), StateData) ->
     {keep_state, StateData};
 
 connected(cast, ?SN_DISCONNECT_MSG(Duration), StateData) ->
-    send_message(?SN_DISCONNECT_MSG(undefined), StateData),
+    ok = send_message(?SN_DISCONNECT_MSG(undefined), StateData),
     case Duration of
         undefined ->
             emqx_channel:handle_in(?DISCONNECT_PACKET(), fun keep_state/1, StateData);
@@ -292,7 +291,7 @@ connected(EventType, EventContent, StateData) ->
     handle_event(EventType, EventContent, connected, StateData).
 
 asleep(cast, ?SN_DISCONNECT_MSG(Duration), StateData) ->
-    send_message(?SN_DISCONNECT_MSG(undefined), StateData),
+    ok = send_message(?SN_DISCONNECT_MSG(undefined), StateData),
     case Duration of
         undefined ->
             handle_incoming(?PACKET(?DISCONNECT), fun keep_state/1, StateData);
@@ -319,7 +318,7 @@ asleep(cast, ?SN_PUBACK_MSG(TopicId, MsgId, ReturnCode), StateData) ->
     do_puback(TopicId, MsgId, ReturnCode, asleep, StateData);
 
 asleep(cast, ?SN_PUBREC_MSG(PubRec, MsgId), StateData)
-    when PubRec == ?SN_PUBREC; PubRec == ?SN_PUBREL; PubRec == ?SN_PUBCOMP ->
+  when PubRec == ?SN_PUBREC; PubRec == ?SN_PUBREL; PubRec == ?SN_PUBCOMP ->
     do_pubrec(PubRec, MsgId, StateData);
 
 % NOTE: what about following scenario:
@@ -354,7 +353,6 @@ handle_event(info, {datagram, SockPid, Data}, StateName, StateData = #state{sock
     StateData1 = ensure_stats_timer(StateData),
     try emqx_sn_frame:parse(Data) of
         {ok, Msg} ->
-            io:format("Msg: ~p~n,  Data: ~p~n", [Msg, Data]),
             gen_statem:cast(self(), Msg),
             ?LOG(info, "RECV ~s at state ~s", [emqx_sn_frame:format(Msg), StateName], StateData1),
             emqx_pd:update_counter(recv_oct, iolist_size(Data)),
@@ -377,7 +375,8 @@ handle_event(info, Deliver = {deliver, _Topic, Msg}, asleep,
 handle_event(info, Deliver = {deliver, _Topic, _Msg}, _StateName,
              StateData = #state{client_id = ClientId}) ->
     StateData1 = ensure_stats_timer(StateData),
-    send_message_to_device(Deliver, ClientId, StateData1);
+    {ok, NChanState} = send_message_to_device(Deliver, ClientId, StateData1),
+    {keep_state, StateData#state{chan_state = NChanState}};
 
 handle_event(info, {timeout, Timer, emit_stats}, _StateName,
              StateData = #state{stats_timer = Timer,
@@ -427,6 +426,7 @@ handle_event(info, {keepalive, check}, StateName, StateData = #state{keepalive =
     end;
 
 handle_event(info, do_awake_jobs, StateName, StateData=#state{client_id = ClientId}) ->
+    ?LOG(debug, "Do awake jobs, statename : ~p", [StateName], StateData),
     NewStateData = process_awake_jobs(ClientId, StateData),
     case StateName of
         awake  -> goto_asleep_state(NewStateData, undefined);
@@ -512,8 +512,6 @@ transform(?PUBLISH_PACKET(QoS, Topic, PacketId, Payload), _FuncMsgIdToTopicId) -
                                   end,
 
     Flags = #mqtt_sn_flags{qos = QoS, topic_id_type = TopicIdType},
-    io:format("~n Flags: ~p TopicContent: ~p, NewPacketId: ~p, Payload: ~p ~n~n",
-              [Flags, TopicContent, NewPacketId, Payload]),
     ?SN_PUBLISH_MSG(Flags, TopicContent, NewPacketId, Payload);
 
 transform(?PUBACK_PACKET(MsgId, _ReasonCode), FuncMsgIdToTopicId) ->
@@ -776,14 +774,17 @@ send_message_to_device([], _ClientId, #state{chan_state = ChanState}) ->
 send_message_to_device([PubMsg | LeftMsgs], ClientId, StateData) ->
     send_message_to_device(PubMsg, ClientId, StateData),
     send_message_to_device(LeftMsgs, ClientId, StateData);
-send_message_to_device(Deliver = {deliver, _Topic, _Msgs}, _ClientId, StateData = #state{chan_state = ChanState}) ->
-    io:format("Deliver : ~p ~n ~n", [Deliver]),
-    case emqx_channel:handle_out(emqx_misc:drain_deliver([Deliver]), ChanState) of
+send_message_to_device(Deliver = {deliver, _Topic, _Msgs}, ClientId, StateData = #state{chan_state = ChanState}) ->
+    case emqx_channel:handle_out({deliver, emqx_misc:drain_deliver([Deliver])}, ChanState) of
         {ok, NChanState} ->
             keep_state(StateData#state{chan_state = NChanState});
         {ok, Packets, NChanState} ->
             NState = StateData#state{chan_state = NChanState},
-            handle_outgoing(Packets, fun keep_state/1, NState);
+            lists:foldl(fun(PubPkt, {ok, NChanState1}) ->
+                                {ok, NChanState2} =
+                                    send_message_to_device({publish, PubPkt}, ClientId, NState#state{chan_state = NChanState1}),
+                                {ok, NChanState2}
+                        end, {ok, NChanState}, Packets);
         {stop, Reason, NChanState} ->
             stop(Reason, StateData#state{chan_state = NChanState})
     end;
@@ -794,11 +795,10 @@ send_message_to_device({suback, PacketId, ReasonCodes}, _ClientId, StateData) ->
 send_message_to_device({unsuback, PacketId, _ReasonCodes}, _ClientId, StateData) ->
     ?LOG(debug, "[unsuback] msgid: ~p", [PacketId], StateData),
     handle_outgoing(?UNSUBACK_PACKET(PacketId), fun msg2device_succfun/1, StateData);
-send_message_to_device({publish, PacketId, Msg}, ClientId, StateData) ->
-    PubPkt = #mqtt_packet{header   = #mqtt_packet_header{type = ?PUBLISH, dup = Dup, qos = QoS, retain = Retain},
+send_message_to_device({publish, PubPkt}, ClientId, StateData) ->
+    #mqtt_packet{header   = #mqtt_packet_header{type = ?PUBLISH, dup = Dup, qos = QoS, retain = Retain},
                           variable = #mqtt_packet_publish{topic_name = TopicName, packet_id = MsgId0},
-                          payload  = Payload}
-           = emqx_packet:from_message(PacketId, Msg),
+                          payload  = Payload} = PubPkt,
     MsgId = message_id(MsgId0),
     ?LOG(debug, "The TopicName of mqtt_message=~p~n", [TopicName], StateData),
     case emqx_sn_registry:lookup_topic_id(ClientId, TopicName) of
@@ -817,12 +817,15 @@ publish_asleep_messages_to_device(ClientId, StateData = #state{asleep_msg_queue 
     case queue:is_empty(AsleepMsgQueue) of
         false ->
             Msg = queue:get(AsleepMsgQueue),
-            {keep_state, NewStateData} = send_message_to_device(Msg, ClientId, StateData),
+            {ok, NChanState} = send_message_to_device(Msg, ClientId, StateData),
             NewCount = case is_qos2_msg(Msg) of
                            true -> QoS2Count + 1;
                            false -> QoS2Count
                        end,
-            publish_asleep_messages_to_device(ClientId, NewStateData#state{asleep_msg_queue = queue:drop(AsleepMsgQueue)}, NewCount);
+            publish_asleep_messages_to_device(
+              ClientId, StateData#state{asleep_msg_queue = queue:drop(AsleepMsgQueue),
+                                        chan_state = NChanState
+                                       }, NewCount);
         true  ->
             {QoS2Count, StateData}
     end.
