@@ -433,18 +433,18 @@ handle_event(info, do_awake_jobs, StateName, StateData=#state{client_id = Client
         _Other -> {keep_state, NewStateData} %% device send a CONNECT immediately before this do_awake_jobs is handled
     end;
 
-handle_event(info, {subscribe, [Topics]}, _StateName, StateData) ->
-    ?LOG(debug, "Ignore subscribe Topics: ~p", [Topics], StateData),
-    {keep_state, StateData};
+%% handle_event(info, {subscribe, [Topics]}, _StateName, StateData) ->
+%%     ?LOG(debug, "Ignore subscribe Topics: ~p", [Topics], StateData),
+%%     {keep_state, StateData};
 
-%% Asynchronous SUBACK
-handle_event(info, {suback, MsgId, [GrantedQoS]}, _StateName,
-             StateData = #state{awaiting_suback = Awaiting}) ->
-    Flags = #mqtt_sn_flags{qos = GrantedQoS},
-    {MsgId, TopicId} = find_suback_topicid(MsgId, Awaiting),
-    ?LOG(debug, "suback Awaiting=~p, MsgId=~p, TopicId=~p", [Awaiting, MsgId, TopicId], StateData),
-    send_message(?SN_SUBACK_MSG(Flags, TopicId, MsgId, ?SN_RC_ACCEPTED), StateData),
-    {keep_state, StateData#state{awaiting_suback = lists:delete({MsgId, TopicId}, Awaiting)}};
+%% %% Asynchronous SUBACK
+%% handle_event(info, {suback, MsgId, [GrantedQoS]}, _StateName,
+%%              StateData = #state{awaiting_suback = Awaiting}) ->
+%%     Flags = #mqtt_sn_flags{qos = GrantedQoS},
+%%     {MsgId, TopicId} = find_suback_topicid(MsgId, Awaiting),
+%%     ?LOG(debug, "suback Awaiting=~p, MsgId=~p, TopicId=~p", [Awaiting, MsgId, TopicId], StateData),
+%%     send_message(?SN_SUBACK_MSG(Flags, TopicId, MsgId, ?SN_RC_ACCEPTED), StateData),
+%%     {keep_state, StateData#state{awaiting_suback = lists:delete({MsgId, TopicId}, Awaiting)}};
 
 handle_event(info, {asleep_timeout, Ref}, StateName, StateData=#state{asleep_timer = AsleepTimer}) ->
     ?LOG(debug, "asleep_timeout at ~p", [StateName], StateData),
@@ -761,13 +761,6 @@ proto_publish(TopicName, Data, Dup, QoS, Retain, MsgId, TopicId, StateData) ->
                            payload  = Data},
     ?LOG(debug, "[publish] Msg: ~p~n", [Publish], StateData),
     handle_incoming(Publish, fun keep_state/1, StateData).
-
-find_suback_topicid(MsgId, []) ->
-    {MsgId, 0};
-find_suback_topicid(MsgId, [{MsgId, TopicId}|_Rest]) ->
-    {MsgId, TopicId};
-find_suback_topicid(MsgId, [{_, _}|Rest]) ->
-    find_suback_topicid(MsgId, Rest).
 
 send_message_to_device([], _ClientId, #state{chan_state = ChanState}) ->
     {ok, ChanState};
