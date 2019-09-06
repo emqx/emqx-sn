@@ -1,4 +1,5 @@
-%% Copyright (c) 2013-2019 EMQ Technologies Co., Ltd. All Rights Reserved.
+%%--------------------------------------------------------------------
+%% Copyright (c) 2019 EMQ Technologies Co., Ltd. All Rights Reserved.
 %%
 %% Licensed under the Apache License, Version 2.0 (the "License");
 %% you may not use this file except in compliance with the License.
@@ -11,6 +12,8 @@
 %% WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 %% See the License for the specific language governing permissions and
 %% limitations under the License.
+%%--------------------------------------------------------------------
+
 
 %%--------------------------------------------------------------------
 %% MQTT-SN Types
@@ -59,7 +62,12 @@
 %% MQTT-SN Message
 %%--------------------------------------------------------------------
 
--record(mqtt_sn_flags, {dup, qos, retain, will, clean_start, topic_id_type}).
+-record(mqtt_sn_flags, {dup = false,
+                        qos,
+                        retain = false,
+                        will,
+                        clean_start,
+                        topic_id_type}).
 
 -type(mqtt_sn_flags() :: #mqtt_sn_flags{}).
 
