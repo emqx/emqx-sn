@@ -781,8 +781,7 @@ send_message_to_device(Deliver = {deliver, _Topic, _Msgs}, ClientId, StateData =
                             {ok, NChanState2}
                         end, {ok, NChanState}, Packets);
         {ok, Packet, NChanState} ->
-            NState = StateData#state{chan_state = NChanState},
-            send_message_to_device({publish, Packet}, ClientId, NState#state{chan_state = NChanState});
+            send_message_to_device({publish, Packet}, ClientId, StateData#state{chan_state = NChanState});
         {stop, Reason, NChanState} ->
             stop(Reason, StateData#state{chan_state = NChanState})
     end;
