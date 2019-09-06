@@ -385,7 +385,7 @@ handle_event(info, {timeout, Timer, emit_stats}, _StateName,
                                 chan_state    = ChanState}) ->
     emqx_cm:set_chan_stats(emqx_channel:info(client_id, ChanState), stats(StateData)),
     {keep_state, StateData#state{stats_timer = undefined}};
-    
+
 handle_event(info, {redeliver, {?PUBREL, MsgId}}, _StateName, StateData) ->
     send_message(?SN_PUBREC_MSG(?SN_PUBREL, MsgId), StateData),
     {keep_state, StateData};
@@ -773,13 +773,16 @@ send_message_to_device(Deliver = {deliver, _Topic, _Msgs}, ClientId, StateData =
     case emqx_channel:handle_out({deliver, emqx_misc:drain_deliver([Deliver])}, ChanState) of
         {ok, NChanState} ->
             keep_state(StateData#state{chan_state = NChanState});
-        {ok, Packets, NChanState} ->
+        {ok, Packets, NChanState} when is_list(Packets) ->
             NState = StateData#state{chan_state = NChanState},
             lists:foldl(fun(PubPkt, {ok, NChanState1}) ->
-                                {ok, NChanState2} =
-                                    send_message_to_device({publish, PubPkt}, ClientId, NState#state{chan_state = NChanState1}),
-                                {ok, NChanState2}
+                            {ok, NChanState2} =
+                                send_message_to_device({publish, PubPkt}, ClientId, NState#state{chan_state = NChanState1}),
+                            {ok, NChanState2}
                         end, {ok, NChanState}, Packets);
+        {ok, Packet, NChanState} ->
+            NState = StateData#state{chan_state = NChanState},
+            send_message_to_device({publish, Packet}, ClientId, NState#state{chan_state = NChanState});
         {stop, Reason, NChanState} ->
             stop(Reason, StateData#state{chan_state = NChanState})
     end;
