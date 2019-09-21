@@ -739,6 +739,7 @@ do_pubrec(PubRec, MsgId, StateData) ->
 channel_init(#state{peer = Peername}) ->
     emqx_channel:init(#{sockname => element(1, hd(element(2, inet:getif()))),
                         peername => Peername,
+                        protocol => 'mqtt-sn',
                         peercert => ?NO_PEERCERT,
                         conn_mod => ?MODULE}, ?DEFAULT_CHAN_OPTIONS).
 
