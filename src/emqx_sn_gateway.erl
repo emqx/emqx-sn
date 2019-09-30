@@ -63,7 +63,7 @@
                 sockpid              :: pid(),
                 peer                 :: {inet:ip_address(), inet:port()},
                 chan_state           :: emqx_channel:chan_state(),
-                client_id            :: binary(),
+                clientid             :: binary(),
                 will_msg             :: #will_msg{},
                 keepalive_interval   :: integer(),
                 keepalive            :: emqx_sn_keepalive:keepalive() | undefined,
@@ -148,7 +148,7 @@ idle(cast, ?SN_PUBLISH_MSG(_Flag, _TopicId, _MsgId, _Data), StateData = #state{e
     {keep_state_and_data, StateData#state.idle_timeout};
 
 idle(cast, ?SN_PUBLISH_MSG(#mqtt_sn_flags{qos = ?QOS_NEG1, topic_id_type = TopicIdType},
-                           TopicId, _MsgId, Data), StateData = #state{client_id = ClientId}) ->
+                           TopicId, _MsgId, Data), StateData = #state{clientid = ClientId}) ->
     TopicName = case (TopicIdType =:= ?SN_SHORT_TOPIC) of
                     false ->
                         emqx_sn_registry:lookup_topic(ClientId, TopicId);
@@ -210,7 +210,7 @@ wait_for_will_msg(EventType, EventContent, StateData) ->
     handle_event(EventType, EventContent, wait_for_will_msg, StateData).
 
 connected(cast, ?SN_REGISTER_MSG(_TopicId, MsgId, TopicName),
-          StateData = #state{client_id = ClientId}) ->
+          StateData = #state{clientid = ClientId}) ->
     case emqx_sn_registry:register_topic(ClientId, TopicName) of
         TopicId when is_integer(TopicId) ->
             ?LOG(debug, "register ClientId=~p, TopicName=~p, TopicId=~p", [ClientId, TopicName, TopicId], StateData),
@@ -305,7 +305,7 @@ asleep(cast, ?SN_PINGREQ_MSG(undefined), StateData) ->
     % ClientId in PINGREQ is mandatory
     {keep_state, StateData};
 
-asleep(cast, ?SN_PINGREQ_MSG(ClientIdPing), StateData = #state{client_id = ClientId}) ->
+asleep(cast, ?SN_PINGREQ_MSG(ClientIdPing), StateData = #state{clientid = ClientId}) ->
     case ClientIdPing of
         ClientId ->
             self() ! do_awake_jobs,
@@ -375,7 +375,7 @@ handle_event(info, Deliver = {deliver, _Topic, Msg}, asleep,
     {keep_state, StateData1#state{asleep_msg_queue = NewAsleepMsgQue}};
 
 handle_event(info, Deliver = {deliver, _Topic, _Msg}, _StateName,
-             StateData = #state{client_id = ClientId}) ->
+             StateData = #state{clientid = ClientId}) ->
     StateData1 = ensure_stats_timer(StateData),
     {ok, NChanState} = send_message_to_device(Deliver, ClientId, StateData1),
     {keep_state, StateData#state{chan_state = NChanState}};
@@ -383,7 +383,7 @@ handle_event(info, Deliver = {deliver, _Topic, _Msg}, _StateName,
 handle_event(info, {timeout, Timer, emit_stats}, _StateName,
              StateData = #state{stats_timer = Timer,
                                 chan_state    = ChanState}) ->
-    emqx_cm:set_chan_stats(emqx_channel:info(client_id, ChanState), stats(StateData)),
+    emqx_cm:set_chan_stats(emqx_channel:info(clientid, ChanState), stats(StateData)),
     {keep_state, StateData#state{stats_timer = undefined}};
 
 handle_event(info, {redeliver, {?PUBREL, MsgId}}, _StateName, StateData) ->
@@ -427,7 +427,7 @@ handle_event(info, {keepalive, check}, StateName, StateData = #state{keepalive =
             shutdown(Error, StateData)
     end;
 
-handle_event(info, do_awake_jobs, StateName, StateData=#state{client_id = ClientId}) ->
+handle_event(info, do_awake_jobs, StateName, StateData=#state{clientid = ClientId}) ->
     ?LOG(debug, "Do awake jobs, statename : ~p", [StateName], StateData),
     NewStateData = process_awake_jobs(ClientId, StateData),
     case StateName of
@@ -456,7 +456,7 @@ handle_event(info, {asleep_timeout, Ref}, StateName, StateData=#state{asleep_tim
         {stop_timer, NewTimer}    -> {keep_state, StateData#state{asleep_timer = NewTimer}}
     end;
 
-handle_event({call, From}, kick, _StateName, StateData = #state{client_id = ClientId}) ->
+handle_event({call, From}, kick, _StateName, StateData = #state{clientid = ClientId}) ->
     ?LOG(warning, "Clientid '~s' will be kicked out", [ClientId], StateData),
     {stop_and_reply, kick, [{reply, From, ok}], StateData};
 
@@ -469,7 +469,7 @@ handle_event(EventType, EventContent, StateName, StateData) ->
          [StateName, {EventType, EventContent}], StateData),
     {keep_state, StateData}.
 
-terminate(Reason, _StateName, #state{client_id = ClientId,
+terminate(Reason, _StateName, #state{clientid = ClientId,
                                      keepalive = Keepalive,
                                      chan_state  = ChanState}) ->
     if
@@ -503,7 +503,7 @@ transform(?PUBLISH_PACKET(QoS, Topic, PacketId, Payload), _FuncMsgIdToTopicId) -
                       QoS =:= ?QOS_0 -> 0;
                       true           -> PacketId
                   end,
-    ClientId = get(client_id),
+    ClientId = get(clientid),
     {TopicIdType, TopicContent} = case emqx_sn_registry:lookup_topic_id(ClientId, Topic) of
                                       {predef, PredefTopicId} ->
                                           {?SN_PREDEFINED_TOPIC, PredefTopicId};
@@ -592,20 +592,20 @@ mqttsn_to_mqtt(?SN_PUBCOMP, MsgId) ->
 do_connect(ClientId, CleanStart, WillFlag, Duration, StateData) ->
     {ok, Username} = emqx_sn_config:get_env(username),
     {ok, Password} = emqx_sn_config:get_env(password),
-    ConnPkt = #mqtt_packet_connect{client_id   = ClientId,
+    ConnPkt = #mqtt_packet_connect{clientid    = ClientId,
                                    clean_start = CleanStart,
                                    username    = Username,
                                    password    = Password,
                                    keepalive   = Duration},
-    put(client_id, ClientId),
+    put(clientid, ClientId),
     case WillFlag of
         true  ->
             send_message(?SN_WILLTOPICREQ_MSG(), StateData),
-            {next_state, wait_for_will_topic, StateData#state{connpkt = ConnPkt, client_id = ClientId, keepalive_interval = Duration}};
+            {next_state, wait_for_will_topic, StateData#state{connpkt = ConnPkt, clientid = ClientId, keepalive_interval = Duration}};
         false ->
             SuccFun = fun(NStateData = #state{chan_state = NChanState}) ->
                               NStateData1 =
-                                  NStateData#state{client_id = ClientId,
+                                  NStateData#state{clientid = ClientId,
                                                    keepalive_interval = Duration,
                                                    chan_state = NChanState},
                               {next_state, connected, NStateData1}
@@ -613,14 +613,14 @@ do_connect(ClientId, CleanStart, WillFlag, Duration, StateData) ->
             handle_incoming(?CONNECT_PACKET(ConnPkt), SuccFun, StateData)
     end.
 
-do_2nd_connect(Flags, Duration, ClientId, StateData = #state{client_id = OldClientId, chan_state = Channel}) ->
+do_2nd_connect(Flags, Duration, ClientId, StateData = #state{clientid = OldClientId, chan_state = Channel}) ->
     emqx_channel:terminate(normal, Channel),
     emqx_sn_registry:unregister_topic(OldClientId),
     Channel1 = channel_init(StateData),
     #mqtt_sn_flags{will = Will, clean_start = CleanStart} = Flags,
     do_connect(ClientId, CleanStart, Will, Duration, StateData#state{chan_state = Channel1}).
 
-do_subscribe(?SN_NORMAL_TOPIC, TopicId, QoS, MsgId, StateData=#state{client_id = ClientId}) ->
+do_subscribe(?SN_NORMAL_TOPIC, TopicId, QoS, MsgId, StateData=#state{clientid = ClientId}) ->
     case emqx_sn_registry:register_topic(ClientId, TopicId)of
         {error, too_large} ->
             send_message(?SN_SUBACK_MSG(#mqtt_sn_flags{qos = QoS}, ?SN_INVALID_TOPIC_ID, MsgId, ?SN_RC_INVALID_TOPIC_ID), StateData),
@@ -630,7 +630,7 @@ do_subscribe(?SN_NORMAL_TOPIC, TopicId, QoS, MsgId, StateData=#state{client_id =
         NewTopicId when is_integer(NewTopicId) ->
             proto_subscribe(TopicId, QoS, MsgId, NewTopicId, StateData)
     end;
-do_subscribe(?SN_PREDEFINED_TOPIC, TopicId, QoS, MsgId, StateData = #state{client_id = ClientId}) ->
+do_subscribe(?SN_PREDEFINED_TOPIC, TopicId, QoS, MsgId, StateData = #state{clientid = ClientId}) ->
     case emqx_sn_registry:lookup_topic(ClientId, TopicId) of
         undefined ->
             send_message(?SN_SUBACK_MSG(#mqtt_sn_flags{qos = QoS}, TopicId, MsgId, ?SN_RC_INVALID_TOPIC_ID), StateData),
@@ -653,7 +653,7 @@ do_subscribe(_, _TopicId, QoS, MsgId, StateData) ->
 do_unsubscribe(?SN_NORMAL_TOPIC, TopicId, MsgId, StateData) ->
     proto_unsubscribe(TopicId, MsgId, StateData);
 
-do_unsubscribe(?SN_PREDEFINED_TOPIC, TopicId, MsgId, StateData = #state{client_id = ClientId}) ->
+do_unsubscribe(?SN_PREDEFINED_TOPIC, TopicId, MsgId, StateData = #state{clientid = ClientId}) ->
     case emqx_sn_registry:lookup_topic(ClientId, TopicId) of
         undefined ->
             send_message(?SN_UNSUBACK_MSG(MsgId), StateData),
@@ -674,7 +674,7 @@ do_unsubscribe(_, _TopicId, MsgId, StateData) ->
 do_publish(?SN_NORMAL_TOPIC, TopicId, Data, Flags, MsgId, StateData) ->
     %% Handle normal topic id as predefined topic id, to be compatible with paho mqtt-sn library
     do_publish(?SN_PREDEFINED_TOPIC, TopicId, Data, Flags, MsgId, StateData);
-do_publish(?SN_PREDEFINED_TOPIC, TopicId, Data, Flags, MsgId, StateData=#state{client_id = ClientId}) ->
+do_publish(?SN_PREDEFINED_TOPIC, TopicId, Data, Flags, MsgId, StateData=#state{clientid = ClientId}) ->
     #mqtt_sn_flags{qos = QoS, dup = Dup, retain = Retain} = Flags,
     NewQoS = get_corrected_qos(QoS, StateData),
     case emqx_sn_registry:lookup_topic(ClientId, TopicId) of
@@ -715,7 +715,7 @@ do_publish_will(StateData = #state{will_msg = WillMsg}) ->
     %% 1000?
     QoS =:= ?QOS_2 andalso handle_incoming(?PUBREL_PACKET(1000), fun keep_state/1, StateData).
 
-do_puback(TopicId, MsgId, ReturnCode, _StateName, StateData=#state{client_id = ClientId}) ->
+do_puback(TopicId, MsgId, ReturnCode, _StateName, StateData=#state{clientid = ClientId}) ->
     case ReturnCode of
         ?SN_RC_ACCEPTED ->
             handle_incoming(?PUBACK_PACKET(MsgId), fun keep_state/1, StateData);
