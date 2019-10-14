@@ -134,7 +134,7 @@ serialize(#mqtt_sn_message{type = Type, variable = Var}) ->
     VarBin = serialize(Type, Var), VarLen = size(VarBin),
     if
         VarLen < 254 -> <<(VarLen + 2), Type, VarBin/binary>>;
-        true         -> <<16#01, (VarLen + 4):?short, Type, VarBin/binary>>
+        true -> <<16#01, (VarLen + 4):?short, Type, VarBin/binary>>
     end.
 
 serialize(?SN_ADVERTISE, {GwId, Duration}) ->
@@ -305,5 +305,5 @@ format(#mqtt_sn_message{type = Type, variable = Var}) ->
 format_flag(#mqtt_sn_flags{dup = Dup, qos = QoS, retain = Retain, will = Will, clean_start = CleanStart, topic_id_type = TopicType}) ->
     io_lib:format("mqtt_sn_flags{dup=~p, qos=~p, retain=~p, will=~p, clean_session=~p, topic_id_type=~p}",
                   [Dup, QoS, Retain, Will, CleanStart, TopicType]);
-format_flag(_Flag) ->
-    "invalid flag".
+format_flag(_Flag) -> "invalid flag".
+
