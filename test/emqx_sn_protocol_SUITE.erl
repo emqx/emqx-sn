@@ -50,44 +50,43 @@ all() -> [{group, protocol}].
 
 groups() ->
     [{protocol, [non_parallel_tests],
-      [
-       connect_test01,connect_test02,connect_test03,
-       subscribe_test, subscribe_test1, subscribe_test2, 
-       subscribe_test3, subscribe_test4, subscribe_test5, 
-       subscribe_test6, subscribe_test7, subscribe_test8,
+      [connect_test01,connect_test02,connect_test03,
+      subscribe_test, subscribe_test1, subscribe_test2,
+      subscribe_test3, subscribe_test4, subscribe_test5,
+      subscribe_test6, subscribe_test7, subscribe_test8,
 
-       publish_negqos_test1,
-       publish_qos0_test1,
-       publish_qos0_test2,
-       publish_qos0_test3,
-       publish_qos0_test4, publish_qos0_test5,
-       publish_qos0_test6,
+      publish_negqos_test1,
+      publish_qos0_test1,
+      publish_qos0_test2,
+      publish_qos0_test3,
+      publish_qos0_test4, publish_qos0_test5,
+      publish_qos0_test6,
 
-       publish_qos1_test1,
-       publish_qos1_test2, publish_qos1_test3,
-       publish_qos1_test4, publish_qos1_test5, publish_qos1_test6,
+      publish_qos1_test1,
+      publish_qos1_test2, publish_qos1_test3,
+      publish_qos1_test4, publish_qos1_test5, publish_qos1_test6,
 
-       publish_qos2_test1,
-       publish_qos2_test2, publish_qos2_test3,
+      publish_qos2_test1,
+      publish_qos2_test2, publish_qos2_test3,
 
-       will_test1, will_test2, will_test3, will_test4, will_test5,
-       broadcast_test1,
-       asleep_test01_timeout, asleep_test02_to_awake_and_back,
-       asleep_test03_to_awake_qos1_dl_msg, 
-       asleep_test04_to_awake_qos1_dl_msg,
-       asleep_test05_to_awake_qos1_dl_msg,
-       asleep_test06_to_awake_qos2_dl_msg,
-       asleep_test07_to_connected,
-       asleep_test08_to_disconnected,
-       asleep_test09_to_awake_again_qos1_dl_msg,
-       awake_test01_to_connected, awake_test02_to_disconnected
+      will_test1, will_test2, will_test3, will_test4, will_test5,
+      broadcast_test1,
+      asleep_test01_timeout, asleep_test02_to_awake_and_back,
+      asleep_test03_to_awake_qos1_dl_msg,
+      asleep_test04_to_awake_qos1_dl_msg,
+      asleep_test05_to_awake_qos1_dl_msg,
+      asleep_test06_to_awake_qos2_dl_msg,
+      asleep_test07_to_connected,
+      asleep_test08_to_disconnected,
+      asleep_test09_to_awake_again_qos1_dl_msg,
+      awake_test01_to_connected, awake_test02_to_disconnected
       ]}].
 
-init_per_testcase(_TestCase, Config) ->
+init_per_suite(Config) ->
     emqx_ct_helpers:start_apps([emqx, emqx_sn], fun set_special_configs/1),
     Config.
 
-end_per_testcase(_TestCase, _Config) ->
+end_per_suite(_Config) ->
     emqx_ct_helpers:stop_apps([emqx_sn, emqx]).
 
 connect_test01(_Config) ->
@@ -223,7 +222,7 @@ subscribe_test3(_Config) ->
     ?assertEqual(<<8, ?SN_SUBACK, Dup:1, QoS:2, Retain:1, Will:1, CleanSession:1,
                    ?SN_NORMAL_TOPIC:2, TopicId:16, MsgId:16, ReturnCode>>,
                  receive_response(Socket)),
- 
+
     send_unsubscribe_msg_short_topic(Socket, <<"te">>, MsgId),
     ?assertEqual(<<4, ?SN_UNSUBACK, MsgId:16>>, receive_response(Socket)),
 
@@ -432,8 +431,8 @@ publish_qos0_test1(_Config) ->
 
     Topic = <<"abc">>,
     send_subscribe_msg_normal_topic(Socket, QoS, Topic, MsgId),
-    ?assertEqual(<<8, ?SN_SUBACK, Dup:1, QoS:2, Retain:1, Will:1, 
-                   CleanSession:1, ?SN_NORMAL_TOPIC:2, TopicId1:16, 
+    ?assertEqual(<<8, ?SN_SUBACK, Dup:1, QoS:2, Retain:1, Will:1,
+                   CleanSession:1, ?SN_NORMAL_TOPIC:2, TopicId1:16,
                    MsgId:16, ?SN_RC_ACCEPTED>>,
                  receive_response(Socket)),
     MsgId1 = 3,
@@ -1058,14 +1057,13 @@ asleep_test03_to_awake_qos1_dl_msg(_Config) ->
 
     % goto awake state, receive downlink messages, and go back to asleep
     send_pingreq_msg(Socket, <<"test">>),
-    
+    ?assertEqual(<<2, ?SN_PINGRESP>>, receive_response(Socket)),
+
     %% {unexpected_udp_data, _} = receive_response(Socket),
 
     UdpData = receive_response(Socket),
     MsgId_udp = check_publish_msg_on_udp({Dup, QoS, Retain, WillBit, CleanSession, ?SN_NORMAL_TOPIC, TopicId1, Payload1}, UdpData),
     send_puback_msg(Socket, TopicId1, MsgId_udp),
-
-    ?assertEqual(<<2, ?SN_PINGRESP>>, receive_response(Socket)),
 
     gen_udp:close(Socket).
 
@@ -1116,6 +1114,8 @@ asleep_test04_to_awake_qos1_dl_msg(_Config) ->
     % goto awake state, receive downlink messages, and go back to asleep
     send_pingreq_msg(Socket, <<"test">>),
 
+    ?assertEqual(<<2, ?SN_PINGRESP>>, receive_response(Socket)),
+
     %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
     %% get REGISTER first, since this topic has never been registered
     %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
@@ -1126,8 +1126,6 @@ asleep_test04_to_awake_qos1_dl_msg(_Config) ->
     UdpData = receive_response(Socket),
     MsgId_udp = check_publish_msg_on_udp({Dup, QoS, Retain, WillBit, CleanSession, ?SN_NORMAL_TOPIC, TopicIdNew, Payload1}, UdpData),
     send_puback_msg(Socket, TopicIdNew, MsgId_udp),
-
-    ?assertEqual(<<2, ?SN_PINGRESP>>, receive_response(Socket)),
 
     gen_udp:close(Socket).
 
@@ -1183,6 +1181,7 @@ asleep_test05_to_awake_qos1_dl_msg(_Config) ->
 
     % goto awake state, receive downlink messages, and go back to asleep
     send_pingreq_msg(Socket, <<"test">>),
+    ?assertEqual(<<2, ?SN_PINGRESP>>, receive_response(Socket)),
 
     UdpData_reg = receive_response(Socket),
     {TopicIdNew, MsgId_reg} = check_register_msg_on_udp(TopicName_test5, UdpData_reg),
@@ -1258,14 +1257,13 @@ asleep_test06_to_awake_qos2_dl_msg(_Config) ->
 
     % goto awake state, receive downlink messages, and go back to asleep
     send_pingreq_msg(Socket, <<"test">>),
+    ?assertEqual(<<2, ?SN_PINGRESP>>, receive_response(Socket)),
 
     UdpData = wrap_receive_response(Socket),
     MsgId_udp = check_publish_msg_on_udp({Dup, QoS, Retain, WillBit, CleanSession, ?SN_NORMAL_TOPIC, TopicId_tom, Payload1}, UdpData),
     send_pubrec_msg(Socket, MsgId_udp),
 
     timer:sleep(300),
-
-    ?assertEqual(<<2, ?SN_PINGRESP>>, receive_response(Socket)),
 
     gen_udp:close(Socket).
 
@@ -1383,7 +1381,6 @@ asleep_test09_to_awake_again_qos1_dl_msg(_Config) ->
 
     timer:sleep(1000),
 
-
     %% send downlink data in asleep state. This message should be send to device once it wake up
     Payload2 = <<55, 66, 77, 88, 99>>,
     Payload3 = <<61, 71, 81>>,
@@ -1402,12 +1399,14 @@ asleep_test09_to_awake_again_qos1_dl_msg(_Config) ->
     % goto awake state, receive downlink messages, and go back to asleep
     send_pingreq_msg(Socket, <<"test">>),
 
+    ?assertEqual(<<2, ?SN_PINGRESP>>, receive_response(Socket)),
+
     UdpData_reg = receive_response(Socket),
     {TopicIdNew, MsgId_reg} = check_register_msg_on_udp(TopicName_test9, UdpData_reg),
     send_regack_msg(Socket, TopicIdNew, MsgId_reg),
 
     case wrap_receive_response(Socket) of
-        udp_receive_timeout -> 
+        udp_receive_timeout ->
             ok;
         UdpData2 ->
             MsgId2 = check_publish_msg_on_udp({Dup, QoS, Retain, WillBit, CleanSession, ?SN_NORMAL_TOPIC, TopicIdNew, Payload2}, UdpData2),
@@ -1416,7 +1415,7 @@ asleep_test09_to_awake_again_qos1_dl_msg(_Config) ->
     timer:sleep(100),
 
     case wrap_receive_response(Socket) of
-        udp_receive_timeout -> 
+        udp_receive_timeout ->
             ok;
         UdpData3 ->
             MsgId3 = check_publish_msg_on_udp({Dup, QoS, Retain, WillBit, CleanSession, ?SN_NORMAL_TOPIC, TopicIdNew, Payload3}, UdpData3),
@@ -1425,7 +1424,7 @@ asleep_test09_to_awake_again_qos1_dl_msg(_Config) ->
     timer:sleep(100),
 
     case wrap_receive_response(Socket) of
-        udp_receive_timeout -> 
+        udp_receive_timeout ->
             ok;
         UdpData4 ->
             MsgId4 = check_publish_msg_on_udp({Dup, QoS, Retain, WillBit,
@@ -1434,8 +1433,6 @@ asleep_test09_to_awake_again_qos1_dl_msg(_Config) ->
             send_puback_msg(Socket, TopicIdNew, MsgId4)
     end,
     timer:sleep(100),
-
-    receive_response(Socket),
 
     %% send PINGREQ again to enter awake state
     send_pingreq_msg(Socket, <<"test">>),
