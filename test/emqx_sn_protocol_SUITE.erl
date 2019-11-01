@@ -50,7 +50,9 @@ all() -> [{group, protocol}].
 
 groups() ->
     [{protocol, [non_parallel_tests],
-      [connect_test01,connect_test02,connect_test03,
+      [connect_test01,
+       connect_test02,
+       %connect_test03,
        subscribe_test, subscribe_test1, subscribe_test2,
        subscribe_test3, subscribe_test4, subscribe_test5,
        subscribe_test6, subscribe_test7, subscribe_test8,
@@ -102,7 +104,7 @@ connect_test02(_Config) ->
     ?assertEqual(<<3, ?SN_CONNACK, 0>>, receive_response(Socket)),
     timer:sleep(100),
     send_connect_msg(Socket, <<"client_id_test3">>),
-    ?assertEqual(<<3, ?SN_CONNACK, 0>>, receive_response(Socket)),
+    ?assertEqual(udp_receive_timeout, receive_response(Socket, 1000)),
     gen_udp:close(Socket).
 
 connect_test03(_Config) ->
@@ -1790,8 +1792,9 @@ wrap_receive_response(Socket) ->
             ct:log("Other: ~p", [Other]),
             Other
     end.
-
 receive_response(Socket) ->
+    receive_response(Socket, 5000).
+receive_response(Socket, Timeout) ->
     receive
         {udp, Socket, _, _, Bin} ->
             ?LOG("receive_response Bin=~p~n", [Bin]),
@@ -1802,7 +1805,7 @@ receive_response(Socket) ->
         Other ->
             ?LOG("receive_response() Other message: ~p", [{unexpected_udp_data, Other}]),
             receive_response(Socket)
-    after 5000 ->
+    after Timeout ->
         udp_receive_timeout
     end.
 

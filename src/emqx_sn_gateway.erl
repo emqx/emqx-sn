@@ -190,7 +190,8 @@ idle(cast, {outgoing, Packet}, StateData) ->
     ok = handle_outgoing(Packet, StateData),
     {keep_state, StateData};
 
-idle(cast, {enter, connected}, StateData) ->
+idle(cast, {connack, ConnAck}, StateData) ->
+    ok = handle_outgoing(ConnAck, StateData),
     {next_state, connected, StateData};
 
 idle(timeout, _Timeout, StateData) ->
@@ -221,7 +222,8 @@ wait_for_will_topic(cast, {outgoing, Packet}, StateData) ->
     ok = handle_outgoing(Packet, StateData),
     {keep_state, StateData};
 
-wait_for_will_topic(cast, {enter, connected}, StateData) ->
+wait_for_will_topic(cast, {connack, ConnAck}, StateData) ->
+    ok = handle_outgoing(ConnAck, StateData),
     {next_state, connected, StateData};
 
 wait_for_will_topic(cast, Event, StateData) ->
@@ -247,7 +249,8 @@ wait_for_will_msg(cast, {outgoing, Packet}, StateData) ->
     ok = handle_outgoing(Packet, StateData),
     {keep_state, StateData};
 
-wait_for_will_msg(cast, {enter, connected}, StateData) ->
+wait_for_will_msg(cast, {connack, ConnAck}, StateData) ->
+    ok = handle_outgoing(ConnAck, StateData),
     {next_state, connected, StateData};
 
 wait_for_will_msg(EventType, EventContent, StateData) ->
@@ -336,8 +339,8 @@ connected(cast, {outgoing, Packet}, StateData) ->
     ok = handle_outgoing(Packet, StateData),
     {keep_state, StateData};
 
-connected(cast, {enter, disconnected}, StateData) ->
-    {stop, {shutdown, disconnected}, StateData};
+connected(cast, {shutdown, Reason}, StateData) ->
+    {stop, {shutdown, Reason}, StateData};
 
 connected(cast, {close, Reason}, StateData) ->
     {stop, {shutdown, Reason}, StateData};
@@ -415,23 +418,21 @@ awake(EventType, EventContent, StateData) ->
     handle_event(EventType, EventContent, awake, StateData).
 
 handle_event(info, {datagram, SockPid, Data}, StateName,
-             StateData = #state{sockpid = SockPid, channel = Channel}) ->
+             StateData = #state{sockpid = SockPid, channel = _Channel}) ->
     ?LOG(debug, "RECV ~p", [Data], StateData),
     Oct = iolist_size(Data),
-    emqx_pd:update_counter(recv_oct, Oct),
-    {ok, NChannel} = emqx_channel:handle_in(Oct, Channel),
-    StateData1 = StateData#state{channel = NChannel},
+    emqx_pd:inc_counter(recv_oct, Oct),
     try emqx_sn_frame:parse(Data) of
         {ok, Msg} ->
-            emqx_pd:update_counter(recv_cnt, 1),
+            emqx_pd:inc_counter(recv_cnt, 1),
             ?LOG(info, "RECV ~s at state ~s",
-                 [emqx_sn_frame:format(Msg), StateName], StateData1),
-            {keep_state, StateData1, next_event({incoming, Msg})}
+                 [emqx_sn_frame:format(Msg), StateName], StateData),
+            {keep_state, StateData, next_event({incoming, Msg})}
     catch
         error:Error:Stacktrace ->
             ?LOG(info, "Parse frame error: ~p at state ~s, Stacktrace: ~p",
-                 [Error, StateName, Stacktrace], StateData1),
-            shutdown(frame_error, StateData1)
+                 [Error, StateName, Stacktrace], StateData),
+            shutdown(frame_error, StateData)
     end;
 
 handle_event(info, Deliver = {deliver, _Topic, Msg}, asleep,
@@ -510,8 +511,8 @@ code_change(_Vsn, StateName, StateData, _Extra) ->
     {ok, StateName, StateData}.
 
 handle_ping(_PingReq, StateData) ->
-    emqx_pd:update_counter(recv_oct, 2),
-    emqx_pd:update_counter(recv_msg, 1),
+    emqx_pd:inc_counter(recv_oct, 2),
+    emqx_pd:inc_counter(recv_msg, 1),
     ok = send_message(?SN_PINGRESP_MSG(), StateData),
     {keep_state, StateData}.
 
@@ -524,6 +525,9 @@ handle_return({ok, NChannel}, StateData) ->
     {keep_state, StateData#state{channel = NChannel}};
 handle_return({ok, Replies, NChannel}, StateData) ->
     {keep_state, StateData#state{channel = NChannel}, next_events(Replies)};
+
+handle_return({shutdown, Reason, NChannel}, StateData) ->
+    stop(Reason, StateData#state{channel = NChannel});
 handle_return({stop, Reason, NChannel}, StateData) ->
     stop(Reason, StateData#state{channel = NChannel});
 handle_return({stop, Reason, OutPacket, NChannel}, StateData) ->
@@ -912,18 +916,18 @@ transform_fun() ->
     fun(Packet) -> transform(Packet, FunMsgIdToTopicId) end.
 
 inc_incoming_stats(Type) ->
-    emqx_pd:update_counter(recv_pkt, 1),
+    emqx_pd:inc_counter(recv_pkt, 1),
     case Type == ?PUBLISH of
         true ->
-            emqx_pd:update_counter(recv_msg, 1),
-            emqx_pd:update_counter(incoming_pubs, 1);
+            emqx_pd:inc_counter(recv_msg, 1),
+            emqx_pd:inc_counter(incoming_pubs, 1);
         false -> ok
     end.
 
 inc_outgoing_stats(Type) ->
-    emqx_pd:update_counter(send_pkt, 1),
+    emqx_pd:inc_counter(send_pkt, 1),
     (Type == ?SN_PUBLISH)
-        andalso emqx_pd:update_counter(send_msg, 1).
+        andalso emqx_pd:inc_counter(send_msg, 1).
 
 next_event(Content) ->
     {next_event, cast, Content}.
