@@ -339,6 +339,10 @@ connected(cast, {outgoing, Packet}, StateData) ->
     ok = handle_outgoing(Packet, StateData),
     {keep_state, StateData};
 
+connected(cast, {shutdown, Reason, Packet}, StateData) ->
+    ok = handle_outgoing(Packet, StateData),
+    {stop, {shutdown, Reason}, StateData};
+
 connected(cast, {shutdown, Reason}, StateData) ->
     {stop, {shutdown, Reason}, StateData};
 

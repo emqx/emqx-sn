@@ -139,6 +139,7 @@ subscribe_test(_Config) ->
 
     send_unsubscribe_msg_normal_topic(Socket, TopicName1, MsgId),
     ?assertEqual(<<4, ?SN_UNSUBACK, MsgId:16>>, receive_response(Socket)),
+    timer:sleep(100),
     ?assertEqual([], emqx_broker:topics()),
 
     send_disconnect_msg(Socket, undefined),
