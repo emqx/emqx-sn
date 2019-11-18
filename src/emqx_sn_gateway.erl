@@ -83,7 +83,7 @@
 -define(IDLE_TIMEOUT, 30000).
 -define(DEFAULT_CHAN_OPTIONS, [{max_packet_size, 256}, {zone, external}]).
 -define(LOG(Level, Format, Args, State),
-        emqx_logger:Level("MQTT-SN(~s): " ++ Format, [esockd_net:format(State#state.peername) | Args])).
+        emqx_logger:Level("MQTT-SN(~s): " ++ Format, [esockd:format(State#state.peername) | Args])).
 
 -define(NEG_QOS_CLIENT_ID, <<"NegQoS-Client">>).
 
