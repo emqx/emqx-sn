@@ -1059,7 +1059,7 @@ asleep_test03_to_awake_qos1_dl_msg(_Config) ->
     timer:sleep(50),
 
     % goto awake state, receive downlink messages, and go back to asleep
-    send_pingreq_msg(Socket, <<"test">>),
+    send_pingreq_msg(Socket, ClientId),
     ?assertEqual(<<2, ?SN_PINGRESP>>, receive_response(Socket)),
 
     %% {unexpected_udp_data, _} = receive_response(Socket),
@@ -1366,7 +1366,7 @@ asleep_test09_to_awake_again_qos1_dl_msg(_Config) ->
     ?assertEqual(<<3, ?SN_CONNACK, 0>>, receive_response(Socket)),
 
     % subscribe
-    TopicName1 = <<"u/+/w">>,
+    TopicName1 = <<"u/+/k">>,
     MsgId1 = 25,
     TopicId0 = 0,
     WillBit = 0,
@@ -1388,7 +1388,7 @@ asleep_test09_to_awake_again_qos1_dl_msg(_Config) ->
     Payload2 = <<55, 66, 77, 88, 99>>,
     Payload3 = <<61, 71, 81>>,
     Payload4 = <<100, 101, 102, 103, 104, 105, 106, 107>>,
-    TopicName_test9 = <<"u/v/w">>,
+    TopicName_test9 = <<"u/v/k">>,
     {ok, C} = emqtt:start_link(),
     {ok, _} = emqtt:connect(C),
     {ok, _} = emqtt:publish(C, TopicName_test9, Payload2, QoS),
