@@ -894,7 +894,8 @@ handle_outgoing(PubPkt = ?PUBLISH_PACKET(QoS, TopicName, PacketId, Payload),
                 StateData = #state{clientid = ClientId, transform = Transform}) ->
     #mqtt_packet{header = #mqtt_packet_header{dup = Dup, retain = Retain}} = PubPkt,
     MsgId = message_id(PacketId),
-    ?LOG(debug, "The TopicName of mqtt_message=~p~n", [TopicName], StateData),
+    ?LOG(debug, "Handle outgoing: ~p", [PubPkt], StateData),
+
     (emqx_sn_registry:lookup_topic_id(ClientId, TopicName) == undefined)
         andalso (byte_size(TopicName) =/= 2)
             andalso register_and_notify_client(TopicName, Payload, Dup, QoS,
