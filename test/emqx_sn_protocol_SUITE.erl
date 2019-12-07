@@ -1059,7 +1059,7 @@ asleep_test03_to_awake_qos1_dl_msg(_Config) ->
     timer:sleep(50),
 
     % goto awake state, receive downlink messages, and go back to asleep
-    send_pingreq_msg(Socket, <<"test">>),
+    send_pingreq_msg(Socket, ClientId),
     ?assertEqual(<<2, ?SN_PINGRESP>>, receive_response(Socket)),
 
     %% {unexpected_udp_data, _} = receive_response(Socket),
