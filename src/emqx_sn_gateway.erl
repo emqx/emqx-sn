@@ -392,7 +392,7 @@ asleep(cast, {incoming, ?SN_PUBREC_MSG(PubRec, MsgId)}, StateData)
 %    4) emq-sn regard this CONNECT as a signal to connected state, not a bootup CONNECT. For this reason, will procedure is lost
 % this should be a bug in mqtt-sn channel.
 asleep(cast, {incoming, ?SN_CONNECT_MSG(_Flags, _ProtoId, _Duration, _ClientId)},
-       StateData = #state{keepalive_interval = Interval}) ->
+       StateData = #state{keepalive_interval = _Interval}) ->
     % device wakeup and goto connected state
     % keepalive timer may timeout in asleep state and delete itself, need to restart keepalive
     % TODO: Fixme later.
@@ -447,7 +447,7 @@ handle_event(info, Deliver = {deliver, _Topic, Msg}, asleep,
 
 handle_event(info, Deliver = {deliver, _Topic, _Msg}, _StateName,
              StateData = #state{channel = Channel}) ->
-    handle_return(emqx_channel:handle_out([Deliver], Channel), StateData);
+    handle_return(emqx_channel:handle_deliver([Deliver], Channel), StateData);
 
 handle_event(info, {redeliver, {?PUBREL, MsgId}}, _StateName, StateData) ->
     send_message(?SN_PUBREC_MSG(?SN_PUBREL, MsgId), StateData),
@@ -483,7 +483,7 @@ handle_event(info, {asleep_timeout, Ref}, StateName, StateData=#state{asleep_tim
     ?LOG(debug, "asleep_timeout at ~p", [StateName], StateData),
     case emqx_sn_asleep_timer:timeout(AsleepTimer, StateName, Ref) of
         terminate_process         -> stop(asleep_timeout, StateData);
-        {restart_timer, NewTimer} -> goto_asleep_state(StateData#state{asleep_timer = NewTimer}, undefined);
+        {restart_timer, NewTimer} -> goto_asleep_state(undefined, StateData#state{asleep_timer = NewTimer});
         {stop_timer, NewTimer}    -> {keep_state, StateData#state{asleep_timer = NewTimer}}
     end;
 
@@ -848,7 +848,7 @@ process_awake_jobs(_ClientId, StateData = #state{channel = Channel,
                                                  asleep_msg_queue = AsleepMsgQ}) ->
     Delivers = lists:reverse(AsleepMsgQ),
     NStateData = StateData#state{asleep_msg_queue = []},
-    Result = emqx_channel:handle_out(Delivers, Channel),
+    Result = emqx_channel:handle_deliver(Delivers, Channel),
     handle_return(Result, NStateData).
 
 enqueue_msgid(suback, MsgId, TopicId) ->
@@ -894,7 +894,8 @@ handle_outgoing(PubPkt = ?PUBLISH_PACKET(QoS, TopicName, PacketId, Payload),
                 StateData = #state{clientid = ClientId, transform = Transform}) ->
     #mqtt_packet{header = #mqtt_packet_header{dup = Dup, retain = Retain}} = PubPkt,
     MsgId = message_id(PacketId),
-    ?LOG(debug, "The TopicName of mqtt_message=~p~n", [TopicName], StateData),
+    ?LOG(debug, "Handle outgoing: ~p", [PubPkt], StateData),
+
     (emqx_sn_registry:lookup_topic_id(ClientId, TopicName) == undefined)
         andalso (byte_size(TopicName) =/= 2)
             andalso register_and_notify_client(TopicName, Payload, Dup, QoS,
