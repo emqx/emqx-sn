@@ -52,7 +52,7 @@ stop() ->
 %%--------------------------------------------------------------------
 
 init([GwId, Port]) ->
-    Duration = emqx_sn_config:get_env(advertise_duration, ?DEFAULT_DURATION),
+    Duration = application:get_env(emqx_sn, advertise_duration, ?DEFAULT_DURATION),
     {ok, Sock} = gen_udp:open(0, [binary, {broadcast, true}]),
     {ok, ensure_advertise(#state{gwid = GwId, addrs = boradcast_addrs(),
                                  sock = Sock, port = Port, duration = Duration})}.

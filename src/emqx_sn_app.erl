@@ -25,11 +25,10 @@
         ]).
 
 start(_Type, _Args) ->
-    Port = emqx_sn_config:get_env(port, 1884),
-    GwId = emqx_sn_config:get_env(gateway_id, 1),
-    emqx_sn_config:register(),
+    Port = application:get_env(emqx_sn, port, 1884),
+    GwId = application:get_env(emqx_sn, gateway_id, 1),
     emqx_sn_sup:start_link(Port, GwId).
 
 stop(_State) ->
-    emqx_sn_config:unregister().
+    ok.
 
