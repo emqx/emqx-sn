@@ -47,77 +47,63 @@
 % FLAG NOT USED
 -define(FNU, 0).
 
-all() -> [{group, protocol}].
+%%--------------------------------------------------------------------
+%% Setups
+%%--------------------------------------------------------------------
 
-groups() ->
-    [{protocol, [non_parallel_tests],
-      [connect_test01,
-       connect_test02,
-       %connect_test03,
-       subscribe_test, subscribe_test1, subscribe_test2,
-       subscribe_test3, subscribe_test4, subscribe_test5,
-       subscribe_test6, subscribe_test7, subscribe_test8,
-
-       publish_negqos_test1,
-       publish_qos0_test1,
-       publish_qos0_test2,
-       publish_qos0_test3,
-       publish_qos0_test4, publish_qos0_test5,
-       publish_qos0_test6,
-
-       publish_qos1_test1,
-       publish_qos1_test2, publish_qos1_test3,
-       publish_qos1_test4, publish_qos1_test5, publish_qos1_test6,
-
-       publish_qos2_test1,
-       publish_qos2_test2, publish_qos2_test3,
-
-       will_test1, will_test2, will_test3, will_test4, will_test5,
-       broadcast_test1,
-       asleep_test01_timeout, asleep_test02_to_awake_and_back,
-       asleep_test03_to_awake_qos1_dl_msg,
-       asleep_test04_to_awake_qos1_dl_msg,
-       asleep_test05_to_awake_qos1_dl_msg,
-       asleep_test06_to_awake_qos2_dl_msg,
-       asleep_test07_to_connected,
-       asleep_test08_to_disconnected,
-       asleep_test09_to_awake_again_qos1_dl_msg,
-       awake_test01_to_connected, awake_test02_to_disconnected
-      ]}].
+all() ->
+    emqx_ct:all(?MODULE).
 
 init_per_suite(Config) ->
-    emqx_ct_helpers:start_apps([emqx, emqx_sn], fun set_special_configs/1),
+    emqx_ct_helpers:start_apps([emqx_sn], fun set_special_confs/1),
     Config.
 
-end_per_suite(_Config) ->
-    emqx_ct_helpers:stop_apps([emqx_sn, emqx]).
+end_per_suite(_) ->
+    emqx_ct_helpers:stop_apps([emqx_sn]).
 
-connect_test01(_Config) ->
+set_special_confs(emqx) ->
+    application:set_env(emqx, plugins_loaded_file,
+                        emqx_ct_helpers:deps_path(emqx, "test/emqx_SUITE_data/loaded_plugins"));
+set_special_confs(emqx_sn) ->
+    application:set_env(emqx_sn, enable_qos3, ?ENABLE_QOS3),
+    application:set_env(emqx_sn, enable_stats, true),
+    application:set_env(emqx_sn, username, <<"user1">>),
+    application:set_env(emqx_sn, password, <<"pw123">>),
+    application:set_env(emqx_sn, predefined,
+                        [{?PREDEF_TOPIC_ID1, ?PREDEF_TOPIC_NAME1},
+                         {?PREDEF_TOPIC_ID2, ?PREDEF_TOPIC_NAME2}]);
+set_special_confs(_App) ->
+    ok.
+
+%%--------------------------------------------------------------------
+%% Test cases
+%%--------------------------------------------------------------------
+
+%%--------------------------------------------------------------------
+%% Connect
+
+t_connect(_) ->
     {ok, Socket} = gen_udp:open(0, [binary]),
     send_connect_msg(Socket, <<"client_id_test1">>),
     ?assertEqual(<<3, ?SN_CONNACK, 0>>, receive_response(Socket)),
-    %% ct:log("client users: ~p", [get_online_user()]),
+
+    send_disconnect_msg(Socket, undefined),
+    ?assertEqual(<<2, ?SN_DISCONNECT>>, receive_response(Socket)),
     gen_udp:close(Socket).
 
-connect_test02(_Config) ->
-    {ok, Socket} = gen_udp:open(0, [binary]),
-    send_connect_msg(Socket, <<"client_id_test2">>),
-    ?assertEqual(<<3, ?SN_CONNACK, 0>>, receive_response(Socket)),
-    timer:sleep(100),
-    send_connect_msg(Socket, <<"client_id_test3">>),
-    ?assertEqual(udp_receive_timeout, receive_response(Socket, 1000)),
-    gen_udp:close(Socket).
-
-connect_test03(_Config) ->
+t_do_2nd_connect(_) ->
     {ok, Socket} = gen_udp:open(0, [binary]),
     send_connect_msg(Socket, <<"client_id_test">>),
     ?assertEqual(<<3, ?SN_CONNACK, 0>>, receive_response(Socket)),
     timer:sleep(100),
     send_connect_msg(Socket, <<"client_id_other">>),
     ?assertEqual(<<3, ?SN_CONNACK, 0>>, receive_response(Socket)),
+
+    send_disconnect_msg(Socket, undefined),
+    ?assertEqual(<<2, ?SN_DISCONNECT>>, receive_response(Socket)),
     gen_udp:close(Socket).
 
-subscribe_test(_Config) ->
+t_subscribe(_) ->
     Dup = 0,
     QoS = 0,
     Retain = 0,
@@ -145,10 +131,9 @@ subscribe_test(_Config) ->
 
     send_disconnect_msg(Socket, undefined),
     ?assertEqual(<<2, ?SN_DISCONNECT>>, receive_response(Socket)),
-
     gen_udp:close(Socket).
 
-subscribe_test1(_Config) ->
+t_subscribe_case01(_) ->
     Dup = 0,
     QoS = 0,
     Retain = 0,
@@ -177,7 +162,7 @@ subscribe_test1(_Config) ->
 
     gen_udp:close(Socket).
 
-subscribe_test2(_Config) ->
+t_subscribe_case02(_) ->
     Dup = 0,
     QoS = 0,
     Retain = 0,
@@ -207,7 +192,7 @@ subscribe_test2(_Config) ->
 
     gen_udp:close(Socket).
 
-subscribe_test3(_Config) ->
+t_subscribe_case03(_) ->
     Dup = 0,
     QoS = 2,
     Retain = 0,
@@ -236,7 +221,7 @@ subscribe_test3(_Config) ->
 
 %%In this case We use predefined topic name to register and subcribe, and expect to receive the corresponding predefined topic id but not a new generated topic id from broker. We design this case to illustrate
 %% emqx_sn_gateway's compatibility of dealing with predefined and normal topics. Once we give more restrictions to different topic id type, this case would be deleted or modified.
-subscribe_test4(_Config) ->
+t_subscribe_case04(_) ->
     Dup = 0,
     QoS = 0,
     Retain = 0,
@@ -263,7 +248,7 @@ subscribe_test4(_Config) ->
 
     gen_udp:close(Socket).
 
-subscribe_test5(_Config) ->
+t_subscribe_case05(_) ->
     Dup = 0,
     QoS = 1,
     Retain = 0,
@@ -305,7 +290,7 @@ subscribe_test5(_Config) ->
     ?assertEqual(<<2, ?SN_DISCONNECT>>, receive_response(Socket)),
     gen_udp:close(Socket).
 
-subscribe_test6(_Config) ->
+t_subscribe_case06(_) ->
     Dup = 0,
     QoS = 0,
     Retain = 0,
@@ -342,7 +327,7 @@ subscribe_test6(_Config) ->
     ?assertEqual(<<2, ?SN_DISCONNECT>>, receive_response(Socket)),
     gen_udp:close(Socket).
 
-subscribe_test7(_Config) ->
+t_subscribe_case07(_) ->
     Dup = 0,
     QoS = 0,
     Retain = 0,
@@ -365,7 +350,7 @@ subscribe_test7(_Config) ->
     ?assertEqual(<<2, ?SN_DISCONNECT>>, receive_response(Socket)),
     gen_udp:close(Socket).
 
-subscribe_test8(_Config) ->
+t_subscribe_case08(_) ->
     Dup = 0,
     QoS = 0,
     Retain = 0,
@@ -385,7 +370,7 @@ subscribe_test8(_Config) ->
     ?assertEqual(<<2, ?SN_DISCONNECT>>, receive_response(Socket)),
     gen_udp:close(Socket).
 
-publish_negqos_test1(_Config) ->
+t_publish_negqos_case09(_) ->
     Dup = 0,
     QoS = 0,
     NegQoS = 3,
@@ -421,7 +406,7 @@ publish_negqos_test1(_Config) ->
     ?assertEqual(<<2, ?SN_DISCONNECT>>, receive_response(Socket)),
     gen_udp:close(Socket).
 
-publish_qos0_test1(_Config) ->
+t_publish_qos0_case01(_) ->
     Dup = 0,
     QoS = 0,
     Retain = 0,
@@ -452,7 +437,7 @@ publish_qos0_test1(_Config) ->
     ?assertEqual(<<2, ?SN_DISCONNECT>>, receive_response(Socket)),
     gen_udp:close(Socket).
 
-publish_qos0_test2(_Config) ->
+t_publish_qos0_case02(_) ->
     Dup = 0,
     QoS = 0,
     Retain = 0,
@@ -481,7 +466,7 @@ publish_qos0_test2(_Config) ->
     ?assertEqual(<<2, ?SN_DISCONNECT>>, receive_response(Socket)),
     gen_udp:close(Socket).
 
-publish_qos0_test3(_Config) ->
+t_publish_qos0_case3(_) ->
     Dup = 0,
     QoS = 0,
     Retain = 0,
@@ -511,7 +496,7 @@ publish_qos0_test3(_Config) ->
     ?assertEqual(<<2, ?SN_DISCONNECT>>, receive_response(Socket)),
     gen_udp:close(Socket).
 
-publish_qos0_test4(_Config) ->
+t_publish_qos0_case04(_) ->
     Dup = 0,
     QoS = 0,
     Retain = 0,
@@ -541,7 +526,7 @@ publish_qos0_test4(_Config) ->
     ?assertEqual(<<2, ?SN_DISCONNECT>>, receive_response(Socket)),
     gen_udp:close(Socket).
 
-publish_qos0_test5(_Config) ->
+t_publish_qos0_case05(_) ->
     Dup = 0,
     QoS = 0,
     Retain = 0,
@@ -561,7 +546,7 @@ publish_qos0_test5(_Config) ->
     gen_udp:close(Socket).
 
 
-publish_qos0_test6(_Config) ->
+t_publish_qos0_case06(_) ->
     Dup = 0,
     QoS = 0,
     Retain = 0,
@@ -591,7 +576,7 @@ publish_qos0_test6(_Config) ->
     ?assertEqual(<<2, ?SN_DISCONNECT>>, receive_response(Socket)),
     gen_udp:close(Socket).
 
-publish_qos1_test1(_Config) ->
+t_publish_qos1_case01(_) ->
     Dup = 0,
     QoS = 1,
     Retain = 0,
@@ -618,7 +603,7 @@ publish_qos1_test1(_Config) ->
     send_disconnect_msg(Socket, undefined),
     gen_udp:close(Socket).
 
-publish_qos1_test2(_Config) ->
+t_publish_qos1_case02(_) ->
     Dup = 0,
     QoS = 1,
     Retain = 0,
@@ -642,7 +627,7 @@ publish_qos1_test2(_Config) ->
     send_disconnect_msg(Socket, undefined),
     gen_udp:close(Socket).
 
-publish_qos1_test3(_Config) ->
+t_publish_qos1_case03(_) ->
     QoS = 1,
     MsgId = 1,
     TopicId5 = 5,
@@ -656,7 +641,7 @@ publish_qos1_test3(_Config) ->
     ?assertEqual(<<2, ?SN_DISCONNECT>>, receive_response(Socket)),
     gen_udp:close(Socket).
 
-publish_qos1_test4(_Config) ->
+t_publish_qos1_case04(_) ->
     Dup = 0,
     QoS = 1,
     Retain = 0,
@@ -682,7 +667,7 @@ publish_qos1_test4(_Config) ->
     send_disconnect_msg(Socket, undefined),
     gen_udp:close(Socket).
 
-publish_qos1_test5(_Config) ->
+t_publish_qos1_case05(_) ->
     Dup = 0,
     QoS = 1,
     Retain = 0,
@@ -707,7 +692,7 @@ publish_qos1_test5(_Config) ->
     ?assertEqual(<<2, ?SN_DISCONNECT>>, receive_response(Socket)),
     gen_udp:close(Socket).
 
-publish_qos1_test6(_Config) ->
+t_publish_qos1_case06(_) ->
     Dup = 0,
     QoS = 1,
     Retain = 0,
@@ -732,7 +717,7 @@ publish_qos1_test6(_Config) ->
     ?assertEqual(<<2, ?SN_DISCONNECT>>, receive_response(Socket)),
     gen_udp:close(Socket).
 
-publish_qos2_test1(_Config) ->
+t_publish_qos2_case01(_) ->
     Dup = 0,
     QoS = 2,
     Retain = 0,
@@ -760,7 +745,7 @@ publish_qos2_test1(_Config) ->
     ?assertEqual(<<2, ?SN_DISCONNECT>>, receive_response(Socket)),
     gen_udp:close(Socket).
 
-publish_qos2_test2(_Config) ->
+t_publish_qos2_case02(_) ->
     Dup = 0,
     QoS = 2,
     Retain = 0,
@@ -790,7 +775,7 @@ publish_qos2_test2(_Config) ->
     ?assertEqual(<<2, ?SN_DISCONNECT>>, receive_response(Socket)),
     gen_udp:close(Socket).
 
-publish_qos2_test3(_Config) ->
+t_publish_qos2_case03(_) ->
     Dup = 0,
     QoS = 2,
     Retain = 0,
@@ -819,7 +804,7 @@ publish_qos2_test3(_Config) ->
     ?assertEqual(<<2, ?SN_DISCONNECT>>, receive_response(Socket)),
     gen_udp:close(Socket).
 
-will_test1(_Config) ->
+t_will_case01(_) ->
     QoS = 1,
     Duration = 1,
     {ok, Socket} = gen_udp:open(0, [binary]),
@@ -846,7 +831,7 @@ will_test1(_Config) ->
 
     gen_udp:close(Socket).
 
-will_test2(_Config) ->
+t_will_test2(_) ->
     QoS = 2,
     Duration = 1,
     {ok, Socket} = gen_udp:open(0, [binary]),
@@ -871,7 +856,7 @@ will_test2(_Config) ->
 
     gen_udp:close(Socket).
 
-will_test3(_Config) ->
+t_will_test3(_) ->
     Duration = 1,
     {ok, Socket} = gen_udp:open(0, [binary]),
 
@@ -892,7 +877,7 @@ will_test3(_Config) ->
 
     gen_udp:close(Socket).
 
-will_test4(_Config) ->
+t_will_test4(_) ->
     QoS = 1,
     Duration = 1,
     {ok, Socket} = gen_udp:open(0, [binary]),
@@ -920,7 +905,7 @@ will_test4(_Config) ->
 
     gen_udp:close(Socket).
 
-will_test5(_Config) ->
+t_will_test5(_) ->
     QoS = 1,
     Duration = 5,
     {ok, Socket} = gen_udp:open(0, [binary]),
@@ -946,7 +931,7 @@ will_test5(_Config) ->
 
     gen_udp:close(Socket).
 
-asleep_test01_timeout(_Config) ->
+t_asleep_test01_timeout(_) ->
     QoS = 1,
     Duration = 1,
     WillTopic = <<"dead">>,
@@ -969,7 +954,7 @@ asleep_test01_timeout(_Config) ->
 
     gen_udp:close(Socket).
 
-asleep_test02_to_awake_and_back(_Config) ->
+t_asleep_test02_to_awake_and_back(_) ->
     QoS = 1,
     Keepalive_Duration = 1,
     SleepDuration = 5,
@@ -1008,7 +993,7 @@ asleep_test02_to_awake_and_back(_Config) ->
 
     gen_udp:close(Socket).
 
-asleep_test03_to_awake_qos1_dl_msg(_Config) ->
+t_asleep_test03_to_awake_qos1_dl_msg(_) ->
     QoS = 1,
     Duration = 5,
     WillTopic = <<"dead">>,
@@ -1071,7 +1056,7 @@ asleep_test03_to_awake_qos1_dl_msg(_Config) ->
 
     gen_udp:close(Socket).
 
-asleep_test04_to_awake_qos1_dl_msg(_Config) ->
+t_asleep_test04_to_awake_qos1_dl_msg(_) ->
     QoS = 1,
     Duration = 5,
     WillTopic = <<"dead">>,
@@ -1133,7 +1118,7 @@ asleep_test04_to_awake_qos1_dl_msg(_Config) ->
 
     gen_udp:close(Socket).
 
-asleep_test05_to_awake_qos1_dl_msg(_Config) ->
+t_asleep_test05_to_awake_qos1_dl_msg(_) ->
     QoS = 1,
     Duration = 5,
     WillTopic = <<"dead">>,
@@ -1212,7 +1197,7 @@ asleep_test05_to_awake_qos1_dl_msg(_Config) ->
     timer:sleep(50),
     gen_udp:close(Socket).
 
-asleep_test06_to_awake_qos2_dl_msg(_Config) ->
+t_asleep_test06_to_awake_qos2_dl_msg(_) ->
     QoS = 2,
     Duration = 1,
     WillTopic = <<"dead">>,
@@ -1271,7 +1256,7 @@ asleep_test06_to_awake_qos2_dl_msg(_Config) ->
 
     gen_udp:close(Socket).
 
-asleep_test07_to_connected(_Config) ->
+t_asleep_test07_to_connected(_) ->
     QoS = 1,
     Keepalive_Duration = 10,
     SleepDuration = 1,
@@ -1320,7 +1305,7 @@ asleep_test07_to_connected(_Config) ->
 
     gen_udp:close(Socket).
 
-asleep_test08_to_disconnected(_Config) ->
+t_asleep_test08_to_disconnected(_) ->
     QoS = 1,
     Keepalive_Duration = 3,
     SleepDuration = 1,
@@ -1352,7 +1337,7 @@ asleep_test08_to_disconnected(_Config) ->
 
     gen_udp:close(Socket).
 
-asleep_test09_to_awake_again_qos1_dl_msg(_Config) ->
+t_asleep_test09_to_awake_again_qos1_dl_msg(_) ->
     QoS = 1,
     Duration = 5,
     WillTopic = <<"dead">>,
@@ -1445,7 +1430,7 @@ asleep_test09_to_awake_again_qos1_dl_msg(_Config) ->
 
     gen_udp:close(Socket).
 
-awake_test01_to_connected(_Config) ->
+t_awake_test01_to_connected(_) ->
     QoS = 1,
     Keepalive_Duration = 3,
     SleepDuration = 1,
@@ -1479,7 +1464,7 @@ awake_test01_to_connected(_Config) ->
     % keepalive timer should get timeout
     gen_udp:close(Socket).
 
-awake_test02_to_disconnected(_Config) ->
+t_awake_test02_to_disconnected(_) ->
     QoS = 1,
     Keepalive_Duration = 3,
     SleepDuration = 1,
@@ -1512,12 +1497,16 @@ awake_test02_to_disconnected(_Config) ->
 
     gen_udp:close(Socket).
 
-broadcast_test1(_Config) ->
+t_broadcast_test1(_) ->
     {ok, Socket} = gen_udp:open( 0, [binary]),
     send_searchgw_msg(Socket),
     ?assertEqual(<<3, ?SN_GWINFO, 1>>, receive_response(Socket)),
     timer:sleep(600),
     gen_udp:close(Socket).
+
+%%--------------------------------------------------------------------
+%% Helper funcs
+%%--------------------------------------------------------------------
 
 send_searchgw_msg(Socket) ->
     Length = 3,
@@ -1859,20 +1848,6 @@ check_register_msg_on_udp(TopicName, UdpData) ->
 check_regack_msg_on_udp(MsgId, UdpData) ->
     <<7, ?SN_REGACK, TopicId:16, MsgId:16, 0:8>> = UdpData,
     TopicId.
-
-set_special_configs(emqx) ->
-    application:set_env(emqx, plugins_loaded_file,
-                        emqx_ct_helpers:deps_path(emqx, "test/emqx_SUITE_data/loaded_plugins"));
-set_special_configs(emqx_sn) ->
-    application:set_env(emqx_sn, enable_qos3, ?ENABLE_QOS3),
-    application:set_env(emqx_sn, enable_stats, true),
-    application:set_env(emqx_sn, username, <<"user1">>),
-    application:set_env(emqx_sn, password, <<"pw123">>),
-    application:set_env(emqx_sn, predefined,
-                        [{?PREDEF_TOPIC_ID1, ?PREDEF_TOPIC_NAME1},
-                         {?PREDEF_TOPIC_ID2, ?PREDEF_TOPIC_NAME2}]);
-set_special_configs(_App) ->
-    ok.
 
 flush() ->
     flush([]).

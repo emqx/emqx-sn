@@ -356,6 +356,11 @@ connected(cast, {outgoing, Packet}, State) ->
     ok = handle_outgoing(Packet, State),
     {keep_state, State};
 
+%% XXX: It's so strange behavoir!!!
+connected(cast, {connack, ConnAck}, State) ->
+    ok = handle_outgoing(ConnAck, State),
+    {keep_state, State};
+
 connected(cast, {shutdown, Reason, Packet}, State) ->
     ok = handle_outgoing(Packet, State),
     {stop, {shutdown, Reason}, State};
