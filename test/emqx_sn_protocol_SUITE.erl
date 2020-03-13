@@ -16,6 +16,9 @@
 
 -module (emqx_sn_protocol_SUITE).
 
+-compile(export_all).
+-compile(nowarn_export_all).
+
 -include_lib("emqx_sn/include/emqx_sn.hrl").
 
 -include_lib("eunit/include/eunit.hrl").
@@ -24,8 +27,6 @@
 -include_lib("emqx/include/emqx.hrl").
 -include_lib("emqx/include/emqx_mqtt.hrl").
 
--compile(export_all).
--compile(nowarn_export_all).
 
 -define(HOST, {127,0,0,1}).
 -define(PORT, 1884).
