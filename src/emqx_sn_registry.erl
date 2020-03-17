@@ -122,6 +122,7 @@ handle_call({register, ClientId, TopicName}, _From,
                 TopicId when TopicId >= 16#FFFF ->
                     {reply, {error, too_large}, State};
                 TopicId ->
+                    _ = ets:insert(?TAB, {{ClientId, next_topic_id}, TopicId + 1}),
                     _ = ets:insert(?TAB, {{ClientId, TopicName}, TopicId}),
                     _ = ets:insert(?TAB, {{ClientId, TopicId}, TopicName}),
                     {reply, TopicId, State}
@@ -133,15 +134,15 @@ handle_call({unregister, ClientId}, _From, State) ->
     {reply, ok, State};
 
 handle_call(Req, _From, State) ->
-    ?LOG(error, "MQTT-SN(registry): Unexpected request: ~p", [Req]),
+    ?LOG(error, "Unexpected request: ~p", [Req]),
     {reply, ignored, State}.
 
 handle_cast(Msg, State) ->
-    ?LOG(error, "MQTT-SN(registry): Unexpected msg: ~p", [Msg]),
+    ?LOG(error, "Unexpected msg: ~p", [Msg]),
     {noreply, State}.
 
 handle_info(Info, State) ->
-    ?LOG(error, "MQTT-SN(registry): Unexpected info: ~p", [Info]),
+    ?LOG(error, "Unexpected info: ~p", [Info]),
     {noreply, State}.
 
 terminate(_Reason, _State) ->
@@ -153,9 +154,7 @@ code_change(_OldVsn, State, _Extra) ->
 %%-----------------------------------------------------------------------------
 
 next_topic_id(PredefId, ClientId) ->
-    NextId = case ets:lookup(?TAB, {ClientId, next_topic_id}) of
-                 [{_, Id}] -> Id;
-                 []        -> PredefId + 1
-             end,
-    _ = ets:insert(?TAB, {{ClientId, next_topic_id}, NextId + 1}), NextId.
-
+    case ets:lookup(?TAB, {ClientId, next_topic_id}) of
+        [{_, Id}] -> Id;
+        []        -> PredefId + 1
+    end.
