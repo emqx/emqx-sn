@@ -16,20 +16,23 @@
 
 -module(emqx_sn_registry_SUITE).
 
--include_lib("emqx_sn/include/emqx_sn.hrl").
--include_lib("eunit/include/eunit.hrl").
-
 -compile(export_all).
 -compile(nowarn_export_all).
+
+-include_lib("emqx_sn/include/emqx_sn.hrl").
+-include_lib("eunit/include/eunit.hrl").
 
 -define(REGISTRY, emqx_sn_registry).
 -define(MAX_PREDEF_ID, 2).
 -define(PREDEF_TOPICS, [{1, <<"/predefined/topic/name/hello">>},
                         {2, <<"/predefined/topic/name/nice">>}]).
 
+%%--------------------------------------------------------------------
+%% Setups
+%%--------------------------------------------------------------------
+
 all() ->
-    [register_topic_test, register_topic_test2, register_topic_test3,
-     register_topic_test4, register_topic_test4].
+    emqx_ct:all(?MODULE).
 
 init_per_suite(Config) ->
     _ = application:set_env(emqx_sn, predefined, ?PREDEF_TOPICS),
@@ -46,7 +49,11 @@ end_per_testcase(_TestCase, Config) ->
     ?REGISTRY:stop(),
     Config.
 
-register_topic_test(_Config) ->
+%%--------------------------------------------------------------------
+%% Test cases
+%%--------------------------------------------------------------------
+
+t_register(_) ->
     ?assertEqual(?MAX_PREDEF_ID+1, ?REGISTRY:register_topic(<<"ClientId">>, <<"Topic1">>)),
     ?assertEqual(?MAX_PREDEF_ID+2, ?REGISTRY:register_topic(<<"ClientId">>, <<"Topic2">>)),
     ?assertEqual(<<"Topic1">>, ?REGISTRY:lookup_topic(<<"ClientId">>, ?MAX_PREDEF_ID+1)),
@@ -59,7 +66,7 @@ register_topic_test(_Config) ->
     ?assertEqual(undefined, ?REGISTRY:lookup_topic_id(<<"ClientId">>, <<"Topic1">>)),
     ?assertEqual(undefined, ?REGISTRY:lookup_topic_id(<<"ClientId">>, <<"Topic2">>)).
 
-register_topic_test2(_Config) ->
+t_register_case2(_) ->
     ?assertEqual(?MAX_PREDEF_ID+1, ?REGISTRY:register_topic(<<"ClientId">>, <<"Topic1">>)),
     ?assertEqual(?MAX_PREDEF_ID+2, ?REGISTRY:register_topic(<<"ClientId">>, <<"Topic2">>)),
     ?assertEqual(?MAX_PREDEF_ID+1, ?REGISTRY:register_topic(<<"ClientId">>, <<"Topic1">>)),
@@ -74,7 +81,7 @@ register_topic_test2(_Config) ->
     ?assertEqual(undefined, ?REGISTRY:lookup_topic_id(<<"ClientId">>, <<"Topic1">>)),
     ?assertEqual(undefined, ?REGISTRY:lookup_topic_id(<<"ClientId">>, <<"Topic2">>)).
 
-register_topic_test3(_Config) ->
+t_reach_maximum(_) ->
     register_a_lot(?MAX_PREDEF_ID+1, 16#ffff),
     ?assertEqual({error, too_large}, ?REGISTRY:register_topic(<<"ClientId">>, <<"TopicABC">>)),
     Topic1 = iolist_to_binary(io_lib:format("Topic~p", [?MAX_PREDEF_ID+1])),
@@ -87,16 +94,20 @@ register_topic_test3(_Config) ->
     ?assertEqual(undefined, ?REGISTRY:lookup_topic_id(<<"ClientId">>, Topic1)),
     ?assertEqual(undefined, ?REGISTRY:lookup_topic_id(<<"ClientId">>, Topic2)).
 
-register_topic_test4(_Config) ->
+t_register_case4(_) ->
     ?assertEqual(?MAX_PREDEF_ID+1, ?REGISTRY:register_topic(<<"ClientId">>, <<"TopicA">>)),
     ?assertEqual(?MAX_PREDEF_ID+2, ?REGISTRY:register_topic(<<"ClientId">>, <<"TopicB">>)),
     ?assertEqual(?MAX_PREDEF_ID+3, ?REGISTRY:register_topic(<<"ClientId">>, <<"TopicC">>)),
     ?REGISTRY:unregister_topic(<<"ClientId">>),
     ?assertEqual(?MAX_PREDEF_ID+1, ?REGISTRY:register_topic(<<"ClientId">>, <<"TopicD">>)).
 
-register_topic_test5(_Config) ->
-    ?assertEqual(wildcard_topic, ?REGISTRY:register_topic(<<"ClientId">>, <<"/TopicA/#">>)),
-    ?assertEqual(wildcard_topic, ?REGISTRY:register_topic(<<"ClientId">>, <<"/+/TopicB">>)).
+t_deny_wildcard_topic(_) ->
+    ?assertEqual({error, wildcard_topic}, ?REGISTRY:register_topic(<<"ClientId">>, <<"/TopicA/#">>)),
+    ?assertEqual({error, wildcard_topic}, ?REGISTRY:register_topic(<<"ClientId">>, <<"/+/TopicB">>)).
+
+%%--------------------------------------------------------------------
+%% Helper funcs
+%%--------------------------------------------------------------------
 
 register_a_lot(Max, Max) ->
     ok;
