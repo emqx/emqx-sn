@@ -25,9 +25,9 @@
         ]).
 
 start(_Type, _Args) ->
-    Port = application:get_env(emqx_sn, port, 1884),
+    Addr = application:get_env(emqx_sn, port, 1884),
     GwId = application:get_env(emqx_sn, gateway_id, 1),
-    emqx_sn_sup:start_link(Port, GwId).
+    emqx_sn_sup:start_link(Addr, GwId).
 
 stop(_State) ->
     ok.
