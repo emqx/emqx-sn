@@ -634,7 +634,7 @@ close_socket(State = #state{socket = _Socket}) ->
 info(CPid) when is_pid(CPid) ->
     call(CPid, info);
 info(State = #state{channel = Channel}) ->
-    ChanInfo = emqx_channel:info(Channel),
+    ChanInfo = upgrade_infos(emqx_channel:info(Channel)),
     SockInfo = maps:from_list(
                  info(?INFO_KEYS, State)),
     ChanInfo#{sockinfo => SockInfo}.
@@ -651,6 +651,10 @@ info(sockstate, #state{sockstate = SockSt}) ->
     SockSt;
 info(stats_timer, #state{stats_timer = StatsTimer}) ->
     StatsTimer.
+
+upgrade_infos(ChanInfo = #{conninfo := ConnInfo}) ->
+    ChanInfo#{conninfo => ConnInfo#{proto_name => <<"MQTT-SN">>,
+                                    proto_ver  => 1}}.
 
 %% @doc Get stats of the connection/channel.
 stats(CPid) when is_pid(CPid) ->
@@ -814,9 +818,9 @@ do_2nd_connect(Flags, Duration, ClientId, State = #state{sockname = Sockname,
                    true ->
                        emqx_channel:terminate(normal, Channel),
                        emqx_sn_registry:unregister_topic(OldClientId),
-                       emqx_channel:init(#{sockname => Sockname,
+                       emqx_channel:init(#{socktype => udp,
+                                           sockname => Sockname,
                                            peername => Peername,
-                                           protocol => 'mqtt-sn',
                                            peercert => ?NO_PEERCERT,
                                            conn_mod => ?MODULE
                                           }, ?DEFAULT_CHAN_OPTIONS);
