@@ -105,10 +105,8 @@
 %% Exported APIs
 %%--------------------------------------------------------------------
 
--spec(start_link(pos_integer(), esockd:udp_transport(), {inet:ip_address(), inet:port()})
-      -> {ok, pid()} | {error, term()}).
-start_link(GwId, Transport, Peername) ->
-    gen_statem:start_link(?MODULE, [GwId, Transport, Peername], [{hibernate_after, 60000}]).
+start_link(Transport, Peername, Options) ->
+    gen_statem:start_link(?MODULE, [Transport, Peername, Options], [{hibernate_after, 60000}]).
 
 subscribe(GwPid, TopicTable) ->
     gen_statem:cast(GwPid, {subscribe, TopicTable}).
@@ -123,7 +121,10 @@ kick(GwPid) ->
 %% gen_statem callbacks
 %%--------------------------------------------------------------------
 
-init([GwId, {_, SockPid, Sock}, Peername]) ->
+init([{_, SockPid, Sock}, Peername, Options]) ->
+    GwId = proplists:get_value(gateway_id, Options),
+    EnableQos3 = proplists:get_value(enable_qos3, Options, false),
+    IdleTimeout = proplists:get_value(idle_timeout, Options, 30000),
     case inet:sockname(Sock) of
         {ok, Sockname} ->
             Channel = emqx_channel:init(#{sockname => Sockname,
@@ -132,8 +133,6 @@ init([GwId, {_, SockPid, Sock}, Peername]) ->
                                           peercert => ?NO_PEERCERT,
                                           conn_mod => ?MODULE
                                          }, ?DEFAULT_CHAN_OPTIONS),
-            EnableQos3 = application:get_env(emqx_sn, enable_qos3, false),
-            IdleTimeout = application:get_env(emqx_sn, idle_timeout, 30000),
             State = #state{gwid             = GwId,
                            socket           = Sock,
                            sockstate        = running,

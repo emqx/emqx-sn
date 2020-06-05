@@ -25,39 +25,17 @@
 start_link(Addr, GwId) ->
     supervisor:start_link({local, ?MODULE}, ?MODULE, [Addr, GwId]).
 
-init([{Ip, Port}, GwId]) ->
+init([{_Ip, Port}, GwId]) ->
     Registry = #{id       => emqx_sn_registry,
                  start    => {emqx_sn_registry, start_link, []},
                  restart  => permanent,
                  shutdown => 5000,
                  type     => worker,
                  modules  => [emqx_sn_registry]},
-    GwSup = #{id       => emqx_sn_gateway_sup,
-              start    => {emqx_sn_gateway_sup, start_link, [GwId]},
-              restart  => permanent,
-              shutdown => infinity,
-              type     => supervisor,
-              modules  => [emqx_sn_gateway_sup]},
-    MFA = {emqx_sn_gateway_sup, start_gateway, []},
-    UdpSrv = #{id       => emqx_sn_udp_server,
-               start    => {esockd_udp, server, [mqtt_sn, Port, opts(Ip), MFA]},
-               restart  => permanent,
-               shutdown => 5000,
-               type     => worker,
-               modules  => [esockd_udp]},
     Broadcast = #{id       => emqx_sn_broadcast,
                   start    => {emqx_sn_broadcast, start_link, [GwId, Port]},
                   restart  => permanent,
                   shutdown => brutal_kill,
                   type     => worker,
                   modules  => [emqx_sn_broadcast]},
-    {ok, {{one_for_all, 10, 3600}, [Registry, GwSup, UdpSrv, Broadcast]}}.
-
-%%--------------------------------------------------------------------
-%% Internal funcs
-%%--------------------------------------------------------------------
-
-opts(Ip) when tuple_size(Ip) =:= 4 ->
-    [{ip, Ip}, inet];
-opts(Ip) when tuple_size(Ip) =:= 8 ->
-    [{ip, Ip}, inet6].
+    {ok, {{one_for_one, 10, 3600}, [Registry, Broadcast]}}.

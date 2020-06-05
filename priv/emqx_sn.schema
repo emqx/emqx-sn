@@ -8,7 +8,7 @@
 {translation, "emqx_sn.port", fun(Conf) ->
   case re:split(cuttlefish:conf_get("mqtt.sn.port", Conf, ""), ":", [{return, list}]) of
       [Port] ->
-          {{127,0,0,1}, list_to_integer(Port)};
+          {{0,0,0,0}, list_to_integer(Port)};
       Tokens ->
           Port = lists:last(Tokens),
           IP = case inet:parse_address(lists:flatten(lists:join(":", Tokens -- [Port]))) of
