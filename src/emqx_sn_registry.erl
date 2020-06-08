@@ -78,14 +78,19 @@ lookup_topic(ClientId, TopicId) when is_integer(TopicId) ->
         Topic -> Topic
     end.
 
--spec(lookup_topic_id(binary(), binary()) -> undefined | pos_integer()).
+-spec(lookup_topic_id(binary(), binary())
+      -> undefined
+       | pos_integer()
+       | {predef, integer()}).
 lookup_topic_id(ClientId, TopicName) when is_binary(TopicName) ->
     case lookup_element({predef, TopicName}, 2) of
         undefined ->
             lookup_element({ClientId, TopicName}, 2);
-        TopicId -> {predef, TopicId}
+        TopicId ->
+            {predef, TopicId}
     end.
 
+%% @private
 lookup_element(Key, Pos) ->
     try ets:lookup_element(?TAB, Key, Pos) catch error:badarg -> undefined end.
 
