@@ -17,47 +17,44 @@
 -module(emqx_sn_asleep_timer).
 
 -export([ init/0
-        , start/2
-        , timeout/3
+        , ensure/2
         ]).
 
--record(asleep_state, {duration :: integer(), timer_on :: boolean(), ref :: integer()}).
+-record(asleep_state, {
+          %% Time internal (seconds)
+          duration :: integer(),
+          %% Timer reference
+          tref :: reference() | undefined
+         }).
 
--define(LOG(Level, Format, Args),
-        emqx_logger:Level("MQTT-SN(ASLEEP-TIMER): " ++ Format, Args)).
+-type(asleep_state() :: #asleep_state{}).
 
+-export_type([asleep_state/0]).
+
+%%--------------------------------------------------------------------
+%% APIs
+%%--------------------------------------------------------------------
+
+-spec(init() -> asleep_state()).
 init() ->
-    #asleep_state{duration = 0, timer_on = false, ref = 0}.
+    #asleep_state{duration = 0}.
 
-start(State=#asleep_state{duration = Duration, timer_on = TimerIsRunning, ref = Ref}, undefined) ->
-    NewRef = Ref + 1,
-    start_timer(TimerIsRunning, Duration, NewRef),
-    State#asleep_state{timer_on = true, ref = NewRef};
-start(State=#asleep_state{timer_on = TimerIsRunning, ref = Ref}, Duration) ->
-    NewRef = Ref + 1,
-    start_timer(TimerIsRunning, Duration, NewRef),
-    State#asleep_state{duration = Duration, timer_on = true, ref = NewRef}.
+-spec(ensure(undefined | integer(), asleep_state()) -> asleep_state()).
+ensure(undefined, State = #asleep_state{duration = Duration}) ->
+    ensure(Duration, State);
+ensure(Duration, State = #asleep_state{tref = TRef}) ->
+    _ = cancel(TRef),
+    State#asleep_state{duration = Duration, tref = start(Duration)}.
 
-timeout(#asleep_state{ref = Ref}, asleep, Ref) ->
-    % if two reference are identical, no event happened during device's sleep state
-    % terminate process
-    ?LOG(debug, "asleep timer timeout decide to terminate Ref=~p", [Ref]),
-    terminate_process;
-timeout(State=#asleep_state{ref = OtherRef}, asleep, Ref) ->
-    % two references are different means this timer has been canceled once.
-    % restart asleep timer again since it is still in asleep state
-    ?LOG(debug, "asleep timer timeout decide to restart OtherRef=~p, Ref=~p", [OtherRef, Ref]),
-    {restart_timer, State#asleep_state{timer_on = false}};
-timeout(StateData, StateName, Ref) ->
-    % in other state, stop asleep timer
-    ?LOG(debug, "asleep timer timeout no decision Ref=~p StateName=~p", [Ref, StateName]),
-    {stop_timer, StateData#asleep_state{timer_on = false}}.
+%%--------------------------------------------------------------------
+%% Internal funcs
+%%--------------------------------------------------------------------
 
-start_timer(true, Duration, Ref) ->
-    % if an asleep timer has already been running, do not start a new timer
-    ?LOG(debug, "asleep start_timer, timer is already running, Duration=~p, NewRef=~p", [Duration, Ref]),
-    ok;
-start_timer(false, Duration, Ref) ->
-    ?LOG(debug, "asleep start_timer Duration=~p, Ref=~p", [Duration, Ref]),
-    erlang:send_after(timer:seconds(Duration), self(), {asleep_timeout, Ref}).
+-compile({inline, [start/1, cancel/1]}).
 
+start(Duration) ->
+    erlang:send_after(timer:seconds(Duration), self(), asleep_timeout).
+
+cancel(undefined) -> ok;
+cancel(TRef) when is_reference(TRef) ->
+    erlang:cancel_timer(TRef).

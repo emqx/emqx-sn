@@ -60,10 +60,12 @@
 -compile(nowarn_export_all).
 -endif.
 
+-type(maybe(T) :: T | undefined).
+
 -record(will_msg, {retain = false  :: boolean(),
                    qos    = ?QOS_0 :: emqx_mqtt_types:qos(),
-                   topic           :: binary() | undefined,
-                   payload         :: binary() | undefined
+                   topic           :: maybe(binary()),
+                   payload         :: maybe(binary())
                   }).
 
 -record(state, {gwid                 :: integer(),
@@ -73,14 +75,14 @@
                 sockname             :: {inet:ip_address(), inet:port()},
                 peername             :: {inet:ip_address(), inet:port()},
                 channel              :: emqx_channel:channel(),
-                clientid             :: binary(),
-                will_msg             :: #will_msg{},
-                keepalive_interval   :: integer(),
+                clientid             :: maybe(binary()),
+                will_msg             :: maybe(#will_msg{}),
+                keepalive_interval   :: maybe(integer()),
                 connpkt              :: term(),
                 asleep_timer         :: tuple(),
                 asleep_msg_queue     :: list(),
                 enable_stats         :: boolean(),
-                stats_timer          :: reference(),
+                stats_timer          :: maybe(reference()),
                 idle_timeout         :: integer(),
                 enable_qos3 = false  :: boolean(),
                 transform            :: fun((emqx_types:packet()) -> tuple())
@@ -125,6 +127,7 @@ init([{_, SockPid, Sock}, Peername, Options]) ->
     GwId = proplists:get_value(gateway_id, Options),
     EnableQos3 = proplists:get_value(enable_qos3, Options, false),
     IdleTimeout = proplists:get_value(idle_timeout, Options, 30000),
+    EnableStats = proplists:get_value(enable_stats, Options, false),
     case inet:sockname(Sock) of
         {ok, Sockname} ->
             Channel = emqx_channel:init(#{sockname => Sockname,
@@ -142,6 +145,7 @@ init([{_, SockPid, Sock}, Peername, Options]) ->
                            channel          = Channel,
                            asleep_timer     = emqx_sn_asleep_timer:init(),
                            asleep_msg_queue = [],
+                           enable_stats     = EnableStats,
                            enable_qos3      = EnableQos3,
                            idle_timeout     = IdleTimeout,
                            transform        = transform_fun()
@@ -327,7 +331,6 @@ connected(cast, {incoming, ?SN_DISCONNECT_MSG(Duration)}, State) ->
     ok = send_message(?SN_DISCONNECT_MSG(undefined), State),
     case Duration of
         undefined ->
-            %% XXX: Need goto a keep_session_state ?
             handle_incoming(?DISCONNECT_PACKET(), State);
         _Other -> goto_asleep_state(Duration, State)
     end;
@@ -510,20 +513,20 @@ handle_event(info, do_awake_jobs, StateName, State=#state{clientid = ClientId}) 
     case process_awake_jobs(ClientId, State) of
         {keep_state, NewState} ->
             case StateName of
-                awake  -> goto_asleep_state(undefined, NewState);
+                awake  -> goto_asleep_state(NewState);
                 _Other -> {keep_state, NewState}
                           %% device send a CONNECT immediately before this do_awake_jobs is handled
             end;
         Stop -> Stop
     end;
 
-handle_event(info, {asleep_timeout, Ref}, StateName, State=#state{asleep_timer = AsleepTimer}) ->
-    ?LOG(debug, "asleep_timeout at ~p", [StateName], State),
-    case emqx_sn_asleep_timer:timeout(AsleepTimer, StateName, Ref) of
-        terminate_process         -> stop(asleep_timeout, State);
-        {restart_timer, NewTimer} -> goto_asleep_state(undefined, State#state{asleep_timer = NewTimer});
-        {stop_timer, NewTimer}    -> {keep_state, State#state{asleep_timer = NewTimer}}
-    end;
+handle_event(info, asleep_timeout, asleep, State) ->
+    ?LOG(debug, "asleep timer timeout, shutdown now", [], State),
+    stop(asleep_timeout, State);
+
+handle_event(info, asleep_timeout, StateName, State) ->
+    ?LOG(debug, "asleep timer timeout on StateName=~p, ignore it", [StateName], State),
+    {keep_state, State};
 
 handle_event(cast, {event, connected}, _StateName, State = #state{channel = Channel}) ->
     ClientId = emqx_channel:info(clientid, Channel),
@@ -647,9 +650,7 @@ info(peername, #state{peername = Peername}) ->
 info(sockname, #state{sockname = Sockname}) ->
     Sockname;
 info(sockstate, #state{sockstate = SockSt}) ->
-    SockSt;
-info(stats_timer, #state{stats_timer = StatsTimer}) ->
-    StatsTimer.
+    SockSt.
 
 upgrade_infos(ChanInfo = #{conninfo := ConnInfo}) ->
     ChanInfo#{conninfo => ConnInfo#{proto_name => <<"MQTT-SN">>,
@@ -744,9 +745,11 @@ send_message(Msg = #mqtt_sn_message{type = Type},
     SockPid ! {datagram, Peername, Data},
     ok.
 
+goto_asleep_state(State) ->
+    goto_asleep_state(undefined, State).
 goto_asleep_state(Duration, State=#state{asleep_timer = AsleepTimer}) ->
     ?LOG(debug, "goto_asleep_state Duration=~p", [Duration], State),
-    NewTimer = emqx_sn_asleep_timer:start(AsleepTimer, Duration),
+    NewTimer = emqx_sn_asleep_timer:ensure(Duration, AsleepTimer),
     {next_state, asleep, State#state{asleep_timer = NewTimer}, hibernate}.
 
 %%--------------------------------------------------------------------
@@ -988,7 +991,7 @@ update_will_msg(Will = #will_msg{}, Msg) ->
 process_awake_jobs(_ClientId, State = #state{asleep_msg_queue = []}) ->
     {keep_state, State};
 process_awake_jobs(_ClientId, State = #state{channel = Channel,
-                                                 asleep_msg_queue = AsleepMsgQ}) ->
+                                             asleep_msg_queue = AsleepMsgQ}) ->
     Delivers = lists:reverse(AsleepMsgQ),
     NState = State#state{asleep_msg_queue = []},
     Result = emqx_channel:handle_deliver(Delivers, Channel),
@@ -1073,4 +1076,3 @@ inc_outgoing_stats(Type) ->
 
 next_event(Content) ->
     {next_event, cast, Content}.
-
