@@ -29,9 +29,6 @@
 -define(byte,  8/big-integer).
 -define(short, 16/big-integer).
 
--define(LOG(Level, Format, Args),
-        emqx_logger:Level("MQTT-SN(Frame): " ++ Format, Args)).
-
 %%--------------------------------------------------------------------
 %% Parse MQTT-SN Message
 %%--------------------------------------------------------------------
@@ -43,9 +40,8 @@ parse(<<Len:?byte, Type:?byte, Var/binary>>) ->
 
 parse(Type, Len, Var) when Len =:= size(Var) ->
     {ok, #mqtt_sn_message{type = Type, variable = parse_var(Type, Var)}};
-parse(Type, Len, Var) ->
-    ?LOG(error, "format error: type=~p, len=~p, var=~p", [Type, Len, Var]),
-    error(format_error).
+parse(_Type, _Len, _Var) ->
+    error(malformed_message_len).
 
 parse_var(?SN_ADVERTISE, <<GwId:?byte, Duration:?short>>) ->
     {GwId, Duration};
@@ -103,7 +99,7 @@ parse_var(?SN_WILLTOPICRESP, <<ReturnCode:?byte>>) ->
 parse_var(?SN_WILLMSGRESP, <<ReturnCode:?byte>>) ->
     ReturnCode;
 parse_var(_Type, _Var) ->
-    error(format_error).
+    error(unkown_message_type).
 
 parse_flags(?SN_CONNECT, <<_D:1, _Q:2, _R:1, Will:1, CleanStart:1, _IdType:2>>) ->
     #mqtt_sn_flags{will = bool(Will), clean_start = bool(CleanStart)};
@@ -119,7 +115,7 @@ parse_flags(?SN_SUBACK, <<_D:1, QoS:2, _R:1, _W:1, _C:1, _Id:2>>) ->
 parse_flags(?SN_WILLTOPICUPD, <<_D:1, QoS:2, Retain:1, _W:1, _C:1, _Id:2>>) ->
     #mqtt_sn_flags{qos = QoS, retain = bool(Retain)};
 parse_flags(_Type, _) ->
-    error(format_error).
+    error(malformed_message_flags).
 
 parse_topic(2#00, Topic)     -> Topic;
 parse_topic(2#01, <<Id:16>>) -> Id;

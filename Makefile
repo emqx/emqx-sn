@@ -18,6 +18,9 @@ ct: compile
 eunit: compile
 	$(REBAR) as test eunit
 
+dialyzer:
+	$(REBAR) dialyzer
+
 xref:
 	$(REBAR) xref
 
