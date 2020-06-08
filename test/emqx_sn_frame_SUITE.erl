@@ -162,7 +162,10 @@ random_test_body() ->
     Data = generate_random_binary(),
     case catch parse(Data) of
         {ok, _Msg} -> ok;
-        {'EXIT', {format_error, _Stack}} -> ok
+        {'EXIT', {Err, _Stack}}
+          when Err =:= unkown_message_type;
+               Err =:= malformed_message_len;
+               Err =:= malformed_message_flags -> ok
     end.
 
 generate_random_binary() ->
