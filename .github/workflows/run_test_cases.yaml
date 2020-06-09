@@ -13,9 +13,11 @@ jobs:
             - uses: actions/checkout@v1
             - name: run test cases
               run: |
+                make dialyzer
                 make xref
                 make eunit  
                 make ct
+                make proper
                 make cover
             - uses: actions/upload-artifact@v1
               if: always()

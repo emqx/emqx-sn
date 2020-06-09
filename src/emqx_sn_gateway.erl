@@ -894,8 +894,9 @@ handle_unsubscribe(_, _TopicId, MsgId, State) ->
     send_message(?SN_UNSUBACK_MSG(MsgId), State),
     {keep_state, State}.
 
-do_publish(?SN_NORMAL_TOPIC, TopicId, Data, Flags, MsgId, State) ->
-    %% Handle normal topic id as predefined topic id, to be compatible with paho mqtt-sn library
+do_publish(?SN_NORMAL_TOPIC, TopicName, Data, Flags, MsgId, State) ->
+    %% XXX: Handle normal topic id as predefined topic id, to be compatible with paho mqtt-sn library
+    <<TopicId:16>> = TopicName,
     do_publish(?SN_PREDEFINED_TOPIC, TopicId, Data, Flags, MsgId, State);
 do_publish(?SN_PREDEFINED_TOPIC, TopicId, Data, Flags, MsgId, State=#state{clientid = ClientId}) ->
     #mqtt_sn_flags{qos = QoS, dup = Dup, retain = Retain} = Flags,
@@ -907,16 +908,16 @@ do_publish(?SN_PREDEFINED_TOPIC, TopicId, Data, Flags, MsgId, State=#state{clien
         TopicName ->
             proto_publish(TopicName, Data, Dup, NewQoS, Retain, MsgId, TopicId, State)
     end;
-do_publish(?SN_SHORT_TOPIC, TopicId, Data, Flags, MsgId, State) ->
+do_publish(?SN_SHORT_TOPIC, STopicName, Data, Flags, MsgId, State) ->
     #mqtt_sn_flags{qos = QoS, dup = Dup, retain = Retain} = Flags,
     NewQoS = get_corrected_qos(QoS, State),
-    TopicName = <<TopicId:16>>,
-    case emqx_topic:wildcard(TopicName) of
+    <<TopicId:16>> = STopicName ,
+    case emqx_topic:wildcard(STopicName) of
         true ->
             (NewQoS =/= ?QOS_0) andalso send_message(?SN_PUBACK_MSG(TopicId, MsgId, ?SN_RC_NOT_SUPPORTED), State),
             {keep_state, State};
         false ->
-            proto_publish(TopicName, Data, Dup, NewQoS, Retain, MsgId, TopicId, State)
+            proto_publish(STopicName, Data, Dup, NewQoS, Retain, MsgId, TopicId, State)
     end;
 do_publish(_, TopicId, _Data, #mqtt_sn_flags{qos = QoS}, MsgId, State) ->
     (QoS =/= ?QOS_0) andalso send_message(?SN_PUBACK_MSG(TopicId, MsgId, ?SN_RC_NOT_SUPPORTED), State),
