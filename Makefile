@@ -18,6 +18,9 @@ ct: compile
 eunit: compile
 	$(REBAR) as test eunit
 
+proper:
+	$(REBAR) proper -d test/props
+
 dialyzer:
 	$(REBAR) dialyzer
 

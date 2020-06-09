@@ -67,8 +67,9 @@ parse_var(?SN_REGISTER, <<TopicId:?short, MsgId:?short, TopicName/binary>>) ->
     {TopicId, MsgId, TopicName};
 parse_var(?SN_REGACK, <<TopicId:?short, MsgId:?short, ReturnCode:?byte>>) ->
     {TopicId, MsgId, ReturnCode};
-parse_var(?SN_PUBLISH, <<Flags:?flag, TopicId:?short, MsgId:?short, Data/binary>>) ->
-    {parse_flags(?SN_PUBLISH, Flags), TopicId, MsgId, Data};
+parse_var(?SN_PUBLISH, <<FlagsBin:?flag, Topic:2/binary, MsgId:?short, Data/binary>>) ->
+    #mqtt_sn_flags{topic_id_type = IdType} = Flags = parse_flags(?SN_PUBLISH, FlagsBin),
+    {Flags, parse_topic(IdType, Topic), MsgId, Data};
 parse_var(?SN_PUBACK, <<TopicId:?short, MsgId:?short, ReturnCode:?byte>>) ->
     {TopicId, MsgId, ReturnCode};
 parse_var(PubRec, <<MsgId:?short>>) when PubRec == ?SN_PUBREC; PubRec == ?SN_PUBREL; PubRec == ?SN_PUBCOMP ->
@@ -145,7 +146,10 @@ serialize(?SN_CONNACK, ReturnCode) ->
     <<ReturnCode>>;
 serialize(?SN_WILLTOPICREQ, _) ->
     <<>>;
+serialize(?SN_WILLTOPIC, undefined) ->
+    <<>>;
 serialize(?SN_WILLTOPIC, {Flags, Topic}) ->
+    %% The WillTopic must a short topic name
     <<(serialize_flags(Flags))/binary, Topic/binary>>;
 serialize(?SN_WILLMSGREQ, _) ->
     <<>>;
@@ -155,14 +159,12 @@ serialize(?SN_REGISTER, {TopicId, MsgId, TopicName}) ->
     <<TopicId:?short, MsgId:?short, TopicName/binary>>;
 serialize(?SN_REGACK, {TopicId, MsgId, ReturnCode}) ->
     <<TopicId:?short, MsgId:?short, ReturnCode>>;
-%serialize(?SN_PUBLISH, {Flags, TopicId, MsgId, Data}) ->
-%    <<(serialize_flags(Flags))/binary, TopicId/binary, MsgId:?short, Data/binary>>;
 serialize(?SN_PUBLISH, {Flags=#mqtt_sn_flags{topic_id_type = ?SN_NORMAL_TOPIC}, TopicId, MsgId, Data}) ->
     <<(serialize_flags(Flags))/binary, TopicId:?short, MsgId:?short, Data/binary>>;
 serialize(?SN_PUBLISH, {Flags=#mqtt_sn_flags{topic_id_type = ?SN_PREDEFINED_TOPIC}, TopicId, MsgId, Data}) ->
     <<(serialize_flags(Flags))/binary, TopicId:?short, MsgId:?short, Data/binary>>;
-serialize(?SN_PUBLISH, {Flags=#mqtt_sn_flags{topic_id_type = ?SN_SHORT_TOPIC}, TopicId, MsgId, Data}) ->
-    <<(serialize_flags(Flags))/binary, TopicId:2/binary, MsgId:?short, Data/binary>>;
+serialize(?SN_PUBLISH, {Flags=#mqtt_sn_flags{topic_id_type = ?SN_SHORT_TOPIC}, STopicName, MsgId, Data}) ->
+    <<(serialize_flags(Flags))/binary, STopicName:2/binary, MsgId:?short, Data/binary>>;
 serialize(?SN_PUBACK, {TopicId, MsgId, ReturnCode}) ->
     <<TopicId:?short, MsgId:?short, ReturnCode>>;
 serialize(PubRec, MsgId) when PubRec == ?SN_PUBREC; PubRec == ?SN_PUBREL; PubRec == ?SN_PUBCOMP ->

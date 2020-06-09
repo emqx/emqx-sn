@@ -62,12 +62,12 @@
 %% MQTT-SN Message
 %%--------------------------------------------------------------------
 
--record(mqtt_sn_flags, {dup = false,
-                        qos,
-                        retain = false,
-                        will,
-                        clean_start,
-                        topic_id_type}).
+-record(mqtt_sn_flags, {dup           = false,
+                        qos           = 0,
+                        retain        = false,
+                        will          = false,
+                        clean_start   = false,
+                        topic_id_type = 0}).
 
 -type(mqtt_sn_flags() :: #mqtt_sn_flags{}).
 
@@ -86,9 +86,9 @@
         #mqtt_sn_message{type     = ?SN_SEARCHGW,
                          variable = Radius}).
 
--define(SN_GWINFO_MSG(GwId, GwInfo),
+-define(SN_GWINFO_MSG(GwId, GwAddr),
         #mqtt_sn_message{type     = ?SN_GWINFO,
-                         variable = {GwId, GwInfo}}).
+                         variable = {GwId, GwAddr}}).
 
 -define(SN_CONNECT_MSG(Flags, ProtocolId, Duration, ClientId),
         #mqtt_sn_message{type     = ?SN_CONNECT,
@@ -130,25 +130,26 @@
         #mqtt_sn_message{type    = ?SN_PUBACK,
                         variable = {TopicId, MsgId, ReturnCode}}).
 
+%% Type: SN_PUBREC | SN_PUBREL | SN_PUBCOMP
 -define(SN_PUBREC_MSG(Type, MsgId),
         #mqtt_sn_message{type     = Type,
                          variable = MsgId}).
 
--define(SN_SUBSCRIBE_MSG(Flags, Msgid, Topic),
+-define(SN_SUBSCRIBE_MSG(Flags, MsgId, Topic),
         #mqtt_sn_message{type     = ?SN_SUBSCRIBE,
-                         variable = {Flags, Msgid, Topic}}).
+                         variable = {Flags, MsgId, Topic}}).
 
 -define(SN_SUBACK_MSG(Flags, TopicId, MsgId, ReturnCode),
         #mqtt_sn_message{type     = ?SN_SUBACK,
                          variable = {Flags, TopicId, MsgId, ReturnCode}}).
 
--define(SN_UNSUBSCRIBE_MSG(Flags, Msgid, Topic),
+-define(SN_UNSUBSCRIBE_MSG(Flags, MsgId, Topic),
        #mqtt_sn_message{type     = ?SN_UNSUBSCRIBE,
-                        variable = {Flags, Msgid, Topic}}).
+                        variable = {Flags, MsgId, Topic}}).
 
--define(SN_UNSUBACK_MSG(Msgid),
+-define(SN_UNSUBACK_MSG(MsgId),
        #mqtt_sn_message{type     = ?SN_UNSUBACK,
-                        variable = Msgid}).
+                        variable = MsgId}).
 
 -define(SN_PINGREQ_MSG(ClientId),
        #mqtt_sn_message{type = ?SN_PINGREQ, variable = ClientId}).
