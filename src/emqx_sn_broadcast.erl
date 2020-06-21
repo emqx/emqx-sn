@@ -73,7 +73,7 @@ handle_info(Info, State) ->
 	{noreply, State}.
 
 terminate(_Reason, #state{tref = Timer}) ->
-    erlang:cancel_timer(Timer),
+    _ = erlang:cancel_timer(Timer),
     ok.
 
 code_change(_OldVsn, State, _Extra) ->

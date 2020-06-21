@@ -83,6 +83,9 @@ set_special_confs(_App) ->
 %% Connect
 
 t_connect(_) ->
+    SockName = {'mqttsn:udp', {{0,0,0,0}, 1884}},
+    ?assertEqual(true, lists:keymember(SockName, 1, esockd:listeners())),
+
     {ok, Socket} = gen_udp:open(0, [binary]),
     send_connect_msg(Socket, <<"client_id_test1">>),
     ?assertEqual(<<3, ?SN_CONNACK, 0>>, receive_response(Socket)),

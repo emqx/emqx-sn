@@ -29,9 +29,6 @@
 -define(byte,  8/big-integer).
 -define(short, 16/big-integer).
 
--define(LOG(Level, Format, Args),
-        emqx_logger:Level("MQTT-SN(Frame): " ++ Format, Args)).
-
 %%--------------------------------------------------------------------
 %% Parse MQTT-SN Message
 %%--------------------------------------------------------------------
@@ -43,9 +40,8 @@ parse(<<Len:?byte, Type:?byte, Var/binary>>) ->
 
 parse(Type, Len, Var) when Len =:= size(Var) ->
     {ok, #mqtt_sn_message{type = Type, variable = parse_var(Type, Var)}};
-parse(Type, Len, Var) ->
-    ?LOG(error, "format error: type=~p, len=~p, var=~p", [Type, Len, Var]),
-    error(format_error).
+parse(_Type, _Len, _Var) ->
+    error(malformed_message_len).
 
 parse_var(?SN_ADVERTISE, <<GwId:?byte, Duration:?short>>) ->
     {GwId, Duration};
@@ -71,8 +67,9 @@ parse_var(?SN_REGISTER, <<TopicId:?short, MsgId:?short, TopicName/binary>>) ->
     {TopicId, MsgId, TopicName};
 parse_var(?SN_REGACK, <<TopicId:?short, MsgId:?short, ReturnCode:?byte>>) ->
     {TopicId, MsgId, ReturnCode};
-parse_var(?SN_PUBLISH, <<Flags:?flag, TopicId:?short, MsgId:?short, Data/binary>>) ->
-    {parse_flags(?SN_PUBLISH, Flags), TopicId, MsgId, Data};
+parse_var(?SN_PUBLISH, <<FlagsBin:?flag, Topic:2/binary, MsgId:?short, Data/binary>>) ->
+    #mqtt_sn_flags{topic_id_type = IdType} = Flags = parse_flags(?SN_PUBLISH, FlagsBin),
+    {Flags, parse_topic(IdType, Topic), MsgId, Data};
 parse_var(?SN_PUBACK, <<TopicId:?short, MsgId:?short, ReturnCode:?byte>>) ->
     {TopicId, MsgId, ReturnCode};
 parse_var(PubRec, <<MsgId:?short>>) when PubRec == ?SN_PUBREC; PubRec == ?SN_PUBREL; PubRec == ?SN_PUBCOMP ->
@@ -103,7 +100,7 @@ parse_var(?SN_WILLTOPICRESP, <<ReturnCode:?byte>>) ->
 parse_var(?SN_WILLMSGRESP, <<ReturnCode:?byte>>) ->
     ReturnCode;
 parse_var(_Type, _Var) ->
-    error(format_error).
+    error(unkown_message_type).
 
 parse_flags(?SN_CONNECT, <<_D:1, _Q:2, _R:1, Will:1, CleanStart:1, _IdType:2>>) ->
     #mqtt_sn_flags{will = bool(Will), clean_start = bool(CleanStart)};
@@ -119,7 +116,7 @@ parse_flags(?SN_SUBACK, <<_D:1, QoS:2, _R:1, _W:1, _C:1, _Id:2>>) ->
 parse_flags(?SN_WILLTOPICUPD, <<_D:1, QoS:2, Retain:1, _W:1, _C:1, _Id:2>>) ->
     #mqtt_sn_flags{qos = QoS, retain = bool(Retain)};
 parse_flags(_Type, _) ->
-    error(format_error).
+    error(malformed_message_flags).
 
 parse_topic(2#00, Topic)     -> Topic;
 parse_topic(2#01, <<Id:16>>) -> Id;
@@ -149,7 +146,10 @@ serialize(?SN_CONNACK, ReturnCode) ->
     <<ReturnCode>>;
 serialize(?SN_WILLTOPICREQ, _) ->
     <<>>;
+serialize(?SN_WILLTOPIC, undefined) ->
+    <<>>;
 serialize(?SN_WILLTOPIC, {Flags, Topic}) ->
+    %% The WillTopic must a short topic name
     <<(serialize_flags(Flags))/binary, Topic/binary>>;
 serialize(?SN_WILLMSGREQ, _) ->
     <<>>;
@@ -159,14 +159,12 @@ serialize(?SN_REGISTER, {TopicId, MsgId, TopicName}) ->
     <<TopicId:?short, MsgId:?short, TopicName/binary>>;
 serialize(?SN_REGACK, {TopicId, MsgId, ReturnCode}) ->
     <<TopicId:?short, MsgId:?short, ReturnCode>>;
-%serialize(?SN_PUBLISH, {Flags, TopicId, MsgId, Data}) ->
-%    <<(serialize_flags(Flags))/binary, TopicId/binary, MsgId:?short, Data/binary>>;
 serialize(?SN_PUBLISH, {Flags=#mqtt_sn_flags{topic_id_type = ?SN_NORMAL_TOPIC}, TopicId, MsgId, Data}) ->
     <<(serialize_flags(Flags))/binary, TopicId:?short, MsgId:?short, Data/binary>>;
 serialize(?SN_PUBLISH, {Flags=#mqtt_sn_flags{topic_id_type = ?SN_PREDEFINED_TOPIC}, TopicId, MsgId, Data}) ->
     <<(serialize_flags(Flags))/binary, TopicId:?short, MsgId:?short, Data/binary>>;
-serialize(?SN_PUBLISH, {Flags=#mqtt_sn_flags{topic_id_type = ?SN_SHORT_TOPIC}, TopicId, MsgId, Data}) ->
-    <<(serialize_flags(Flags))/binary, TopicId:2/binary, MsgId:?short, Data/binary>>;
+serialize(?SN_PUBLISH, {Flags=#mqtt_sn_flags{topic_id_type = ?SN_SHORT_TOPIC}, STopicName, MsgId, Data}) ->
+    <<(serialize_flags(Flags))/binary, STopicName:2/binary, MsgId:?short, Data/binary>>;
 serialize(?SN_PUBACK, {TopicId, MsgId, ReturnCode}) ->
     <<TopicId:?short, MsgId:?short, ReturnCode>>;
 serialize(PubRec, MsgId) when PubRec == ?SN_PUBREC; PubRec == ?SN_PUBREL; PubRec == ?SN_PUBCOMP ->
