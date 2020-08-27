@@ -88,7 +88,7 @@
                 stats_timer          :: maybe(reference()),
                 idle_timeout         :: integer(),
                 enable_qos3 = false  :: boolean(),
-                transform            :: fun((emqx_types:packet()) -> tuple())
+                transform            :: fun((emqx_types:packet(), #state{}) -> tuple())
                }).
 
 -define(INFO_KEYS, [socktype, peername, sockname, sockstate]). %, active_n]).
