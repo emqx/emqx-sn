@@ -76,6 +76,8 @@
                 peername             :: {inet:ip_address(), inet:port()},
                 channel              :: emqx_channel:channel(),
                 clientid             :: maybe(binary()),
+                username             :: maybe(binary()),
+                password             :: maybe(binary()),
                 will_msg             :: maybe(#will_msg{}),
                 keepalive_interval   :: maybe(integer()),
                 connpkt              :: term(),
@@ -125,6 +127,8 @@ kick(GwPid) ->
 
 init([{_, SockPid, Sock}, Peername, Options]) ->
     GwId = proplists:get_value(gateway_id, Options),
+    Username = proplists:get_value(username, Options, undefined),
+    Password = proplists:get_value(password, Options, undefined),
     EnableQos3 = proplists:get_value(enable_qos3, Options, false),
     IdleTimeout = proplists:get_value(idle_timeout, Options, 30000),
     EnableStats = proplists:get_value(enable_stats, Options, false),
@@ -137,6 +141,8 @@ init([{_, SockPid, Sock}, Peername, Options]) ->
                                           conn_mod => ?MODULE
                                          }, ?DEFAULT_CHAN_OPTIONS),
             State = #state{gwid             = GwId,
+                           username         = Username,
+                           password         = Password,
                            socket           = Sock,
                            sockstate        = running,
                            sockpid          = SockPid,
@@ -192,7 +198,7 @@ idle(cast, {incoming, ?SN_PUBLISH_MSG(#mqtt_sn_flags{qos = ?QOS_NEG1,
                         emqx_sn_registry:lookup_topic(ClientId, TopicId);
                     true  -> <<TopicId:16>>
                 end,
-    Msg = emqx_message:make({?NEG_QOS_CLIENT_ID, application:get_env(emqx_sn, username, undefined)},
+    Msg = emqx_message:make({?NEG_QOS_CLIENT_ID, State#state.username},
                             ?QOS_0, TopicName, Data),
     (TopicName =/= undefined) andalso emqx_broker:publish(Msg),
     ?LOG(debug, "Client id=~p receives a publish with QoS=-1 in idle mode!", [ClientId], State),
@@ -788,12 +794,10 @@ mqttsn_to_mqtt(?SN_PUBCOMP, MsgId) ->
     ?PUBCOMP_PACKET(MsgId).
 
 do_connect(ClientId, CleanStart, WillFlag, Duration, State) ->
-    Username = application:get_env(emqx_sn, username, undefined),
-    Password = application:get_env(emqx_sn, password, undefined),
     ConnPkt = #mqtt_packet_connect{clientid    = ClientId,
                                    clean_start = CleanStart,
-                                   username    = Username,
-                                   password    = Password,
+                                   username    = State#state.username,
+                                   password    = State#state.password,
                                    keepalive   = Duration
                                   },
     put(clientid, ClientId),
