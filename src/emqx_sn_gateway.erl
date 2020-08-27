@@ -75,6 +75,7 @@
                 sockname             :: {inet:ip_address(), inet:port()},
                 peername             :: {inet:ip_address(), inet:port()},
                 channel              :: emqx_channel:channel(),
+                registry             :: emqx_sn_registry:registry(),
                 clientid             :: maybe(binary()),
                 username             :: maybe(binary()),
                 password             :: maybe(binary()),
@@ -127,6 +128,7 @@ kick(GwPid) ->
 
 init([{_, SockPid, Sock}, Peername, Options]) ->
     GwId = proplists:get_value(gateway_id, Options),
+    Registry = proplists:get_value(registry, Options),
     Username = proplists:get_value(username, Options, undefined),
     Password = proplists:get_value(password, Options, undefined),
     EnableQos3 = proplists:get_value(enable_qos3, Options, false),
@@ -149,6 +151,7 @@ init([{_, SockPid, Sock}, Peername, Options]) ->
                            sockname         = Sockname,
                            peername         = Peername,
                            channel          = Channel,
+                           registry         = Registry,
                            asleep_timer     = emqx_sn_asleep_timer:init(),
                            asleep_msg_queue = [],
                            enable_stats     = EnableStats,
@@ -192,10 +195,10 @@ idle(cast, {incoming, ?SN_PUBLISH_MSG(_Flag, _TopicId, _MsgId, _Data)}, State = 
 idle(cast, {incoming, ?SN_PUBLISH_MSG(#mqtt_sn_flags{qos = ?QOS_NEG1,
                                                      topic_id_type = TopicIdType
                                                     }, TopicId, _MsgId, Data)},
-     State = #state{clientid = ClientId}) ->
+     State = #state{clientid = ClientId, registry = Registry}) ->
     TopicName = case (TopicIdType =:= ?SN_SHORT_TOPIC) of
                     false ->
-                        emqx_sn_registry:lookup_topic(ClientId, TopicId);
+                        emqx_sn_registry:lookup_topic(Registry, ClientId, TopicId);
                     true  -> <<TopicId:16>>
                 end,
     Msg = emqx_message:make({?NEG_QOS_CLIENT_ID, State#state.username},
@@ -282,8 +285,8 @@ wait_for_will_msg(EventType, EventContent, State) ->
     handle_event(EventType, EventContent, wait_for_will_msg, State).
 
 connected(cast, {incoming, ?SN_REGISTER_MSG(_TopicId, MsgId, TopicName)},
-          State = #state{clientid = ClientId}) ->
-    case emqx_sn_registry:register_topic(ClientId, TopicName) of
+          State = #state{clientid = ClientId, registry = Registry}) ->
+    case emqx_sn_registry:register_topic(Registry, ClientId, TopicName) of
         TopicId when is_integer(TopicId) ->
             ?LOG(debug, "register ClientId=~p, TopicName=~p, TopicId=~p", [ClientId, TopicName, TopicId], State),
             send_message(?SN_REGACK_MSG(TopicId, MsgId, ?SN_RC_ACCEPTED), State);
@@ -557,8 +560,9 @@ handle_event(EventType, EventContent, StateName, State) ->
     {keep_state, State}.
 
 terminate(Reason, _StateName, #state{clientid = ClientId,
-                                     channel  = Channel}) ->
-    emqx_sn_registry:unregister_topic(ClientId),
+                                     channel  = Channel,
+                                     registry = Registry}) ->
+    emqx_sn_registry:unregister_topic(Registry, ClientId),
     case {Channel, Reason} of
         {undefined, _} -> ok;
         {_, _} ->
@@ -682,19 +686,19 @@ call(Pid, Req) ->
 %% Internal Functions
 %%--------------------------------------------------------------------
 
-transform(?CONNACK_PACKET(0, _SessPresent), _FuncMsgIdToTopicId) ->
+transform(?CONNACK_PACKET(0, _SessPresent), _FuncMsgIdToTopicId, _State) ->
     ?SN_CONNACK_MSG(0);
 
-transform(?CONNACK_PACKET(_ReturnCode, _SessPresent), _FuncMsgIdToTopicId) ->
+transform(?CONNACK_PACKET(_ReturnCode, _SessPresent), _FuncMsgIdToTopicId, _State) ->
     ?SN_CONNACK_MSG(?SN_RC_CONGESTION);
 
-transform(?PUBLISH_PACKET(QoS, Topic, PacketId, Payload), _FuncMsgIdToTopicId) ->
+transform(?PUBLISH_PACKET(QoS, Topic, PacketId, Payload), _FuncMsgIdToTopicId, #state{registry = Registry}) ->
     NewPacketId = if
                       QoS =:= ?QOS_0 -> 0;
                       true           -> PacketId
                   end,
     ClientId = get(clientid),
-    {TopicIdType, TopicContent} = case emqx_sn_registry:lookup_topic_id(ClientId, Topic) of
+    {TopicIdType, TopicContent} = case emqx_sn_registry:lookup_topic_id(Registry, ClientId, Topic) of
                                       {predef, PredefTopicId} ->
                                           {?SN_PREDEFINED_TOPIC, PredefTopicId};
                                       TopicId when is_integer(TopicId) ->
@@ -706,20 +710,20 @@ transform(?PUBLISH_PACKET(QoS, Topic, PacketId, Payload), _FuncMsgIdToTopicId) -
     Flags = #mqtt_sn_flags{qos = QoS, topic_id_type = TopicIdType},
     ?SN_PUBLISH_MSG(Flags, TopicContent, NewPacketId, Payload);
 
-transform(?PUBACK_PACKET(MsgId, _ReasonCode), FuncMsgIdToTopicId) ->
+transform(?PUBACK_PACKET(MsgId, _ReasonCode), FuncMsgIdToTopicId, _State) ->
     TopicIdFinal =  get_topic_id(puback, MsgId, FuncMsgIdToTopicId),
     ?SN_PUBACK_MSG(TopicIdFinal, MsgId, ?SN_RC_ACCEPTED);
 
-transform(?PUBREC_PACKET(MsgId), _FuncMsgIdToTopicId) ->
+transform(?PUBREC_PACKET(MsgId), _FuncMsgIdToTopicId, _State) ->
     ?SN_PUBREC_MSG(?SN_PUBREC, MsgId);
 
-transform(?PUBREL_PACKET(MsgId), _FuncMsgIdToTopicId) ->
+transform(?PUBREL_PACKET(MsgId), _FuncMsgIdToTopicId, _State) ->
     ?SN_PUBREC_MSG(?SN_PUBREL, MsgId);
 
-transform(?PUBCOMP_PACKET(MsgId), _FuncMsgIdToTopicId) ->
+transform(?PUBCOMP_PACKET(MsgId), _FuncMsgIdToTopicId, _State) ->
     ?SN_PUBREC_MSG(?SN_PUBCOMP, MsgId);
 
-transform(?SUBACK_PACKET(MsgId, ReturnCodes), FuncMsgIdToTopicId)->
+transform(?SUBACK_PACKET(MsgId, ReturnCodes), FuncMsgIdToTopicId, _State)->
     % if success, suback is sent by handle_info({suback, MsgId, [GrantedQoS]}, ...)
     % if failure, suback is sent in this function.
     [ReturnCode | _ ] = ReturnCodes,
@@ -733,7 +737,7 @@ transform(?SUBACK_PACKET(MsgId, ReturnCodes), FuncMsgIdToTopicId)->
     Flags = #mqtt_sn_flags{qos = QoS},
     ?SN_SUBACK_MSG(Flags, TopicId, MsgId, NewReturnCode);
 
-transform(?UNSUBACK_PACKET(MsgId), _FuncMsgIdToTopicId)->
+transform(?UNSUBACK_PACKET(MsgId), _FuncMsgIdToTopicId, _State)->
     ?SN_UNSUBACK_MSG(MsgId).
 
 send_register(TopicName, TopicId, MsgId, State) ->
@@ -818,12 +822,13 @@ do_connect(ClientId, CleanStart, WillFlag, Duration, State) ->
 do_2nd_connect(Flags, Duration, ClientId, State = #state{sockname = Sockname,
                                                          peername = Peername,
                                                          clientid = OldClientId,
+                                                         registry = Registry,
                                                          channel  = Channel}) ->
     #mqtt_sn_flags{will = Will, clean_start = CleanStart} = Flags,
     NChannel = case CleanStart of
                    true ->
                        emqx_channel:terminate(normal, Channel),
-                       emqx_sn_registry:unregister_topic(OldClientId),
+                       emqx_sn_registry:unregister_topic(Registry, OldClientId),
                        emqx_channel:init(#{socktype => udp,
                                            sockname => Sockname,
                                            peername => Peername,
@@ -835,8 +840,9 @@ do_2nd_connect(Flags, Duration, ClientId, State = #state{sockname = Sockname,
     NState = State#state{channel = NChannel},
     do_connect(ClientId, CleanStart, Will, Duration, NState).
 
-handle_subscribe(?SN_NORMAL_TOPIC, TopicName, QoS, MsgId, State=#state{clientid = ClientId}) ->
-    case emqx_sn_registry:register_topic(ClientId, TopicName) of
+handle_subscribe(?SN_NORMAL_TOPIC, TopicName, QoS, MsgId,
+                 State=#state{clientid = ClientId, registry = Registry}) ->
+    case emqx_sn_registry:register_topic(Registry, ClientId, TopicName) of
         {error, too_large} ->
             ok = send_message(?SN_SUBACK_MSG(#mqtt_sn_flags{qos = QoS},
                                              ?SN_INVALID_TOPIC_ID,
@@ -849,8 +855,9 @@ handle_subscribe(?SN_NORMAL_TOPIC, TopicName, QoS, MsgId, State=#state{clientid 
             proto_subscribe(TopicName, QoS, MsgId, NewTopicId, State)
     end;
 
-handle_subscribe(?SN_PREDEFINED_TOPIC, TopicId, QoS, MsgId, State = #state{clientid = ClientId}) ->
-    case emqx_sn_registry:lookup_topic(ClientId, TopicId) of
+handle_subscribe(?SN_PREDEFINED_TOPIC, TopicId, QoS, MsgId,
+                 State = #state{clientid = ClientId, registry = Registry}) ->
+    case emqx_sn_registry:lookup_topic(Registry, ClientId, TopicId) of
         undefined ->
             ok = send_message(?SN_SUBACK_MSG(#mqtt_sn_flags{qos = QoS},
                                              TopicId,
@@ -878,8 +885,9 @@ handle_subscribe(_, _TopicId, QoS, MsgId, State) ->
 handle_unsubscribe(?SN_NORMAL_TOPIC, TopicId, MsgId, State) ->
     proto_unsubscribe(TopicId, MsgId, State);
 
-handle_unsubscribe(?SN_PREDEFINED_TOPIC, TopicId, MsgId, State = #state{clientid = ClientId}) ->
-    case emqx_sn_registry:lookup_topic(ClientId, TopicId) of
+handle_unsubscribe(?SN_PREDEFINED_TOPIC, TopicId, MsgId,
+                   State = #state{clientid = ClientId, registry = Registry}) ->
+    case emqx_sn_registry:lookup_topic(Registry, ClientId, TopicId) of
         undefined ->
             ok = send_message(?SN_UNSUBACK_MSG(MsgId), State),
             {keep_state, State};
@@ -902,10 +910,11 @@ do_publish(?SN_NORMAL_TOPIC, TopicName, Data, Flags, MsgId, State) ->
     %% XXX: Handle normal topic id as predefined topic id, to be compatible with paho mqtt-sn library
     <<TopicId:16>> = TopicName,
     do_publish(?SN_PREDEFINED_TOPIC, TopicId, Data, Flags, MsgId, State);
-do_publish(?SN_PREDEFINED_TOPIC, TopicId, Data, Flags, MsgId, State=#state{clientid = ClientId}) ->
+do_publish(?SN_PREDEFINED_TOPIC, TopicId, Data, Flags, MsgId,
+           State=#state{clientid = ClientId, registry = Registry}) ->
     #mqtt_sn_flags{qos = QoS, dup = Dup, retain = Retain} = Flags,
     NewQoS = get_corrected_qos(QoS, State),
-    case emqx_sn_registry:lookup_topic(ClientId, TopicId) of
+    case emqx_sn_registry:lookup_topic(Registry, ClientId, TopicId) of
         undefined ->
             (NewQoS =/= ?QOS_0) andalso send_message(?SN_PUBACK_MSG(TopicId, MsgId, ?SN_RC_INVALID_TOPIC_ID), State),
             {keep_state, State};
@@ -943,12 +952,13 @@ do_publish_will(#state{channel = Channel, will_msg = WillMsg}) ->
     emqx_broker:publish(emqx_packet:to_message(ClientInfo, Publish)),
     ok.
 
-do_puback(TopicId, MsgId, ReturnCode, _StateName, State=#state{clientid = ClientId}) ->
+do_puback(TopicId, MsgId, ReturnCode, _StateName,
+          State=#state{clientid = ClientId, registry = Registry}) ->
     case ReturnCode of
         ?SN_RC_ACCEPTED ->
             handle_incoming(?PUBACK_PACKET(MsgId), State);
         ?SN_RC_INVALID_TOPIC_ID ->
-            case emqx_sn_registry:lookup_topic(ClientId, TopicId) of
+            case emqx_sn_registry:lookup_topic(Registry, ClientId, TopicId) of
                 undefined -> ok;
                 TopicName ->
                     %%notice that this TopicName maybe normal or predefined,
@@ -1036,23 +1046,24 @@ handle_outgoing(Packets, State) when is_list(Packets) ->
     lists:foreach(fun(Packet) -> handle_outgoing(Packet, State) end, Packets);
 
 handle_outgoing(PubPkt = ?PUBLISH_PACKET(QoS, TopicName, PacketId, Payload),
-                State = #state{clientid = ClientId, transform = Transform}) ->
+                State = #state{clientid = ClientId, registry = Registry, transform = Transform}) ->
     #mqtt_packet{header = #mqtt_packet_header{dup = Dup, retain = Retain}} = PubPkt,
     MsgId = message_id(PacketId),
     ?LOG(debug, "Handle outgoing: ~p", [PubPkt], State),
 
-    (emqx_sn_registry:lookup_topic_id(ClientId, TopicName) == undefined)
+    (emqx_sn_registry:lookup_topic_id(Registry, ClientId, TopicName) == undefined)
         andalso (byte_size(TopicName) =/= 2)
             andalso register_and_notify_client(TopicName, Payload, Dup, QoS,
                                                Retain, MsgId, ClientId, State),
-    send_message(Transform(PubPkt), State);
+    send_message(Transform(PubPkt, State), State);
 
 
 handle_outgoing(Packet, State = #state{transform = Transform}) ->
-    send_message(Transform(Packet), State).
+    send_message(Transform(Packet, State), State).
 
-register_and_notify_client(TopicName, Payload, Dup, QoS, Retain, MsgId, ClientId, State) ->
-    TopicId = emqx_sn_registry:register_topic(ClientId, TopicName),
+register_and_notify_client(TopicName, Payload, Dup, QoS, Retain, MsgId, ClientId,
+                           State = #state{registry = Registry}) ->
+    TopicId = emqx_sn_registry:register_topic(Registry, ClientId, TopicName),
     ?LOG(debug, "register TopicId=~p, TopicName=~p, Payload=~p, Dup=~p, QoS=~p, Retain=~p, MsgId=~p",
         [TopicId, TopicName, Payload, Dup, QoS, Retain, MsgId], State),
     send_register(TopicName, TopicId, MsgId, State).
@@ -1063,7 +1074,7 @@ message_id(MsgId) -> MsgId.
 
 transform_fun() ->
     FunMsgIdToTopicId = fun(Type, MsgId) -> dequeue_msgid(Type, MsgId) end,
-    fun(Packet) -> transform(Packet, FunMsgIdToTopicId) end.
+    fun(Packet, State) -> transform(Packet, FunMsgIdToTopicId, State) end.
 
 inc_incoming_stats(Type) ->
     emqx_pd:inc_counter(recv_pkt, 1),
