@@ -201,8 +201,7 @@ idle(cast, {incoming, ?SN_PUBLISH_MSG(#mqtt_sn_flags{qos = ?QOS_NEG1,
                         emqx_sn_registry:lookup_topic(Registry, ClientId, TopicId);
                     true  -> <<TopicId:16>>
                 end,
-    Msg = emqx_message:make({?NEG_QOS_CLIENT_ID, State#state.username},
-                            ?QOS_0, TopicName, Data),
+    Msg = emqx_message:make(?NEG_QOS_CLIENT_ID, ?QOS_0, TopicName, Data),
     (TopicName =/= undefined) andalso emqx_broker:publish(Msg),
     ?LOG(debug, "Client id=~p receives a publish with QoS=-1 in idle mode!", [ClientId], State),
     {keep_state_and_data, State#state.idle_timeout};
