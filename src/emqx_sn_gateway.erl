@@ -942,14 +942,13 @@ do_publish_will(#state{will_msg = #will_msg{payload = undefined}}) ->
     ok;
 do_publish_will(#state{will_msg = #will_msg{topic = undefined}}) ->
     ok;
-do_publish_will(#state{channel = Channel, will_msg = WillMsg}) ->
+do_publish_will(#state{will_msg = WillMsg, clientid = ClientId}) ->
     #will_msg{qos = QoS, retain = Retain, topic = Topic, payload = Payload} = WillMsg,
     Publish = #mqtt_packet{header   = #mqtt_packet_header{type = ?PUBLISH, dup = false,
                                                           qos = QoS, retain = Retain},
                            variable = #mqtt_packet_publish{topic_name = Topic, packet_id = 1000},
                            payload  = Payload},
-    ClientInfo = emqx_channel:info(clientinfo, Channel),
-    emqx_broker:publish(emqx_packet:to_message(ClientInfo, Publish)),
+    emqx_broker:publish(emqx_packet:to_message(Publish, ClientId)),
     ok.
 
 do_puback(TopicId, MsgId, ReturnCode, _StateName,
