@@ -74,7 +74,7 @@
                 sockstate            :: emqx_types:sockstate(),
                 sockname             :: {inet:ip_address(), inet:port()},
                 peername             :: {inet:ip_address(), inet:port()},
-                channel              :: emqx_channel:channel(),
+                channel              :: maybe(emqx_channel:channel()),
                 registry             :: emqx_sn_registry:registry(),
                 clientid             :: maybe(binary()),
                 username             :: maybe(binary()),
@@ -83,12 +83,11 @@
                 keepalive_interval   :: maybe(integer()),
                 connpkt              :: term(),
                 asleep_timer         :: tuple(),
-                asleep_msg_queue     :: list(),
                 enable_stats         :: boolean(),
                 stats_timer          :: maybe(reference()),
                 idle_timeout         :: integer(),
                 enable_qos3 = false  :: boolean(),
-                transform            :: fun((emqx_types:packet(), #state{}) -> tuple())
+                has_pending_pingresp = false :: boolean()
                }).
 
 -define(INFO_KEYS, [socktype, peername, sockname, sockstate]). %, active_n]).
@@ -105,6 +104,14 @@
 
 -define(NO_PEERCERT, undefined).
 
+-define(CONN_INFO(Sockname, Peername),
+    #{socktype => udp,
+      sockname => Sockname,
+      peername => Peername,
+      protocol => 'mqtt-sn',
+      peercert => ?NO_PEERCERT,
+      conn_mod => ?MODULE
+    }).
 
 %%--------------------------------------------------------------------
 %% Exported APIs
@@ -136,12 +143,7 @@ init([{_, SockPid, Sock}, Peername, Options]) ->
     EnableStats = proplists:get_value(enable_stats, Options, false),
     case inet:sockname(Sock) of
         {ok, Sockname} ->
-            Channel = emqx_channel:init(#{sockname => Sockname,
-                                          peername => Peername,
-                                          protocol => 'mqtt-sn',
-                                          peercert => ?NO_PEERCERT,
-                                          conn_mod => ?MODULE
-                                         }, ?DEFAULT_CHAN_OPTIONS),
+            Channel = emqx_channel:init(?CONN_INFO(Sockname, Peername), ?DEFAULT_CHAN_OPTIONS),
             State = #state{gwid             = GwId,
                            username         = Username,
                            password         = Password,
@@ -153,11 +155,9 @@ init([{_, SockPid, Sock}, Peername, Options]) ->
                            channel          = Channel,
                            registry         = Registry,
                            asleep_timer     = emqx_sn_asleep_timer:init(),
-                           asleep_msg_queue = [],
                            enable_stats     = EnableStats,
                            enable_qos3      = EnableQos3,
-                           idle_timeout     = IdleTimeout,
-                           transform        = transform_fun()
+                           idle_timeout     = IdleTimeout
                           },
             {ok, idle, State, [IdleTimeout]};
         {error, Reason} when Reason =:= enotconn;
@@ -177,9 +177,6 @@ idle(cast, {incoming, ?SN_CONNECT_MSG(Flags, _ProtoId, Duration, ClientId)}, Sta
     #mqtt_sn_flags{will = Will, clean_start = CleanStart} = Flags,
     do_connect(ClientId, CleanStart, Will, Duration, State);
 
-idle(cast, {incoming, Packet = ?CONNECT_PACKET(_ConnPkt)}, State) ->
-    handle_incoming(Packet, State);
-
 idle(cast, {incoming, ?SN_ADVERTISE_MSG(_GwId, _Radius)}, State) ->
     % ignore
     {keep_state, State, State#state.idle_timeout};
@@ -190,21 +187,25 @@ idle(cast, {incoming, ?SN_DISCONNECT_MSG(_Duration)}, State) ->
 
 idle(cast, {incoming, ?SN_PUBLISH_MSG(_Flag, _TopicId, _MsgId, _Data)}, State = #state{enable_qos3 = false}) ->
     ?LOG(debug, "The enable_qos3 is false, ignore the received publish with QoS=-1 in idle mode!", [], State),
-    {keep_state_and_data, State#state.idle_timeout};
+    {keep_state, State#state.idle_timeout};
 
 idle(cast, {incoming, ?SN_PUBLISH_MSG(#mqtt_sn_flags{qos = ?QOS_NEG1,
                                                      topic_id_type = TopicIdType
                                                     }, TopicId, _MsgId, Data)},
-     State = #state{clientid = ClientId, registry = Registry}) ->
+    State = #state{clientid = ClientId, registry = Registry}) ->
     TopicName = case (TopicIdType =:= ?SN_SHORT_TOPIC) of
-                    false ->
-                        emqx_sn_registry:lookup_topic(Registry, ClientId, TopicId);
+                    false -> emqx_sn_registry:lookup_topic(Registry, ClientId, TopicId);
                     true  -> <<TopicId:16>>
                 end,
-    Msg = emqx_message:make(?NEG_QOS_CLIENT_ID, ?QOS_0, TopicName, Data),
-    (TopicName =/= undefined) andalso emqx_broker:publish(Msg),
+    _ = case TopicName =/= undefined of
+        true ->
+            Msg = emqx_message:make(?NEG_QOS_CLIENT_ID, ?QOS_0, TopicName, Data),
+            emqx_broker:publish(Msg);
+        false ->
+            ok
+    end,
     ?LOG(debug, "Client id=~p receives a publish with QoS=-1 in idle mode!", [ClientId], State),
-    {keep_state_and_data, State#state.idle_timeout};
+    {keep_state, State#state.idle_timeout};
 
 idle(cast, {incoming, PingReq = ?SN_PINGREQ_MSG(_ClientId)}, State) ->
     handle_ping(PingReq, State);
@@ -398,15 +399,23 @@ asleep(cast, {incoming, ?SN_PINGREQ_MSG(undefined)}, State) ->
     % ClientId in PINGREQ is mandatory
     {keep_state, State};
 
-asleep(cast, {incoming, PingReq = ?SN_PINGREQ_MSG(ClientIdPing)},
-       State = #state{clientid = ClientId}) ->
+asleep(cast, {incoming, ?SN_PINGREQ_MSG(ClientIdPing)},
+       State = #state{clientid = ClientId, channel = Channel}) ->
     case ClientIdPing of
         ClientId ->
-            _ = handle_ping(PingReq, State),
-            self() ! do_awake_jobs,
-            % it is better to go awake state, since the jobs in awake may take long time
-            % and asleep timer get timeout, it will cause disaster
-            {next_state, awake, State};
+            inc_ping_counter(),
+            case emqx_session:dequeue(emqx_channel:get_session(Channel)) of
+                {ok, Session0} ->
+                    send_message(?SN_PINGRESP_MSG(), State),
+                    {keep_state, State#state{
+                        channel = emqx_channel:set_session(Session0, Channel)}};
+                {ok, Delivers, Session0} ->
+                    Events = [emqx_message:to_packet(PckId, Msg) || {PckId, Msg} <- Delivers]
+                             ++ [try_goto_asleep],
+                    {next_state, awake, State#state{
+                        channel = emqx_channel:set_session(Session0, Channel),
+                        has_pending_pingresp = true}, outgoing_events(Events)}
+            end;
         _Other   ->
             {next_state, asleep, State}
     end;
@@ -451,6 +460,20 @@ awake(cast, {outgoing, Packet}, State) ->
     ok = handle_outgoing(Packet, State),
     {keep_state, State};
 
+awake(cast, {incoming, ?SN_PUBACK_MSG(TopicId, MsgId, ReturnCode)}, State) ->
+    do_puback(TopicId, MsgId, ReturnCode, awake, State);
+
+awake(cast, try_goto_asleep, State=#state{channel = Channel,
+        has_pending_pingresp = PingPending}) ->
+    case emqx_mqueue:is_empty(emqx_session:info(mqueue, emqx_channel:get_session(Channel))) of
+        true when PingPending =:= true ->
+            send_message(?SN_PINGRESP_MSG(), State),
+            goto_asleep_state(State#state{has_pending_pingresp = false});
+        true when PingPending =:= false ->
+            goto_asleep_state(State);
+        false -> keep_state_and_data
+    end;
+
 awake(EventType, EventContent, State) ->
     handle_event(EventType, EventContent, awake, State).
 
@@ -473,10 +496,10 @@ handle_event(info, {datagram, SockPid, Data}, StateName,
              State = #state{sockpid = SockPid, channel = _Channel}) ->
     ?LOG(debug, "RECV ~p", [Data], State),
     Oct = iolist_size(Data),
-    emqx_pd:inc_counter(recv_oct, Oct),
+    inc_counter(recv_oct, Oct),
     try emqx_sn_frame:parse(Data) of
         {ok, Msg} ->
-            emqx_pd:inc_counter(recv_cnt, 1),
+            inc_counter(recv_cnt, 1),
             ?LOG(info, "RECV ~s at state ~s",
                  [emqx_sn_frame:format(Msg), StateName], State),
             {keep_state, State, next_event({incoming, Msg})}
@@ -487,11 +510,12 @@ handle_event(info, {datagram, SockPid, Data}, StateName,
             shutdown(frame_error, State)
     end;
 
-handle_event(info, Deliver = {deliver, _Topic, Msg}, asleep,
-             State = #state{asleep_msg_queue = AsleepMsgQ}) ->
+handle_event(info, {deliver, _Topic, Msg}, asleep,
+             State = #state{channel = Channel}) ->
     % section 6.14, Support of sleeping clients
     ?LOG(debug, "enqueue downlink message in asleep state Msg=~p", [Msg], State),
-    {keep_state, State#state{asleep_msg_queue = [Deliver|AsleepMsgQ]}};
+    Session = emqx_session:enqueue(Msg, emqx_channel:get_session(Channel)),
+    {keep_state, State#state{channel = emqx_channel:set_session(Session, Channel)}};
 
 handle_event(info, Deliver = {deliver, _Topic, _Msg}, _StateName,
              State = #state{channel = Channel}) ->
@@ -515,18 +539,6 @@ handle_event(info, {timeout, TRef, keepalive}, _StateName, State) ->
 
 handle_event(info, {timeout, TRef, TMsg}, _StateName, State) ->
     handle_timeout(TRef, TMsg, State);
-
-handle_event(info, do_awake_jobs, StateName, State=#state{clientid = ClientId}) ->
-    ?LOG(debug, "Do awake jobs, statename : ~p", [StateName], State),
-    case process_awake_jobs(ClientId, State) of
-        {keep_state, NewState} ->
-            case StateName of
-                awake  -> goto_asleep_state(NewState);
-                _Other -> {keep_state, NewState}
-                          %% device send a CONNECT immediately before this do_awake_jobs is handled
-            end;
-        Stop -> Stop
-    end;
 
 handle_event(info, asleep_timeout, asleep, State) ->
     ?LOG(debug, "asleep timer timeout, shutdown now", [], State),
@@ -562,10 +574,9 @@ terminate(Reason, _StateName, #state{clientid = ClientId,
                                      channel  = Channel,
                                      registry = Registry}) ->
     emqx_sn_registry:unregister_topic(Registry, ClientId),
-    case {Channel, Reason} of
-        {undefined, _} -> ok;
-        {_, _} ->
-            emqx_channel:terminate(Reason, Channel)
+    case Channel =:= undefined of
+        true -> ok;
+        false -> emqx_channel:terminate(Reason, Channel)
     end.
 
 code_change(_Vsn, StateName, State, _Extra) ->
@@ -586,51 +597,37 @@ handle_call(_From, Req, State = #state{channel = Channel}) ->
         {reply, Reply, NChannel} ->
             {reply, Reply, State#state{channel = NChannel}};
         {shutdown, Reason, Reply, NChannel} ->
-            shutdown(Reason, Reply, State#state{channel = NChannel});
-        {shutdown, Reason, Reply, OutPacket, NChannel} ->
-            NState = State#state{channel = NChannel},
-            ok = handle_outgoing(OutPacket, NState),
-            shutdown(Reason, Reply, NState)
+            shutdown(Reason, Reply, State#state{channel = NChannel})
     end.
 
 handle_info(Info, State = #state{channel = Channel}) ->
    handle_return(emqx_channel:handle_info(Info, Channel), State).
 
-handle_ping(_PingReq, State) ->
-    emqx_pd:inc_counter(recv_oct, 2),
-    emqx_pd:inc_counter(recv_msg, 1),
-    ok = send_message(?SN_PINGRESP_MSG(), State),
-    {keep_state, State}.
-
 handle_timeout(TRef, TMsg, State = #state{channel = Channel}) ->
     handle_return(emqx_channel:handle_timeout(TRef, TMsg, Channel), State).
 
-handle_return(ok, State) ->
-    {keep_state, State};
-handle_return({ok, NChannel}, State) ->
-    {keep_state, State#state{channel = NChannel}};
-handle_return({ok, Replies, NChannel}, State) ->
-    {keep_state, State#state{channel = NChannel}, next_events(Replies)};
+handle_return(Return, State) ->
+    handle_return(Return, State, []).
 
-handle_return({shutdown, Reason, NChannel}, State) ->
+handle_return({ok, NChannel}, State, AddEvents) ->
+    handle_return({ok, AddEvents, NChannel}, State, []);
+handle_return({ok, Replies, NChannel}, State, AddEvents) ->
+    {keep_state, State#state{channel = NChannel}, outgoing_events(append(Replies, AddEvents))};
+handle_return({shutdown, Reason, NChannel}, State, _AddEvents) ->
     stop({shutdown, Reason}, State#state{channel = NChannel});
-handle_return({shutdown, Reason, OutPacket, NChannel}, State) ->
+handle_return({shutdown, Reason, OutPacket, NChannel}, State, _AddEvents) ->
     NState = State#state{channel = NChannel},
     ok = handle_outgoing(OutPacket, NState),
-    stop({shutdown, Reason}, NState);
-handle_return({stop, Reason, NChannel}, State) ->
-    stop(Reason, State#state{channel = NChannel});
-handle_return({stop, Reason, OutPacket, NChannel}, State) ->
-    NState = State#state{channel = NChannel},
-    ok = handle_outgoing(OutPacket, NState),
-    stop(Reason, NState).
+    stop({shutdown, Reason}, NState).
 
-next_events(Packet) when is_record(Packet, mqtt_packet) ->
+outgoing_events(Actions) ->
+    lists:map(fun outgoing_event/1, Actions).
+
+outgoing_event(Packet) when is_record(Packet, mqtt_packet);
+                            is_record(Packet, mqtt_sn_message)->
     next_event({outgoing, Packet});
-next_events(Action) when is_tuple(Action) ->
-    next_event(Action);
-next_events(Actions) when is_list(Actions) ->
-    lists:map(fun next_event/1, Actions).
+outgoing_event(Action) ->
+    next_event(Action).
 
 close_socket(State = #state{sockstate = closed}) -> State;
 close_socket(State = #state{socket = _Socket}) ->
@@ -684,14 +681,33 @@ call(Pid, Req) ->
 %%--------------------------------------------------------------------
 %% Internal Functions
 %%--------------------------------------------------------------------
+handle_ping(_PingReq, State) ->
+    ok = send_message(?SN_PINGRESP_MSG(), State),
+    inc_ping_counter(),
+    {keep_state, State}.
 
-transform(?CONNACK_PACKET(0, _SessPresent), _FuncMsgIdToTopicId, _State) ->
+inc_ping_counter() ->
+    inc_counter(recv_msg, 1).
+
+mqtt2sn(?CONNACK_PACKET(0, _SessPresent),  _State) ->
     ?SN_CONNACK_MSG(0);
 
-transform(?CONNACK_PACKET(_ReturnCode, _SessPresent), _FuncMsgIdToTopicId, _State) ->
+mqtt2sn(?CONNACK_PACKET(_ReturnCode, _SessPresent), _State) ->
     ?SN_CONNACK_MSG(?SN_RC_CONGESTION);
 
-transform(?PUBLISH_PACKET(QoS, Topic, PacketId, Payload), _FuncMsgIdToTopicId, #state{registry = Registry}) ->
+mqtt2sn(?PUBREC_PACKET(MsgId), _State) ->
+    ?SN_PUBREC_MSG(?SN_PUBREC, MsgId);
+
+mqtt2sn(?PUBREL_PACKET(MsgId), _State) ->
+    ?SN_PUBREC_MSG(?SN_PUBREL, MsgId);
+
+mqtt2sn(?PUBCOMP_PACKET(MsgId), _State) ->
+    ?SN_PUBREC_MSG(?SN_PUBCOMP, MsgId);
+
+mqtt2sn(?UNSUBACK_PACKET(MsgId), _State)->
+    ?SN_UNSUBACK_MSG(MsgId);
+
+mqtt2sn(?PUBLISH_PACKET(QoS, Topic, PacketId, Payload), #state{registry = Registry}) ->
     NewPacketId = if
                       QoS =:= ?QOS_0 -> 0;
                       true           -> PacketId
@@ -709,35 +725,23 @@ transform(?PUBLISH_PACKET(QoS, Topic, PacketId, Payload), _FuncMsgIdToTopicId, #
     Flags = #mqtt_sn_flags{qos = QoS, topic_id_type = TopicIdType},
     ?SN_PUBLISH_MSG(Flags, TopicContent, NewPacketId, Payload);
 
-transform(?PUBACK_PACKET(MsgId, _ReasonCode), FuncMsgIdToTopicId, _State) ->
-    TopicIdFinal =  get_topic_id(puback, MsgId, FuncMsgIdToTopicId),
-    ?SN_PUBACK_MSG(TopicIdFinal, MsgId, ?SN_RC_ACCEPTED);
-
-transform(?PUBREC_PACKET(MsgId), _FuncMsgIdToTopicId, _State) ->
-    ?SN_PUBREC_MSG(?SN_PUBREC, MsgId);
-
-transform(?PUBREL_PACKET(MsgId), _FuncMsgIdToTopicId, _State) ->
-    ?SN_PUBREC_MSG(?SN_PUBREL, MsgId);
-
-transform(?PUBCOMP_PACKET(MsgId), _FuncMsgIdToTopicId, _State) ->
-    ?SN_PUBREC_MSG(?SN_PUBCOMP, MsgId);
-
-transform(?SUBACK_PACKET(MsgId, ReturnCodes), FuncMsgIdToTopicId, _State)->
+mqtt2sn(?SUBACK_PACKET(MsgId, ReturnCodes), _State)->
     % if success, suback is sent by handle_info({suback, MsgId, [GrantedQoS]}, ...)
     % if failure, suback is sent in this function.
     [ReturnCode | _ ] = ReturnCodes,
     {QoS, TopicId, NewReturnCode}
         = case ?IS_QOS(ReturnCode) of
               true ->
-                  {ReturnCode, get_topic_id(suback, MsgId, FuncMsgIdToTopicId), ?SN_RC_ACCEPTED};
+                  {ReturnCode, get_topic_id(suback, MsgId), ?SN_RC_ACCEPTED};
               _ ->
-                  {?QOS_0, get_topic_id(suback, MsgId, FuncMsgIdToTopicId), ?SN_RC_NOT_SUPPORTED}
+                  {?QOS_0, get_topic_id(suback, MsgId), ?SN_RC_NOT_SUPPORTED}
           end,
     Flags = #mqtt_sn_flags{qos = QoS},
     ?SN_SUBACK_MSG(Flags, TopicId, MsgId, NewReturnCode);
 
-transform(?UNSUBACK_PACKET(MsgId), _FuncMsgIdToTopicId, _State)->
-    ?SN_UNSUBACK_MSG(MsgId).
+mqtt2sn(?PUBACK_PACKET(MsgId, _ReasonCode), _State) ->
+    TopicIdFinal =  get_topic_id(puback, MsgId),
+    ?SN_PUBACK_MSG(TopicIdFinal, MsgId, ?SN_RC_ACCEPTED).
 
 send_register(TopicName, TopicId, MsgId, State) ->
     send_message(?SN_REGISTER_MSG(TopicId, MsgId, TopicName), State).
@@ -797,11 +801,17 @@ mqttsn_to_mqtt(?SN_PUBCOMP, MsgId) ->
     ?PUBCOMP_PACKET(MsgId).
 
 do_connect(ClientId, CleanStart, WillFlag, Duration, State) ->
+    %% 6.6 Client’s Publish Procedure
+    %% At any point in time a client may have only one QoS level 1 or 2 PUBLISH message
+    %% outstanding, i.e. it has to wait for the termination of this PUBLISH message exchange
+    %% before it could start a new level 1 or 2 transaction.
+    OnlyOneInflight = #{'Receive-Maximum' => 1},
     ConnPkt = #mqtt_packet_connect{clientid    = ClientId,
                                    clean_start = CleanStart,
                                    username    = State#state.username,
                                    password    = State#state.password,
-                                   keepalive   = Duration
+                                   keepalive   = Duration,
+                                   properties  = OnlyOneInflight
                                   },
     put(clientid, ClientId),
     case WillFlag of
@@ -947,14 +957,14 @@ do_publish_will(#state{will_msg = WillMsg, clientid = ClientId}) ->
                                                           qos = QoS, retain = Retain},
                            variable = #mqtt_packet_publish{topic_name = Topic, packet_id = 1000},
                            payload  = Payload},
-    emqx_broker:publish(emqx_packet:to_message(Publish, ClientId)),
+    _ = emqx_broker:publish(emqx_packet:to_message(Publish, ClientId)),
     ok.
 
-do_puback(TopicId, MsgId, ReturnCode, _StateName,
+do_puback(TopicId, MsgId, ReturnCode, StateName,
           State=#state{clientid = ClientId, registry = Registry}) ->
     case ReturnCode of
         ?SN_RC_ACCEPTED ->
-            handle_incoming(?PUBACK_PACKET(MsgId), State);
+            handle_incoming(?PUBACK_PACKET(MsgId), StateName, State);
         ?SN_RC_INVALID_TOPIC_ID ->
             case emqx_sn_registry:lookup_topic(Registry, ClientId, TopicId) of
                 undefined -> ok;
@@ -1001,15 +1011,6 @@ update_will_msg(undefined, Msg) ->
 update_will_msg(Will = #will_msg{}, Msg) ->
     Will#will_msg{payload = Msg}.
 
-process_awake_jobs(_ClientId, State = #state{asleep_msg_queue = []}) ->
-    {keep_state, State};
-process_awake_jobs(_ClientId, State = #state{channel = Channel,
-                                             asleep_msg_queue = AsleepMsgQ}) ->
-    Delivers = lists:reverse(AsleepMsgQ),
-    NState = State#state{asleep_msg_queue = []},
-    Result = emqx_channel:handle_deliver(Delivers, Channel),
-    handle_return(Result, NState).
-
 enqueue_msgid(suback, MsgId, TopicId) ->
     put({suback, MsgId}, TopicId);
 enqueue_msgid(puback, MsgId, TopicId) ->
@@ -1027,24 +1028,33 @@ get_corrected_qos(?QOS_NEG1, State) ->
 get_corrected_qos(QoS, _State) ->
     QoS.
 
-get_topic_id(Type, MsgId, Func) ->
-    case Func(Type, MsgId) of
+get_topic_id(Type, MsgId) ->
+    case dequeue_msgid(Type, MsgId) of
         undefined -> 0;
         TopicId -> TopicId
     end.
 
-handle_incoming(Packet = ?PACKET(Type), State = #state{channel = Channel}) ->
+handle_incoming(Packet, State) ->
+    handle_incoming(Packet, unknown, State).
+
+handle_incoming(?PUBACK_PACKET(_) = Packet, awake, State) ->
+    Result = channel_handle_in(Packet, State),
+    handle_return(Result, State, [try_goto_asleep]);
+handle_incoming(Packet, _StName, State) ->
+    Result = channel_handle_in(Packet, State),
+    handle_return(Result, State).
+
+channel_handle_in(Packet = ?PACKET(Type), State = #state{channel = Channel}) ->
     _ = inc_incoming_stats(Type),
     ok = emqx_metrics:inc_recv(Packet),
     ?LOG(debug, "RECV ~s", [emqx_packet:format(Packet)], State),
-    Result = emqx_channel:handle_in(Packet, Channel),
-    handle_return(Result, State).
+    emqx_channel:handle_in(Packet, Channel).
 
 handle_outgoing(Packets, State) when is_list(Packets) ->
     lists:foreach(fun(Packet) -> handle_outgoing(Packet, State) end, Packets);
 
 handle_outgoing(PubPkt = ?PUBLISH_PACKET(QoS, TopicName, PacketId, Payload),
-                State = #state{clientid = ClientId, registry = Registry, transform = Transform}) ->
+                State = #state{clientid = ClientId, registry = Registry}) ->
     #mqtt_packet{header = #mqtt_packet_header{dup = Dup, retain = Retain}} = PubPkt,
     MsgId = message_id(PacketId),
     ?LOG(debug, "Handle outgoing: ~p", [PubPkt], State),
@@ -1053,11 +1063,11 @@ handle_outgoing(PubPkt = ?PUBLISH_PACKET(QoS, TopicName, PacketId, Payload),
         andalso (byte_size(TopicName) =/= 2)
             andalso register_and_notify_client(TopicName, Payload, Dup, QoS,
                                                Retain, MsgId, ClientId, State),
-    send_message(Transform(PubPkt, State), State);
 
+    send_message(mqtt2sn(PubPkt, State), State);
 
-handle_outgoing(Packet, State = #state{transform = Transform}) ->
-    send_message(Transform(Packet, State), State).
+handle_outgoing(Packet, State) ->
+    send_message(mqtt2sn(Packet, State), State).
 
 register_and_notify_client(TopicName, Payload, Dup, QoS, Retain, MsgId, ClientId,
                            State = #state{registry = Registry}) ->
@@ -1070,23 +1080,30 @@ message_id(undefined) ->
     rand:uniform(16#FFFF);
 message_id(MsgId) -> MsgId.
 
-transform_fun() ->
-    FunMsgIdToTopicId = fun(Type, MsgId) -> dequeue_msgid(Type, MsgId) end,
-    fun(Packet, State) -> transform(Packet, FunMsgIdToTopicId, State) end.
-
 inc_incoming_stats(Type) ->
-    emqx_pd:inc_counter(recv_pkt, 1),
+    inc_counter(recv_pkt, 1),
     case Type == ?PUBLISH of
         true ->
-            emqx_pd:inc_counter(recv_msg, 1),
-            emqx_pd:inc_counter(incoming_pubs, 1);
+            inc_counter(recv_msg, 1),
+            inc_counter(incoming_pubs, 1);
         false -> ok
     end.
 
 inc_outgoing_stats(Type) ->
-    emqx_pd:inc_counter(send_pkt, 1),
-    (Type == ?SN_PUBLISH)
-        andalso emqx_pd:inc_counter(send_msg, 1).
+    inc_counter(send_pkt, 1),
+    case Type =:= ?SN_PUBLISH of
+        true -> inc_counter(send_msg, 1);
+        false -> ok
+    end.
 
 next_event(Content) ->
     {next_event, cast, Content}.
+
+inc_counter(Key, Inc) ->
+    _ = emqx_pd:inc_counter(Key, Inc),
+    ok.
+
+append(Replies, AddEvents) when is_list(Replies) ->
+    Replies ++ AddEvents;
+append(Replies, AddEvents) ->
+    [Replies] ++ AddEvents.
