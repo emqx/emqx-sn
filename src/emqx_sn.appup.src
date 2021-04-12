@@ -3,13 +3,13 @@
 {VSN,
    [
      {<<"4\\.2\\.[0-5]">>, [
-       {load_module, emqx_sn_gateway, brutal_purge, soft_purge, []}
+       {restart_application, emqx_sn}
      ]},
      {<<".*">>, []}
    ],
    [
      {<<"4\\.2\\.[0-5]">>, [
-       {load_module, emqx_sn_gateway, brutal_purge, soft_purge, []}
+       {restart_application, emqx_sn}
      ]},
      {<<".*">>, []}
    ]
