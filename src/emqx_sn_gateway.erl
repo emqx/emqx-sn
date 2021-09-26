@@ -835,6 +835,8 @@ do_connect(ClientId, CleanStart, WillFlag, Duration, State) ->
                                    clean_start = CleanStart,
                                    username    = State#state.username,
                                    password    = State#state.password,
+                                   proto_name  = <<"MQTT-SN">>,
+                                   proto_ver   = 1,
                                    keepalive   = Duration,
                                    properties  = OnlyOneInflight
                                   },
