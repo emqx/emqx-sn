@@ -248,7 +248,7 @@ wait_for_will_topic(cast, {incoming, ?SN_ADVERTISE_MSG(_GwId, _Radius)}, _State)
     % ignore
     keep_state_and_data;
 
-wait_for_will_topic(cast, {incoming, ?SN_CONNECT_MSG(Flags, _ProtoId, _Duration, _ClientId)}, _State) ->
+wait_for_will_topic(cast, {incoming, ?SN_CONNECT_MSG(_Flags, _ProtoId, _Duration, _ClientId)}, _State) ->
     % do_2nd_connect(Flags, Duration, ClientId, State);
     ?LOG(warning, "Receive connect packet in wait_for_will_topic state", []),
     keep_state_and_data;
@@ -276,7 +276,7 @@ wait_for_will_msg(cast, {incoming, ?SN_ADVERTISE_MSG(_GwId, _Radius)}, _State) -
     keep_state_and_data;
 
 %% XXX: ?? Why we will handling the 2nd CONNECT packet ??
-wait_for_will_msg(cast, {incoming, ?SN_CONNECT_MSG(Flags, _ProtoId, _Duration, _ClientId)}, _State) ->
+wait_for_will_msg(cast, {incoming, ?SN_CONNECT_MSG(_Flags, _ProtoId, _Duration, _ClientId)}, _State) ->
     % do_2nd_connect(Flags, Duration, ClientId, State);
     ?LOG(warning, "Receive connect packet in wait_for_will_msg state", []),
     keep_state_and_data;
@@ -367,7 +367,7 @@ connected(cast, {incoming, ?SN_ADVERTISE_MSG(_GwId, _Radius)}, State) ->
     % ignore
     {keep_state, State};
 
-connected(cast, {incoming, ?SN_CONNECT_MSG(Flags, _ProtoId, _Duration, _ClientId)}, _State) ->
+connected(cast, {incoming, ?SN_CONNECT_MSG(_Flags, _ProtoId, _Duration, _ClientId)}, _State) ->
     % do_2nd_connect(Flags, Duration, ClientId, State);
     ?LOG(warning, "Receive connect packet in wait_for_will_topic state", []),
     keep_state_and_data;
