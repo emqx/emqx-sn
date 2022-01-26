@@ -805,6 +805,50 @@ t_publish_qos2_case03(_) ->
     ?assertEqual(<<2, ?SN_DISCONNECT>>, receive_response(Socket)),
     gen_udp:close(Socket).
 
+t_delivery_qos1_register_invalid_topic_id(_) ->
+    Dup = 0,
+    QoS = 1,
+    Retain = 0,
+    Will = 0,
+    CleanSession = 0,
+    MsgId = 1,
+    TopicId = ?MAX_PRED_TOPIC_ID + 1,
+    {ok, Socket} = gen_udp:open(0, [binary]),
+    send_connect_msg(Socket, <<"test">>),
+    ?assertEqual(<<3, ?SN_CONNACK, 0>>, receive_response(Socket)),
+
+    send_subscribe_msg_normal_topic(Socket, QoS, <<"ab">>, MsgId),
+    ?assertEqual(<<8, ?SN_SUBACK, Dup:1, QoS:2, Retain:1, Will:1, CleanSession:1,
+                   ?SN_NORMAL_TOPIC:2, TopicId:16, MsgId:16, ?SN_RC_ACCEPTED>>,
+                 receive_response(Socket)),
+
+    Payload = <<"test-registration-inconsistent">>,
+    _ = emqx:publish(emqx_message:make(test, ?QOS_1, <<"ab">>, Payload)),
+
+    ?assertEqual(
+       <<(7 + byte_size(Payload)), ?SN_PUBLISH,
+         Dup:1, QoS:2, Retain:1,
+         Will:1, CleanSession:1, ?SN_NORMAL_TOPIC:2,
+         TopicId:16, MsgId:16, Payload/binary>>, receive_response(Socket)),
+    %% acked with ?SN_RC_INVALID_TOPIC_ID to
+    send_puback_msg(Socket, TopicId, MsgId, ?SN_RC_INVALID_TOPIC_ID),
+
+    ?assertEqual(
+       {TopicId, MsgId},
+       check_register_msg_on_udp(<<"ab">>, receive_response(Socket))),
+    send_regack_msg(Socket, TopicId, MsgId + 1),
+
+    %% receive the replay message
+    ?assertEqual(
+       <<(7 + byte_size(Payload)), ?SN_PUBLISH,
+         Dup:1, QoS:2, Retain:1,
+         Will:1, CleanSession:1, ?SN_NORMAL_TOPIC:2,
+         TopicId:16, (MsgId):16, Payload/binary>>, receive_response(Socket)),
+
+    send_disconnect_msg(Socket, undefined),
+    ?assertEqual(<<2, ?SN_DISCONNECT>>, receive_response(Socket)),
+    gen_udp:close(Socket).
+
 t_will_case01(_) ->
     QoS = 1,
     Duration = 1,
@@ -1654,11 +1698,16 @@ send_publish_msg_short_topic(Socket, QoS, MsgId, TopicName, Data) ->
     ok = gen_udp:send(Socket, ?HOST, ?PORT, PublishPacket).
 
 send_puback_msg(Socket, TopicId, MsgId) ->
+    send_puback_msg(Socket, TopicId, ?SN_RC_ACCEPTED).
+
+send_puback_msg(Socket, TopicId, MsgId, Rc) ->
     Length = 7,
     MsgType = ?SN_PUBACK,
-    PubAckPacket = <<Length:8, MsgType:8, TopicId:16, MsgId:16, ?SN_RC_ACCEPTED:8>>,
+    PubAckPacket = <<Length:8, MsgType:8, TopicId:16, MsgId:16, Rc:8>>,
     ?LOG("send_puback_msg TopicId=~p, MsgId=~p", [TopicId, MsgId]),
     ok = gen_udp:send(Socket, ?HOST, ?PORT, PubAckPacket).
+
+
 
 send_pubrec_msg(Socket, MsgId) ->
     Length = 4,
