@@ -495,7 +495,7 @@ handle_event({call, From}, Req, _StateName, State) ->
         {reply, Reply, NState} ->
             gen_server:reply(From, Reply),
             {keep_state, NState};
-        {stop, Reason, Reply, NState} ->
+        {shutdown, Reason, Reply, NState} ->
             State0 = case NState#state.sockstate of
                 running ->
                     send_message(?SN_DISCONNECT_MSG(undefined), NState);
@@ -616,7 +616,7 @@ handle_call(_From, Req, State = #state{channel = Channel}) ->
         {reply, Reply, NChannel} ->
             {reply, Reply, State#state{channel = NChannel}};
         {shutdown, Reason, Reply, NChannel} ->
-            stop(Reason, Reply, State#state{channel = NChannel})
+            {shutdown, Reason, Reply, State#state{channel = NChannel}}
     end.
 
 handle_info({sock_closed, Reason} = Info, State = #state{channel = Channel}) ->
@@ -797,13 +797,6 @@ stop(Reason, State) ->
     ?LOG(stop_log_level(Reason), "stop due to ~p", [Reason]),
     maybe_send_will_msg(Reason, State),
     {stop, {shutdown, Reason}, State}.
-
-stop({shutdown, Reason}, Reply, State) ->
-    stop(Reason, Reply, State);
-stop(Reason, Reply, State) ->
-    ?LOG(stop_log_level(Reason), "stop due to ~p", [Reason]),
-    maybe_send_will_msg(Reason, State),
-    {stop, {shutdown, Reason}, Reply, State}.
 
 maybe_send_will_msg(normal, _State) ->
     ok;
