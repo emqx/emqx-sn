@@ -991,13 +991,47 @@ do_puback(TopicId, MsgId, ReturnCode, StateName,
             case emqx_sn_registry:lookup_topic(ClientId, TopicId) of
                 undefined -> {keep_state, State};
                 TopicName ->
-                    %%notice that this TopicName maybe normal or predefined,
-                    %% involving the predefined topic name in register to enhance the gateway's robustness even inconsistent with MQTT-SN channels
-                    {keep_state, send_register(TopicName, TopicId, MsgId, State)}
+                    %% notice that this TopicName maybe normal or predefined,
+                    %% involving the predefined topic name in register to
+                    %% enhance the gateway's robustness even inconsistent
+                    %% with MQTT-SN channel
+                    %% and we need to remove the message into pengdins queue for
+                    %% replaying it when register packet acked
+                    NState = cache_invalid_topic_id_message(TopicId, MsgId, State),
+                    {keep_state, send_register(TopicName, TopicId, MsgId, NState)}
             end;
         _ ->
             ?LOG(error, "CAN NOT handle PUBACK ReturnCode=~p", [ReturnCode]),
             {keep_state, State}
+    end.
+
+cache_invalid_topic_id_message(TopicId, MsgId,
+                               State = #state{
+                                          channel = Channel,
+                                          pending_topic_ids = Pendings}) ->
+    ?LOG(info, "Cache the publish packet acked INVALI_TOPIC_ID into pendings "
+               "queue, topic-id: ~p, packet-id: ~p", [TopicId, MsgId]),
+    Session = emqx_channel:get_session(Channel),
+    case emqx_session:puback(MsgId, Session) of
+        {ok, Message, Session1} ->
+            Channel1 = emqx_channel:set_session(
+                         Session1,
+                         Channel
+                        ),
+            State1 = State#state{channel = Channel1},
+            PubPkt = emqx_message:to_packet(
+                       MsgId, Message
+                      ),
+            NPendings = cache_no_reg_publish_message(
+                          Pendings, TopicId, PubPkt,
+                          State1
+                         ),
+            State1#state{pending_topic_ids = NPendings};
+        {error, Reason} ->
+            ?LOG(error, "Cannot find the message in the session, when moving "
+                        "the message to the pendings queue, packet-id: ~p, "
+                        "topic-id: ~p, reason: ~p", [MsgId, TopicId, Reason]),
+            State
     end.
 
 do_pubrec(PubRec, MsgId, StateName, State) ->
