@@ -853,41 +853,27 @@ t_delivery_takeover_and_re_register(_) ->
     MsgId = 1,
     {ok, Socket} = gen_udp:open(0, [binary]),
     send_connect_msg(Socket, <<"test">>, 0),
-    ?assertMatch(<<_, ?SN_CONNACK, ?SN_RC_ACCEPTED>>, receive_response(Socket)),
-
-    %% 1. connect to gw with clean-session=0
-    %% 2. subscribe topic-a, topic-b
-    %% 3. disconnect
-    %% 4. publish three messages to topic-a, and three messages to topic-b
-    %% 5. reconnect to gw with clean-session=0
-    %% 6. the expecte behaviors:
-    %%      1. recv the message1 with registered topic-id-a
-    %%      2. acked with INVAILD_TOPIC_ID
-    %%      3. recv REGISTER message for topic-a and topic-id-a
-    %%      4. acked with code=0
-    %%      5. recv message1, acked with code=0
-    %%      6. recv message2, acked with code=0
-    %%      7. recv message3, acked with code=0
-    %%      8. recv message4 with topic-b,
-    %%      9. acked with INVAILD_TOPIC_ID
-    %%     10. ... (same with topic-a flow)
+    ?assertMatch(<<_, ?SN_CONNACK, ?SN_RC_ACCEPTED>>,
+                 receive_response(Socket)),
 
     send_subscribe_msg_normal_topic(Socket, ?QOS_1, <<"topic-a">>, MsgId+1),
     <<_, ?SN_SUBACK, 2#00100000,
       TopicIdA:16, _:16, ?SN_RC_ACCEPTED>> = receive_response(Socket),
 
-    send_subscribe_msg_normal_topic(Socket, ?QOS_1, <<"topic-b">>, MsgId+2),
-    <<_, ?SN_SUBACK, 2#00100000,
+    send_subscribe_msg_normal_topic(Socket, ?QOS_2, <<"topic-b">>, MsgId+2),
+    <<_, ?SN_SUBACK, 2#01000000,
       TopicIdB:16, _:16, ?SN_RC_ACCEPTED>> = receive_response(Socket),
 
-    _ = emqx:publish(emqx_message:make(test, ?QOS_1, <<"topic-a">>, <<"test-a">>)),
-    _ = emqx:publish(emqx_message:make(test, ?QOS_1, <<"topic-b">>, <<"test-b">>)),
+    _ = emqx:publish(
+          emqx_message:make(test, ?QOS_1, <<"topic-a">>, <<"test-a">>)),
+    _ = emqx:publish(
+          emqx_message:make(test, ?QOS_2, <<"topic-b">>, <<"test-b">>)),
 
     <<_, ?SN_PUBLISH, 2#00100000,
       TopicIdA:16, MsgId1:16, "test-a">> = receive_response(Socket),
     send_puback_msg(Socket, TopicIdA, MsgId1, ?SN_RC_ACCEPTED),
 
-    <<_, ?SN_PUBLISH, 2#00100000,
+    <<_, ?SN_PUBLISH, 2#01000000,
       TopicIdB:16, MsgId2:16, "test-b">> = receive_response(Socket),
     send_puback_msg(Socket, TopicIdB, MsgId2, ?SN_RC_ACCEPTED),
 
@@ -899,50 +885,64 @@ t_delivery_takeover_and_re_register(_) ->
     _ = emqx:publish(emqx_message:make(test, ?QOS_1, <<"topic-a">>, <<"m1">>)),
     _ = emqx:publish(emqx_message:make(test, ?QOS_1, <<"topic-a">>, <<"m2">>)),
     _ = emqx:publish(emqx_message:make(test, ?QOS_1, <<"topic-a">>, <<"m3">>)),
-    _ = emqx:publish(emqx_message:make(test, ?QOS_1, <<"topic-b">>, <<"m1">>)),
-    _ = emqx:publish(emqx_message:make(test, ?QOS_1, <<"topic-b">>, <<"m2">>)),
-    _ = emqx:publish(emqx_message:make(test, ?QOS_1, <<"topic-b">>, <<"m3">>)),
+    _ = emqx:publish(emqx_message:make(test, ?QOS_2, <<"topic-b">>, <<"m1">>)),
+    _ = emqx:publish(emqx_message:make(test, ?QOS_2, <<"topic-b">>, <<"m2">>)),
+    _ = emqx:publish(emqx_message:make(test, ?QOS_2, <<"topic-b">>, <<"m3">>)),
 
-    %% reconnect TODO: will message?
     {ok, NSocket} = gen_udp:open(0, [binary]),
     send_connect_msg(NSocket, <<"test">>, 0),
-    ?assertMatch(<<_, ?SN_CONNACK, ?SN_RC_ACCEPTED>>, receive_response(NSocket)),
+    ?assertMatch(<<_, ?SN_CONNACK, ?SN_RC_ACCEPTED>>,
+                 receive_response(NSocket)),
+
+    %% qos1
 
     %% received the resume messages
     <<_, ?SN_PUBLISH, 2#00100000,
-      TopicIdA:16, NMsgId0:16, "m1">> = receive_response(NSocket),
+      TopicIdA:16, MsgIdA0:16, "m1">> = receive_response(NSocket),
     %% only one qos1/qos2 inflight
     ?assertEqual(udp_receive_timeout, receive_response(NSocket)),
-    send_puback_msg(NSocket, TopicIdA, NMsgId0, ?SN_RC_INVALID_TOPIC_ID),
+    send_puback_msg(NSocket, TopicIdA, MsgIdA0, ?SN_RC_INVALID_TOPIC_ID),
     %% recv register
     <<_, ?SN_REGISTER,
-      TopicIdA:16, RegMsgId1:16, "topic-a">> = receive_response(NSocket),
-    send_regack_msg(NSocket, TopicIdA, RegMsgId1),
-
+      TopicIdA:16, RegMsgIdA:16, "topic-a">> = receive_response(NSocket),
+    send_regack_msg(NSocket, TopicIdA, RegMsgIdA),
     %% received the replay messages
     <<_, ?SN_PUBLISH, 2#00100000,
-      TopicIdA:16, NMsgId1:16, "m1">> = receive_response(NSocket),
-    send_puback_msg(NSocket, TopicIdA, NMsgId1, ?SN_RC_ACCEPTED),
+      TopicIdA:16, MsgIdA1:16, "m1">> = receive_response(NSocket),
+    send_puback_msg(NSocket, TopicIdA, MsgIdA1, ?SN_RC_ACCEPTED),
 
     <<_, ?SN_PUBLISH, 2#00100000,
-      TopicIdA:16, NMsgId2:16, "m2">> = receive_response(NSocket),
-    send_puback_msg(NSocket, TopicIdA, NMsgId2, ?SN_RC_ACCEPTED),
+      TopicIdA:16, MsgIdA2:16, "m2">> = receive_response(NSocket),
+    send_puback_msg(NSocket, TopicIdA, MsgIdA2, ?SN_RC_ACCEPTED),
 
     <<_, ?SN_PUBLISH, 2#00100000,
-      TopicIdA:16, NMsgId3:16, "m3">> = receive_response(NSocket),
-    send_puback_msg(NSocket, TopicIdA, NMsgId3, ?SN_RC_ACCEPTED),
+      TopicIdA:16, MsgIdA3:16, "m3">> = receive_response(NSocket),
+    send_puback_msg(NSocket, TopicIdA, MsgIdA3, ?SN_RC_ACCEPTED),
 
-    <<_, ?SN_PUBLISH, 2#00100000,
-      TopicIdB:16, NMsgId4:16, "m1">> = receive_response(NSocket),
-    send_puback_msg(NSocket, TopicIdA, NMsgId4, ?SN_RC_ACCEPTED),
+    %% qos2
+    <<_, ?SN_PUBLISH, 2#01000000,
+      TopicIdB:16, MsgIdB0:16, "m1">> = receive_response(NSocket),
+    %% only one qos1/qos2 inflight
+    ?assertEqual(udp_receive_timeout, receive_response(NSocket)),
+    send_puback_msg(NSocket, TopicIdB, MsgIdB0, ?SN_RC_INVALID_TOPIC_ID),
+    %% recv register
+    <<_, ?SN_REGISTER,
+      TopicIdB:16, RegMsgIdB:16, "topic-b">> = receive_response(NSocket),
+    send_regack_msg(NSocket, TopicIdB, RegMsgIdB),
+    %% received the replay messages
+    <<_, ?SN_PUBLISH, 2#01000000,
+      TopicIdB:16, MsgIdB1:16, "m1">> = receive_response(NSocket),
+    send_pubrec_msg(NSocket, MsgIdB1),
+    <<_, ?SN_PUBREL, MsgIdB1:16>> = receive_response(NSocket),
+    send_pubcomp_msg(NSocket, MsgIdB1),
 
-    <<_, ?SN_PUBLISH, 2#00100000,
-      TopicIdB:16, NMsgId5:16, "m2">> = receive_response(NSocket),
-    send_puback_msg(NSocket, TopicIdA, NMsgId5, ?SN_RC_ACCEPTED),
+    <<_, ?SN_PUBLISH, 2#01000000,
+      TopicIdB:16, MsgIdB2:16, "m2">> = receive_response(NSocket),
+    send_puback_msg(NSocket, TopicIdB, MsgIdB2, ?SN_RC_ACCEPTED),
 
-    <<_, ?SN_PUBLISH, 2#00100000,
-      TopicIdB:16, NMsgId6:16, "m3">> = receive_response(NSocket),
-    send_puback_msg(NSocket, TopicIdA, NMsgId6, ?SN_RC_ACCEPTED),
+    <<_, ?SN_PUBLISH, 2#01000000,
+      TopicIdB:16, MsgIdB3:16, "m3">> = receive_response(NSocket),
+    send_puback_msg(NSocket, TopicIdB, MsgIdB3, ?SN_RC_ACCEPTED),
 
     %% no more messages
     ?assertEqual(udp_receive_timeout, receive_response(NSocket)),
@@ -1811,8 +1811,6 @@ send_puback_msg(Socket, TopicId, MsgId, Rc) ->
     PubAckPacket = <<Length:8, MsgType:8, TopicId:16, MsgId:16, Rc:8>>,
     ?LOG("send_puback_msg TopicId=~p, MsgId=~p", [TopicId, MsgId]),
     ok = gen_udp:send(Socket, ?HOST, ?PORT, PubAckPacket).
-
-
 
 send_pubrec_msg(Socket, MsgId) ->
     Length = 4,
