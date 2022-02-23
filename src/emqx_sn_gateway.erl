@@ -1009,6 +1009,8 @@ do_puback(TopicId, MsgId, ReturnCode, StateName,
                     {keep_state, send_register(TopicName, TopicId, MsgId, State)}
             end;
         _ ->
+            %% XXX: We need to handle others error code
+            %% 'Rejection: congestion'
             ?LOG(error, "CAN NOT handle PUBACK ReturnCode=~p", [ReturnCode]),
             {keep_state, State}
     end.
