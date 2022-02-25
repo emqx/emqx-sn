@@ -740,9 +740,10 @@ mqtt2sn(
                              topic_name = Topic,
                              packet_id = PacketId},
                payload = Payload}, #state{clientid = ClientId}) ->
-    NPacketId = if QoS =:= ?QOS_0 -> 0;
-                     true -> PacketId
-                  end,
+    NPacketId = case QoS of
+                    ?QOS_0 -> 0;
+                     _ -> PacketId
+                end,
     {TopicIdType, TopicContent} = case emqx_sn_registry:lookup_topic_id(ClientId, Topic) of
                                       {predef, PredefTopicId} ->
                                           {?SN_PREDEFINED_TOPIC, PredefTopicId};
@@ -784,7 +785,7 @@ send_connack(State) ->
 
 send_message(Msg = #mqtt_sn_message{type = Type},
              State = #state{sockpid = SockPid, peername = Peername}) ->
-    ?LOG(info, "SEND ~s~n", [emqx_sn_frame:format(Msg)]),
+    ?LOG(debug, "SEND ~s", [emqx_sn_frame:format(Msg)]),
     inc_outgoing_stats(Type),
     Data = emqx_sn_frame:serialize(Msg),
     ?LOG(debug, "SEND ~0p", [Data]),

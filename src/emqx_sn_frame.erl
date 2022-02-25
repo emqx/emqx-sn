@@ -273,7 +273,7 @@ format(?SN_CONNECT_MSG(Flags, ProtocolId, Duration, ClientId)) ->
        will = Will,
        clean_start = CleanStart} = Flags,
     io_lib:format("SN_CONNECT(W~w, C~w, ProtocolId=~w, Duration=~w, "
-                  "ClientId=~s)",
+                  "ClientId=~ts)",
                   [bool(Will), bool(CleanStart),
                    ProtocolId, Duration, ClientId]);
 format(?SN_CONNACK_MSG(ReturnCode)) ->
