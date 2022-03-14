@@ -46,6 +46,7 @@
         , wait_for_will_topic/3
         , wait_for_will_msg/3
         , connected/3
+        , registering/3
         , asleep/3
         , awake/3
         ]).
@@ -94,7 +95,9 @@
                 has_pending_pingresp = false :: boolean(),
                 %% Store all qos0 messages for waiting REGACK
                 %% Note: QoS1/QoS2 messages will kept inflight queue
-                pending_topic_ids = #{} :: pending_msgs()
+                pending_topic_ids = #{} :: pending_msgs(),
+                waiting_sync_topics = [],
+                previous_outgoings_and_state = undefined
                }).
 
 -define(INFO_KEYS, [socktype, peername, sockname, sockstate]). %, active_n]).
@@ -123,6 +126,9 @@
         Reason =:= idle_timeout;
         Reason =:= asleep_timeout;
         Reason =:= keepalive_timeout).
+
+-define(RETRY_TIMEOUT, 5000).
+-define(MAX_RETRY_TIMES, 3).
 
 %%--------------------------------------------------------------------
 %% Exported APIs
@@ -381,6 +387,13 @@ connected(cast, {outgoing, Packet}, State) ->
 connected(cast, {connack, ConnAck}, State) ->
     {keep_state, handle_outgoing(ConnAck, State)};
 
+connected(cast, {register, TopicNames, BlockedOutgoins}, State) ->
+    NState = State#state{
+               waiting_sync_topics = TopicNames,
+               previous_outgoings_and_state = {BlockedOutgoins, ?FUNCTION_NAME}
+              },
+    {next_state, registering, NState, [next_event(shooting)]};
+
 connected(cast, {shutdown, Reason, Packet}, State) ->
     stop(Reason, handle_outgoing(Packet, State));
 
@@ -393,6 +406,59 @@ connected(cast, {close, Reason}, State) ->
 
 connected(EventType, EventContent, State) ->
     handle_event(EventType, EventContent, connected, State).
+
+registering(cast, shooting,
+            State = #state{waiting_sync_topics = [],
+                           previous_outgoings_and_state = {Outgoings, StateName}}) ->
+    NState = State#state{previous_outgoings_and_state = undefined},
+    {next_state, StateName, NState, outgoing_events(Outgoings)};
+
+registering(cast, shooting,
+            State = #state{
+                       clientid = ClientId,
+                       waiting_sync_topics = [TopicName | Remainings]}) ->
+    TopicId = emqx_sn_registry:lookup_topic_id(ClientId, TopicName),
+    NState = send_register(
+               TopicName,
+               TopicId,
+               16#FFFF, %% FIXME: msgid ?
+               State#state{waiting_sync_topics = [{TopicId, TopicName, 0} | Remainings]}
+              ),
+    {keep_state, NState, {{timeout, wait_regack}, ?RETRY_TIMEOUT, nocontent}};
+
+registering(cast, {incoming, ?SN_REGACK_MSG(TopicId, _MsgId, ?SN_RC_ACCEPTED)},
+            State = #state{waiting_sync_topics = [{TopicId, TopicName, _} | Remainings]}) ->
+    ?LOG(debug, "Register topic name ~s with id ~w successfully!", [TopicName, TopicId]),
+    {keep_state, State#state{waiting_sync_topics = Remainings}, [next_event(shooting)]};
+
+registering(cast, {incoming, ?SN_REGACK_MSG(TopicId, MsgId, ReturnCode)},
+            State = #state{waiting_sync_topics = [{TopicId, TopicName, _} | Remainings]}) ->
+    ?LOG(error, "client does not accept register TopicName=~s, TopicId=~p, MsgId=~p, ReturnCode=~p",
+         [TopicName, TopicId, MsgId, ReturnCode]),
+    {keep_state, State#state{waiting_sync_topics = Remainings}, [next_event(shooting)]};
+
+registering({timeout, wait_regack}, _,
+            State = #state{waiting_sync_topics = [{TopicId, TopicName, Times} | Remainings]})
+  when Times < ?MAX_RETRY_TIMES ->
+    ?LOG(warning, "Waiting REGACK timeout for TopicName=~s, TopicId=~w, try it again(~w)",
+                  [TopicName, TopicId, Times+1]),
+    NState = send_register(
+               TopicName,
+               TopicId,
+               16#FFFF, %% FIXME: msgid?
+               State#state{waiting_sync_topics = [{TopicId, TopicName, Times + 1} | Remainings]}
+              ),
+    {keep_state, NState, {{timeout, wait_regack}, ?RETRY_TIMEOUT, nocontent}};
+
+registering({timeout, wait_regack}, _,
+            State = #state{waiting_sync_topics = [{TopicId, TopicName, ?MAX_RETRY_TIMES} | _]}) ->
+    ?LOG(error, "Retry register TopicName=~s, TopicId=~w reached the max retry times",
+                [TopicId, TopicName]),
+    NState = send_message(?SN_DISCONNECT_MSG(undefined), State),
+    stop(reached_max_retry_times, NState);
+
+registering(EventType, EventContent, State) ->
+    handle_event(EventType, EventContent, ?FUNCTION_NAME, State).
 
 asleep(cast, {incoming, ?SN_DISCONNECT_MSG(Duration)}, State) ->
     State0 = send_message(?SN_DISCONNECT_MSG(undefined), State),
@@ -648,6 +714,9 @@ outgoing_event(Packet) when is_record(Packet, mqtt_packet);
     next_event({outgoing, Packet});
 outgoing_event(Action) ->
     next_event(Action).
+
+next_event(Content) ->
+    {next_event, cast, Content}.
 
 close_socket(State = #state{sockstate = closed}) -> State;
 close_socket(State = #state{socket = _Socket}) ->
@@ -1077,6 +1146,29 @@ handle_incoming(#mqtt_packet{variable = #mqtt_packet_puback{}} = Packet, awake, 
     Result = channel_handle_in(Packet, State),
     handle_return(Result, State, [try_goto_asleep]);
 
+handle_incoming(
+  #mqtt_packet{variable = #mqtt_packet_connect{clean_start = false}} = Packet, _, State) ->
+    Result = channel_handle_in(Packet, State),
+    case {subs_resume(), Result} of
+        {true, {ok, Replies, NChannel}} ->
+            case maps:get(subscriptions, emqx_channel:info(session, NChannel)) of
+                Subs when map_size(Subs) == 0 ->
+                    handle_return(Result, State);
+                Subs ->
+                    TopicNames = lists:filter(
+                                   fun(T) -> not emqx_topic:wildcard(T)
+                                   end, maps:keys(Subs)),
+                    {ConnackEvents, Outgoings} = split_connack_replies(Replies),
+                    Events = outgoing_events(
+                               ConnackEvents ++
+                               [{register, TopicNames, Outgoings}]
+                              ),
+                    {keep_state, State#state{channel = NChannel}, Events}
+            end;
+        _ ->
+            handle_return(Result, State)
+    end;
+
 handle_incoming(Packet, _StName, State) ->
     Result = channel_handle_in(Packet, State),
     handle_return(Result, State).
@@ -1181,9 +1273,6 @@ inc_outgoing_stats(Type) ->
         false -> ok
     end.
 
-next_event(Content) ->
-    {next_event, cast, Content}.
-
 inc_counter(Key, Inc) ->
     _ = emqx_pd:inc_counter(Key, Inc),
     ok.
@@ -1197,3 +1286,11 @@ maybe_send_puback(?QOS_0, _TopicId, _MsgId, _ReasonCode, State) ->
     State;
 maybe_send_puback(_QoS, TopicId, MsgId, ReasonCode, State) ->
     send_message(?SN_PUBACK_MSG(TopicId, MsgId, ReasonCode), State).
+
+subs_resume() ->
+    application:get_env(emqx_sn, subs_resume, false).
+
+%% Replies = [{event, connected}, {connack, ConnAck}, {outgoing, Pkts}]
+split_connack_replies([A = {event, connected},
+                       B = {connack, _ConnAck} | Outgoings]) ->
+   {[A, B], Outgoings}.
