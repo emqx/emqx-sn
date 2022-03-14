@@ -408,10 +408,24 @@ connected(EventType, EventContent, State) ->
     handle_event(EventType, EventContent, connected, State).
 
 registering(cast, shooting,
-            State = #state{waiting_sync_topics = [],
-                           previous_outgoings_and_state = {Outgoings, StateName}}) ->
-    NState = State#state{previous_outgoings_and_state = undefined},
-    {next_state, StateName, NState, outgoing_events(Outgoings)};
+            State = #state{
+                       channel = Channel,
+                       waiting_sync_topics = [],
+                       previous_outgoings_and_state = {Outgoings, StateName}}) ->
+    {Outgoings2, NChannel} =
+        case emqx_session:dequeue(emqx_channel:get_session(Channel)) of
+            {ok, NSession} ->
+                {[], emqx_channel:set_session(NSession, Channel)};
+            {ok, Pubs, NSession} ->
+                emqx_channel:do_deliver(
+                  Pubs,
+                  emqx_channel:set_session(NSession, Channel)
+                 )
+        end,
+    NState = State#state{
+               channel = NChannel,
+               previous_outgoings_and_state = undefined},
+    {next_state, StateName, NState, outgoing_events(Outgoings ++ Outgoings2)};
 
 registering(cast, shooting,
             State = #state{
@@ -436,6 +450,11 @@ registering(cast, {incoming, ?SN_REGACK_MSG(TopicId, MsgId, ReturnCode)},
     ?LOG(error, "client does not accept register TopicName=~s, TopicId=~p, MsgId=~p, ReturnCode=~p",
          [TopicName, TopicId, MsgId, ReturnCode]),
     {keep_state, State#state{waiting_sync_topics = Remainings}, [next_event(shooting)]};
+
+registering(cast, {incoming, Packet},
+            State = #state{previous_outgoings_and_state = {_, StateName}})
+  when is_record(Packet, mqtt_sn_message) ->
+    apply(?MODULE, StateName, [cast, {incoming, Packet}, State]);
 
 registering({timeout, wait_regack}, _,
             State = #state{waiting_sync_topics = [{TopicId, TopicName, Times} | Remainings]})
@@ -590,10 +609,12 @@ handle_event(info, {datagram, SockPid, Data}, StateName,
             stop(frame_error, State)
     end;
 
-handle_event(info, {deliver, _Topic, Msg}, asleep,
-             State = #state{channel = Channel}) ->
+handle_event(info, {deliver, _Topic, Msg}, StateName,
+             State = #state{channel = Channel})
+  when StateName == asleep;
+       StateName == registering ->
     % section 6.14, Support of sleeping clients
-    ?LOG(debug, "enqueue downlink message in asleep state, msg: ~0p", [Msg]),
+    ?LOG(debug, "enqueue downlink message in ~s state, msg: ~0p", [StateName, Msg]),
     Session = emqx_session:enqueue(Msg, emqx_channel:get_session(Channel)),
     {keep_state, State#state{channel = emqx_channel:set_session(Session, Channel)}};
 

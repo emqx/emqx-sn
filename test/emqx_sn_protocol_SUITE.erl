@@ -1795,10 +1795,6 @@ t_register_skip_failure_topic_name_and_reach_max_retry_times(_) ->
     <<_, ?SN_SUBACK, 2#01000000,
       TopicIdB:16, _:16, ?SN_RC_ACCEPTED>> = receive_response(Socket),
 
-    send_subscribe_msg_normal_topic(Socket, ?QOS_2, <<"topic-c">>, MsgId+3),
-    <<_, ?SN_SUBACK, 2#01000000,
-      TopicIdC:16, _:16, ?SN_RC_ACCEPTED>> = receive_response(Socket),
-
     send_disconnect_msg(Socket, undefined),
     ?assertMatch(<<2, ?SN_DISCONNECT>>, receive_response(Socket)),
     gen_udp:close(Socket),
@@ -1840,6 +1836,63 @@ t_register_skip_failure_topic_name_and_reach_max_retry_times(_) ->
     ?assertMatch(<<2, ?SN_DISCONNECT>>, receive_response(NSocket)),
     application:set_env(emqx_sn, subs_resume, false),
     gen_udp:close(NSocket).
+
+t_register_enqueue_delivering_messages(_) ->
+    application:set_env(emqx_sn, subs_resume, true),
+    MsgId = 1,
+    {ok, Socket} = gen_udp:open(0, [binary]),
+    send_connect_msg(Socket, <<"test">>, 0),
+    ?assertMatch(<<_, ?SN_CONNACK, ?SN_RC_ACCEPTED>>,
+                 receive_response(Socket)),
+
+    send_subscribe_msg_normal_topic(Socket, ?QOS_2, <<"topic-a">>, MsgId+1),
+    <<_, ?SN_SUBACK, 2#01000000,
+      TopicIdA:16, _:16, ?SN_RC_ACCEPTED>> = receive_response(Socket),
+
+    send_disconnect_msg(Socket, undefined),
+    ?assertMatch(<<2, ?SN_DISCONNECT>>, receive_response(Socket)),
+    gen_udp:close(Socket),
+
+    emqx_logger:set_log_level(debug),
+
+    {ok, NSocket} = gen_udp:open(0, [binary]),
+    send_connect_msg(NSocket, <<"test">>, 0),
+    ?assertMatch(<<_, ?SN_CONNACK, ?SN_RC_ACCEPTED>>,
+                 receive_response(NSocket)),
+
+    %% receive subs register requests
+
+    %% registered failured topic-name will be skipped
+    <<_, ?SN_REGISTER,
+      TopicIdA:16, RegMsgIdA:16, "topic-a">> = receive_response(NSocket),
+
+    _ = emqx:publish(emqx_message:make(test, ?QOS_0, <<"topic-a">>, <<"m1">>)),
+    _ = emqx:publish(emqx_message:make(test, ?QOS_1, <<"topic-a">>, <<"m2">>)),
+
+    send_regack_msg(NSocket, TopicIdA, RegMsgIdA, ?SN_RC_ACCEPTED),
+
+    %% receive the queued messages
+
+    <<_, ?SN_PUBLISH, 2#00000000,
+      TopicIdA:16, 0:16, "m1">> = receive_response(NSocket),
+
+    <<_, ?SN_PUBLISH, 2#00100000,
+      TopicIdA:16, MsgIdA1:16, "m2">> = receive_response(NSocket),
+    send_puback_msg(NSocket, TopicIdA, MsgIdA1, ?SN_RC_ACCEPTED),
+
+    %% no more messages
+    ?assertEqual(udp_receive_timeout, receive_response(NSocket)),
+
+    application:set_env(emqx_sn, subs_resume, false),
+
+    gen_udp:close(NSocket),
+    {ok, NSocket1} = gen_udp:open(0, [binary]),
+    send_connect_msg(NSocket1, <<"test">>),
+    ?assertMatch(<<_, ?SN_CONNACK, ?SN_RC_ACCEPTED>>,
+                 receive_response(NSocket1)),
+    send_disconnect_msg(NSocket1, undefined),
+    ?assertMatch(<<2, ?SN_DISCONNECT>>, receive_response(NSocket1)),
+    gen_udp:close(NSocket1).
 
 %%--------------------------------------------------------------------
 %% Helper funcs
