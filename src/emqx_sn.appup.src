@@ -4,6 +4,7 @@
    [
      {<<"4\\.2\\.([7-9]|10)">>, [
        {load_module, emqx_sn_frame, brutal_purge, soft_purge, []},
+       {load_module, emqx_sn_app, brutal_purge, soft_purge, []},
        {update, emqx_sn_gateway, {advanced, []}}
      ]},
      {<<"4\\.2\\.[0-6]">>, [
@@ -14,6 +15,7 @@
    [
      {<<"4\\.2\\.([7-9]|10)">>, [
        {load_module, emqx_sn_frame, brutal_purge, soft_purge, []},
+       {load_module, emqx_sn_app, brutal_purge, soft_purge, []},
        {update, emqx_sn_gateway, {advanced, []}}
      ]},
      {<<"4\\.2\\.[0-6]">>, [

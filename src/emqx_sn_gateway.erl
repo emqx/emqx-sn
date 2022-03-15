@@ -96,6 +96,7 @@
                 %% Store all qos0 messages for waiting REGACK
                 %% Note: QoS1/QoS2 messages will kept inflight queue
                 pending_topic_ids = #{} :: pending_msgs(),
+                subs_resume         = false,
                 waiting_sync_topics = [],
                 previous_outgoings_and_state = undefined
                }).
@@ -156,6 +157,7 @@ init([{_, SockPid, Sock}, Peername, Options]) ->
     Password = proplists:get_value(password, Options, undefined),
     EnableQos3 = proplists:get_value(enable_qos3, Options, false),
     IdleTimeout = proplists:get_value(idle_timeout, Options, 30000),
+    SubsResume = proplists:get_value(subs_resume, Options, false),
     EnableStats = proplists:get_value(enable_stats, Options, false),
     case inet:sockname(Sock) of
         {ok, Sockname} ->
@@ -172,7 +174,8 @@ init([{_, SockPid, Sock}, Peername, Options]) ->
                            asleep_timer     = emqx_sn_asleep_timer:init(),
                            enable_stats     = EnableStats,
                            enable_qos3      = EnableQos3,
-                           idle_timeout     = IdleTimeout
+                           idle_timeout     = IdleTimeout,
+                           subs_resume      = SubsResume
                           },
             emqx_logger:set_metadata_peername(esockd:format(Peername)),
             {ok, idle, State, [IdleTimeout]};
@@ -692,8 +695,10 @@ terminate(Reason, _StateName, #state{channel  = Channel,
 code_change({down, Vsn}, StateName, State, _Extra) ->
     case re:run(Vsn, "4\\.2\\.([7-9]|10)") of
         {match, _} ->
-            NState0 = lists:droplast(lists:droplast(tuple_to_list(State))),
-            NState = list_to_tuple(lists:reverse(NState0)),
+            NState0 = lists:droplast(
+                        lists:droplast(
+                          lists:droplast(tuple_to_list(State)))),
+            NState = list_to_tuple(NState0),
             {ok, StateName, NState};
         _ ->
             {ok, StateName, State}
@@ -703,7 +708,7 @@ code_change(Vsn, StateName, State, _Extra) ->
     case re:run(Vsn, "4\\.2\\.([7-9]|10)") of
         {match, _} ->
             NState = list_to_tuple(
-                       tuple_to_list(State) ++ [[], undefined]
+                       tuple_to_list(State) ++ [false, [], undefined]
                       ),
             {ok, StateName, NState};
         _ ->
@@ -1189,9 +1194,10 @@ handle_incoming(#mqtt_packet{variable = #mqtt_packet_puback{}} = Packet, awake, 
     handle_return(Result, State, [try_goto_asleep]);
 
 handle_incoming(
-  #mqtt_packet{variable = #mqtt_packet_connect{clean_start = false}} = Packet, _, State) ->
+  #mqtt_packet{variable = #mqtt_packet_connect{clean_start = false}} = Packet, _,
+  State = #state{subs_resume = SubsResume}) ->
     Result = channel_handle_in(Packet, State),
-    case {subs_resume(), Result} of
+    case {SubsResume, Result} of
         {true, {ok, Replies, NChannel}} ->
             case maps:get(subscriptions, emqx_channel:info(session, NChannel)) of
                 Subs when map_size(Subs) == 0 ->
@@ -1328,9 +1334,6 @@ maybe_send_puback(?QOS_0, _TopicId, _MsgId, _ReasonCode, State) ->
     State;
 maybe_send_puback(_QoS, TopicId, MsgId, ReasonCode, State) ->
     send_message(?SN_PUBACK_MSG(TopicId, MsgId, ReasonCode), State).
-
-subs_resume() ->
-    application:get_env(emqx_sn, subs_resume, false).
 
 %% Replies = [{event, connected}, {connack, ConnAck}, {outgoing, Pkts}]
 split_connack_replies([A = {event, connected},
